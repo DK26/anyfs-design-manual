@@ -1,0 +1,37 @@
+[book]
+title = "VFS Ecosystem Manual"
+description = "Complete documentation for the VFS Ecosystem - switchable virtual filesystem backends for Rust"
+authors = ["David Krasnitsky"]
+language = "en"
+
+[build]
+build-dir = "build"
+
+[output.html]
+git-repository-url = "https://github.com/DK26/vfs-design-manual"
+edit-url-template = "https://github.com/DK26/vfs-design-manual/edit/main/book/{path}"
+site-url = "/vfs-design-manual/"
+default-theme = "rust"
+preferred-dark-theme = "coal"
+smart-punctuation = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.playground]
+editable = true
+copyable = true
+copy-js = true
+line-numbers = true
+runnable = true
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-hierarchical-menu = true
+
+[preprocessor.links]
+
+[preprocessor.index]
