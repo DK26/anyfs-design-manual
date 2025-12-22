@@ -21,7 +21,7 @@
 # Design & Architecture
 
 - [Design Overview](./architecture/design-overview.md)
-- [VFS Container Design (RFC)](./architecture/vfs-container-design.md)
+- [AnyFS Container Design (RFC)](./architecture/vfs-container-design.md)
 - [Architecture Decision Records](./architecture/adrs.md)
 
 ---
@@ -29,6 +29,7 @@
 # Comparisons & Analysis
 
 - [Comparison & Positioning](./comparisons/positioning.md)
+- [Security Considerations](./comparisons/security.md)
 - [Technical Comparison with Alternatives](./comparisons/technical-comparison.md)
 - [Build vs Reuse Analysis](./comparisons/build-vs-reuse.md)
 

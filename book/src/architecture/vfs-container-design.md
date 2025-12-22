@@ -32,7 +32,7 @@
 
 ### 1.1 What Is This?
 
-VFS Container is a **storage-agnostic virtual filesystem abstraction** for Rust. It provides:
+AnyFS Container is a **storage-agnostic virtual filesystem abstraction** for Rust. It provides:
 
 - A minimal trait (`StorageBackend`) that any storage system can implement
 - A high-level API (`FilesContainer`) with familiar filesystem operations
@@ -170,7 +170,7 @@ The virtual filesystem is modeled as a **directed graph**:
 
 | Concern | Handled By |
 |---------|------------|
-| Path string parsing | `VirtualPath` (in `vfs-core`) |
+| Path string parsing | `VirtualPath` (in `anyfs`) |
 | Path traversal & resolution | `FilesContainer` |
 | Symlink following | `FilesContainer` |
 | Link count management | `FilesContainer` |
@@ -1214,12 +1214,12 @@ thread_local! {
 ### 11.1 Workspace Layout
 
 ```
-vfs-container/
+anyfs-container/
 ├── Cargo.toml              # Workspace manifest
 ├── README.md
 ├── LICENSE
 │
-├── vfs-core/               # Core traits and types
+├── anyfs/               # Core traits and types
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
@@ -1231,7 +1231,7 @@ vfs-container/
 │       ├── error.rs        # BackendError, PathError
 │       └── limits.rs       # CapacityLimits
 │
-├── vfs-sqlite/             # SQLite backend
+├── anyfs-sqlite/             # SQLite backend
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
@@ -1239,12 +1239,12 @@ vfs-container/
 │       ├── schema.rs       # SQL schema definitions
 │       └── migrations.rs   # Schema migrations
 │
-├── vfs-memory/             # In-memory backend
+├── anyfs-memory/             # In-memory backend
 │   ├── Cargo.toml
 │   └── src/
 │       └── lib.rs          # MemoryBackend implementation
 │
-└── vfs/                    # High-level API (batteries included)
+└── anyfs-container/                    # High-level API (batteries included)
     ├── Cargo.toml
     └── src/
         ├── lib.rs
@@ -1276,7 +1276,7 @@ vfs-container/
                          │
                          ▼
                    ┌──────────┐
-                   │ vfs-core │  (traits, types)
+                   │ anyfs │  (traits, types)
                    └──────────┘
 ```
 
@@ -1304,7 +1304,7 @@ The `vfs` crate re-exports everything for convenience:
 ```rust
 // vfs/src/lib.rs
 
-pub use vfs_core::{
+pub use anyfs::{
     // Traits
     StorageBackend, BackendLifecycle, Snapshot, Transaction,
     
@@ -1324,13 +1324,13 @@ pub use crate::error::{VfsError, CapacityError};
 
 // Backends (conditional)
 #[cfg(feature = "sqlite")]
-pub use vfs_sqlite::SqliteBackend;
+pub use anyfs_sqlite::SqliteBackend;
 
 #[cfg(feature = "memory")]
-pub use vfs_memory::MemoryBackend;
+pub use anyfs_memory::MemoryBackend;
 
 #[cfg(feature = "fs")]
-pub use vfs_fs::FsBackend;
+pub use anyfs_fs::FsBackend;
 ```
 
 ---
@@ -1392,7 +1392,7 @@ pub use vfs_fs::FsBackend;
 
 ```
 Phase 1: Core Foundation
-├── vfs-core crate
+├── anyfs crate
 │   ├── [ ] Types: NodeId, ContentId, ChunkId, Name
 │   ├── [ ] Node types: NodeKind, NodeRecord, NodeMetadata
 │   ├── [ ] Edge type
@@ -1480,7 +1480,7 @@ Phase 9: Polish
 
 | Milestone | Deliverable | Est. Effort |
 |-----------|-------------|-------------|
-| M1: Core Types | `vfs-core` crate publishable | 1 week |
+| M1: Core Types | `anyfs` crate publishable | 1 week |
 | M2: Memory Backend | `vfs-memory` crate with tests | 1 week |
 | M3: Basic Container | Read/write/mkdir/remove working | 2 weeks |
 | M4: SQLite Backend | `vfs-sqlite` crate with tests | 2 weeks |
@@ -1504,7 +1504,7 @@ Phase 9: Polish
 - Every backend must pass identical tests
 
 ```rust
-// vfs-core/src/testing.rs
+// anyfs/src/testing.rs
 
 #[macro_export]
 macro_rules! backend_conformance_tests {
@@ -1527,7 +1527,7 @@ macro_rules! backend_conformance_tests {
 // vfs-memory/src/lib.rs
 #[cfg(test)]
 mod tests {
-    vfs_core::backend_conformance_tests!(|| MemoryBackend::new());
+    anyfs::backend_conformance_tests!(|| MemoryBackend::new());
 }
 ```
 

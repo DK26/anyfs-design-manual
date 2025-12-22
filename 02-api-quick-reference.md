@@ -8,14 +8,16 @@
 
 ```toml
 [dependencies]
-vfs = "0.1"
+anyfs-container = "0.1"
+anyfs = "0.1"
 ```
 
 With specific backends:
 
 ```toml
 [dependencies]
-vfs = { version = "0.1", features = ["sqlite", "memory"] }
+anyfs-container = "0.1"
+anyfs = { version = "0.1", features = ["sqlite", "memory"] }
 ```
 
 ---
@@ -23,7 +25,8 @@ vfs = { version = "0.1", features = ["sqlite", "memory"] }
 ## Creating a Container
 
 ```rust
-use vfs::{FilesContainer, SqliteBackend, MemoryBackend, VirtualPath};
+use anyfs_container::FilesContainer;
+use anyfs::{SqliteBackend, MemoryBackend, VirtualPath};
 
 // In-memory (testing)
 let container = FilesContainer::new(MemoryBackend::new());
@@ -52,7 +55,7 @@ let container = FilesContainer::builder()
 ## Path Handling
 
 ```rust
-use vfs::VirtualPath;
+use anyfs::VirtualPath;
 
 // Create paths
 let path = VirtualPath::new("/documents/report.pdf")?;
@@ -210,7 +213,8 @@ container.destroy()?;  // consumes container
 ## Error Handling
 
 ```rust
-use vfs::{VfsError, CapacityError, PathError};
+use anyfs_container::{ContainerError, CapacityError};
+use anyfs::{VfsError, PathError};
 
 match container.write(&path, &data) {
     Ok(()) => println!("Written"),
@@ -242,7 +246,7 @@ match container.write(&path, &data) {
 ## Backend Lifecycle
 
 ```rust
-use vfs::{SqliteBackend, BackendLifecycle};
+use anyfs::{SqliteBackend, BackendLifecycle};
 
 // Create new (fails if exists)
 let backend = SqliteBackend::create("new.db")?;
@@ -264,11 +268,13 @@ backend.destroy()?;  // deletes the file
 ### Ensure parent directories exist
 
 ```rust
+use anyfs::VfsBackend;
+
 fn write_with_parents(
-    container: &mut FilesContainer<impl StorageBackend>,
+    container: &mut FilesContainer<impl VfsBackend>,
     path: &VirtualPath,
     data: &[u8],
-) -> Result<(), VfsError> {
+) -> Result<(), ContainerError> {
     if let Some(parent) = path.parent() {
         container.mkdir_all(&parent)?;
     }
@@ -280,10 +286,10 @@ fn write_with_parents(
 
 ```rust
 fn walk(
-    container: &FilesContainer<impl StorageBackend>,
+    container: &FilesContainer<impl VfsBackend>,
     path: &VirtualPath,
     f: &mut impl FnMut(&VirtualPath, &DirEntry),
-) -> Result<(), VfsError> {
+) -> Result<(), ContainerError> {
     for entry in container.list(path)? {
         let child_path = path.join(entry.name.as_str())?;
         f(&child_path, &entry);
@@ -299,9 +305,9 @@ fn walk(
 
 ```rust
 fn dir_size(
-    container: &FilesContainer<impl StorageBackend>,
+    container: &FilesContainer<impl VfsBackend>,
     path: &VirtualPath,
-) -> Result<u64, VfsError> {
+) -> Result<u64, ContainerError> {
     let mut total = 0u64;
     for entry in container.list(path)? {
         let child = path.join(entry.name.as_str())?;
@@ -334,20 +340,18 @@ fn dir_size(
 | `CapacityLimits` | Quota configuration |
 | `CapacityUsage` | Current usage stats |
 
-| Trait | Description |
-|-------|-------------|
-| `StorageBackend` | Core storage operations |
-| `BackendLifecycle` | Create/open/destroy |
-| `Snapshot` | Read-only view |
-| `Transaction` | Read-write operations |
+| Trait | Crate | Description |
+|-------|-------|-------------|
+| `VfsBackend` | `anyfs` | Core storage operations |
+| `BackendLifecycle` | `anyfs` | Create/open/destroy |
 
-| Error | Description |
-|-------|-------------|
-| `VfsError` | Top-level container errors |
-| `BackendError` | Storage-level errors |
-| `PathError` | Path parsing errors |
-| `CapacityError` | Quota exceeded errors |
+| Error | Crate | Description |
+|-------|-------|-------------|
+| `VfsError` | `anyfs` | Backend-level errors |
+| `PathError` | `anyfs` | Path parsing errors |
+| `ContainerError` | `anyfs-container` | Container-level errors |
+| `CapacityError` | `anyfs-container` | Quota exceeded errors |
 
 ---
 
-*For full details, see the [Design Document](./vfs-container-design.md).*
+*For full details, see the [Design Document](./anyfs-container-design.md).*

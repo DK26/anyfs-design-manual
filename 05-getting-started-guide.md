@@ -10,20 +10,22 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vfs = "0.1"
+anyfs-container = "0.1"
+anyfs = "0.1"
 ```
 
-By default, this includes the SQLite and in-memory backends. For specific backends only:
+By default, `anyfs` includes the SQLite and in-memory backends. For specific backends only:
 
 ```toml
 [dependencies]
-vfs = { version = "0.1", default-features = false, features = ["sqlite"] }
+anyfs-container = "0.1"
+anyfs = { version = "0.1", default-features = false, features = ["sqlite"] }
 ```
 
-Available features:
+Available features for `anyfs`:
 - `sqlite` — SQLite-backed persistent storage
 - `memory` — In-memory storage (for testing)
-- `fs` — Host filesystem backend (via strict-path)
+- `vrootfs` — Host filesystem backend (via strict-path)
 
 ---
 
@@ -32,7 +34,8 @@ Available features:
 ### Hello World
 
 ```rust
-use vfs::{FilesContainer, MemoryBackend, VirtualPath};
+use anyfs_container::FilesContainer;
+use anyfs::{MemoryBackend, VirtualPath};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory container
@@ -54,7 +57,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Persistent Storage with SQLite
 
 ```rust
-use vfs::{FilesContainer, SqliteBackend, VirtualPath};
+use anyfs_container::FilesContainer;
+use anyfs::{SqliteBackend, VirtualPath};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create or open a SQLite-backed container
@@ -320,23 +324,23 @@ println!("Exported {} files", stats.files_exported);
 ### Pattern Matching on Errors
 
 ```rust
-use vfs::{VfsError, CapacityError};
+use anyfs_container::{ContainerError, CapacityError};
 
 match container.write(&path, &large_data) {
     Ok(()) => println!("Written successfully"),
-    
-    Err(VfsError::NotFound(p)) => {
+
+    Err(ContainerError::NotFound(p)) => {
         println!("Parent directory doesn't exist: {}", p);
     }
-    
-    Err(VfsError::Capacity(CapacityError::FileSizeExceeded { size, limit })) => {
+
+    Err(ContainerError::Capacity(CapacityError::FileSizeExceeded { size, limit })) => {
         println!("File too large: {} bytes (limit: {})", size, limit);
     }
-    
-    Err(VfsError::Capacity(CapacityError::TotalSizeExceeded { used, limit })) => {
+
+    Err(ContainerError::Capacity(CapacityError::TotalSizeExceeded { used, limit })) => {
         println!("Storage full: {} / {} bytes", used, limit);
     }
-    
+
     Err(e) => println!("Other error: {}", e),
 }
 ```
@@ -363,8 +367,9 @@ match container.write(&path, &large_data) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vfs::{FilesContainer, MemoryBackend, VirtualPath};
-    
+    use anyfs_container::FilesContainer;
+    use anyfs::{MemoryBackend, VirtualPath};
+
     fn test_container() -> FilesContainer<MemoryBackend> {
         FilesContainer::new(MemoryBackend::new())
     }
@@ -411,7 +416,7 @@ fn test_storage_limit() {
     
     assert!(matches!(
         result,
-        Err(VfsError::Capacity(CapacityError::TotalSizeExceeded { .. }))
+        Err(ContainerError::Capacity(CapacityError::TotalSizeExceeded { .. }))
     ));
 }
 ```
@@ -424,7 +429,7 @@ fn test_storage_limit() {
 
 ```rust
 mod paths {
-    use vfs::VirtualPath;
+    use anyfs::VirtualPath;
     use once_cell::sync::Lazy;
     
     pub static CONFIG: Lazy<VirtualPath> = Lazy::new(|| {
@@ -443,10 +448,12 @@ container.mkdir(&*paths::CONFIG)?;
 ### 2. Handle Errors Gracefully
 
 ```rust
+use anyfs::VfsBackend;
+
 fn ensure_parent_exists(
-    container: &mut FilesContainer<impl StorageBackend>,
+    container: &mut FilesContainer<impl VfsBackend>,
     path: &VirtualPath,
-) -> Result<(), VfsError> {
+) -> Result<(), ContainerError> {
     if let Some(parent) = path.parent() {
         if !container.exists(&parent) {
             container.mkdir_all(&parent)?;
@@ -486,7 +493,7 @@ FilesContainer::builder()
 - [API Quick Reference](./02-api-quick-reference.md) — Condensed API overview
 - [Backend Implementer's Guide](./03-backend-implementers-guide.md) — Create custom backends
 - [Architecture Decision Records](./04-architecture-decision-records.md) — Understand design choices
-- [Design Document](./vfs-container-design.md) — Full technical specification
+- [Design Document](./anyfs-container-design.md) — Full technical specification
 
 ---
 

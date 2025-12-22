@@ -519,4 +519,4 @@ match container.read(&path) {
 ---
 
 *Document version: 1.0*  
-*For technical details, see the [Design Document](./vfs-container-design.md)*
+*For technical details, see the [Design Document](./anyfs-container-design.md)*

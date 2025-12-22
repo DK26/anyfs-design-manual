@@ -170,7 +170,7 @@ The virtual filesystem is modeled as a **directed graph**:
 
 | Concern | Handled By |
 |---------|------------|
-| Path string parsing | `VirtualPath` (in `vfs-core`) |
+| Path string parsing | `VirtualPath` (in `anyfs`) |
 | Path traversal & resolution | `FilesContainer` |
 | Symlink following | `FilesContainer` |
 | Link count management | `FilesContainer` |
@@ -1009,12 +1009,12 @@ impl<T> VfsResultExt<T> for Result<T, BackendError> {
 ### 11.1 Workspace Layout
 
 ```
-vfs-container/
+anyfs-container/
 ├── Cargo.toml              # Workspace manifest
 ├── README.md
 ├── LICENSE
 │
-├── vfs-core/               # Core traits and types
+├── anyfs/               # Core traits and types
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
@@ -1074,7 +1074,7 @@ vfs-container/
                          │
                          ▼
                    ┌──────────┐
-                   │ vfs-core │  (traits, types)
+                   │ anyfs │  (traits, types)
                    └──────────┘
 ```
 
@@ -1102,7 +1102,7 @@ The `vfs` crate re-exports everything for convenience:
 ```rust
 // vfs/src/lib.rs
 
-pub use vfs_core::{
+pub use anyfs::{
     // Traits
     StorageBackend, BackendLifecycle, Snapshot, Transaction,
     
@@ -1190,7 +1190,7 @@ pub use vfs_fs::FsBackend;
 
 ```
 Phase 1: Core Foundation
-├── vfs-core crate
+├── anyfs crate
 │   ├── [ ] Types: NodeId, ContentId, ChunkId, Name
 │   ├── [ ] Node types: NodeKind, NodeRecord, NodeMetadata
 │   ├── [ ] Edge type
@@ -1278,7 +1278,7 @@ Phase 9: Polish
 
 | Milestone | Deliverable | Est. Effort |
 |-----------|-------------|-------------|
-| M1: Core Types | `vfs-core` crate publishable | 1 week |
+| M1: Core Types | `anyfs` crate publishable | 1 week |
 | M2: Memory Backend | `vfs-memory` crate with tests | 1 week |
 | M3: Basic Container | Read/write/mkdir/remove working | 2 weeks |
 | M4: SQLite Backend | `vfs-sqlite` crate with tests | 2 weeks |
@@ -1302,7 +1302,7 @@ Phase 9: Polish
 - Every backend must pass identical tests
 
 ```rust
-// vfs-core/src/testing.rs
+// anyfs/src/testing.rs
 
 #[macro_export]
 macro_rules! backend_conformance_tests {
@@ -1325,7 +1325,7 @@ macro_rules! backend_conformance_tests {
 // vfs-memory/src/lib.rs
 #[cfg(test)]
 mod tests {
-    vfs_core::backend_conformance_tests!(|| MemoryBackend::new());
+    anyfs::backend_conformance_tests!(|| MemoryBackend::new());
 }
 ```
 

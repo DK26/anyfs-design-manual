@@ -259,4 +259,4 @@ If you need a **safe, portable, application-level virtual filesystem** with **pl
 
 ---
 
-*For technical details, see the [Design Document](./vfs-container-design.md).*
+*For technical details, see the [Design Document](./anyfs-container-design.md).*

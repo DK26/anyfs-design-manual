@@ -452,4 +452,4 @@ Differences from POSIX:
 
 ---
 
-*For full technical details, see the [Design Document](./vfs-container-design.md).*
+*For full technical details, see the [Design Document](./anyfs-container-design.md).*

@@ -10,25 +10,25 @@ Two crates:
 
 | Crate | Purpose |
 |-------|---------|
-| `vfs-switchable` | VFS trait with swappable backends (VRootFs, Memory, SQLite) |
-| `vfs-container` | Wraps vfs-switchable, adds capacity limits and isolation |
+| `anyfs` | VFS trait with swappable backends (Fs, Memory, SQLite) |
+| `anyfs-container` | Wraps anyfs, adds capacity limits and isolation |
 
 ```
 ┌─────────────────────────────────────────┐
 │  Your Application                       │
 ├─────────────────────────────────────────┤
-│  vfs-container (quotas, isolation)      │
+│  anyfs-container (quotas, isolation)      │
 ├─────────────────────────────────────────┤
-│  vfs-switchable (VfsBackend trait)      │
+│  anyfs (VfsBackend trait)      │
 ├──────────┬──────────┬───────────────────┤
-│ VRootFs  │  Memory  │  SQLite           │
+│ VRootFs│  Memory  │  SQLite           │
 └──────────┴──────────┴───────────────────┘
 ```
 
 ## Quick Example
 
 ```rust
-use vfs_switchable::{VfsBackend, MemoryBackend};
+use anyfs::{VfsBackend, MemoryBackend};
 
 fn save(vfs: &mut impl VfsBackend) -> Result<(), VfsError> {
     vfs.create_dir_all("/data")?;
@@ -64,7 +64,7 @@ This manual is organized into logical sections for different audiences:
 
 The following documents are authoritative sources of truth:
 
-1. **[VFS Container Design (RFC)](./architecture/vfs-container-design.md)** - Full technical specification
+1. **[AnyFS Container Design (RFC)](./architecture/vfs-container-design.md)** - Full technical specification
 2. **[Architecture Decision Records](./architecture/adrs.md)** - Key design decisions
 3. **[Review Response & Decisions](./review/decisions.md)** - Final decisions after review
 

@@ -486,7 +486,7 @@ FilesContainer::builder()
 - [API Quick Reference](./api-reference.md) — Condensed API overview
 - [Backend Implementer's Guide](../implementation/backend-guide.md) — Create custom backends
 - [Architecture Decision Records](../architecture/adrs.md) — Understand design choices
-- [Design Document](../architecture/vfs-container-design.md) — Full technical specification
+- [Design Document](../architecture/anyfs-container-design.md) — Full technical specification
 
 ---
 

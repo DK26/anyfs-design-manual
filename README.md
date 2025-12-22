@@ -10,25 +10,25 @@ Two crates:
 
 | Crate | Purpose |
 |-------|---------|
-| `vfs-switchable` | VFS trait with swappable backends (VRootFs, Memory, SQLite) |
-| `vfs-container` | Wraps vfs-switchable, adds capacity limits and isolation |
+| `anyfs` | VFS trait with swappable backends (Fs, Memory, SQLite) |
+| `anyfs-container` | Wraps anyfs, adds capacity limits and isolation |
 
 ```
 ┌─────────────────────────────────────────┐
 │  Your Application                       │
 ├─────────────────────────────────────────┤
-│  vfs-container (quotas, isolation)      │
+│  anyfs-container (quotas, isolation)      │
 ├─────────────────────────────────────────┤
-│  vfs-switchable (VfsBackend trait)      │
+│  anyfs (VfsBackend trait)      │
 ├──────────┬──────────┬───────────────────┤
-│ VRootFs  │  Memory  │  SQLite           │
+│ VRootFs│  Memory  │  SQLite           │
 └──────────┴──────────┴───────────────────┘
 ```
 
 ## Quick Example
 
 ```rust
-use vfs_switchable::{VfsBackend, MemoryBackend};
+use anyfs::{VfsBackend, MemoryBackend};
 
 fn save(vfs: &mut impl VfsBackend) -> Result<(), VfsError> {
     vfs.create_dir_all("/data")?;
@@ -48,13 +48,13 @@ save(&mut mem)?;
 
 | Component | Status |
 |-----------|--------|
-| Design | ✅ Path type decided (`impl AsRef<Path>`) |
+| Design | ✅ Complete |
 | Implementation | 🔲 Not started |
 
-## Open Questions
+## Key Design Decisions
 
-See [Section 6 of the design doc](./vfs-design.md#6-open-design-questions) for remaining decisions:
+See [Section 6 of the design doc](./vfs-design.md#6-open-design-questions) for details:
 
-1. ~~**Path type in trait**~~ — ✅ Resolved: `impl AsRef<Path>`
-2. **Symlink support** — Include in v1 or defer?
-3. **Usage discovery** — How does container know existing usage?
+1. ✅ **Path type**: VfsBackend uses `&VirtualPath`, FilesContainer uses `impl AsRef<Path>`
+2. ✅ **Error paths**: Use `VirtualPath`
+3. ⏳ **Symlink support**: Deferred to v2

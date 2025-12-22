@@ -350,4 +350,4 @@ fn dir_size(
 
 ---
 
-*For full details, see the [Design Document](../architecture/vfs-container-design.md).*
+*For full details, see the [Design Document](../architecture/anyfs-container-design.md).*

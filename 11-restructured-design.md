@@ -12,19 +12,19 @@
 │  Your App                               │  ← Project 3: Consumer
 │  (just calls FilesContainer API)        │
 ├─────────────────────────────────────────┤
-│  vfs-container                          │  ← Project 2: Isolation layer
+│  anyfs-container                          │  ← Project 2: Isolation layer
 │  (quotas, tenant isolation, safety)     │
 ├─────────────────────────────────────────┤
-│  vfs-switchable                         │  ← Project 1: Foundation
+│  anyfs                         │  ← Project 1: Foundation
 │  (generic VFS with swappable backends)  │
 ├──────────┬──────────┬───────────────────┤
-│ FsBackend│MemBackend│  SqliteBackend    │
+│ VRootFsBackend│MemBackend│  SqliteBackend    │
 └──────────┴──────────┴───────────────────┘
 ```
 
 ---
 
-# Project 1: vfs-switchable
+# Project 1: anyfs
 
 **Purpose:** Generic virtual filesystem abstraction with swappable backends.
 
@@ -33,7 +33,7 @@
 ## Crate Structure
 
 ```
-vfs-switchable/
+anyfs/
 ├── Cargo.toml
 └── src/
     ├── lib.rs
@@ -42,8 +42,8 @@ vfs-switchable/
     ├── types.rs        # Metadata, DirEntry, FileType
     ├── error.rs        # VfsError
     │
-    ├── fs/             # Filesystem backend
-    │   └── mod.rs      # FsBackend (via strict-path)
+    ├── vrootfs/        # Filesystem backend
+    │   └── mod.rs      # VRootFsBackend (via strict-path)
     │
     ├── memory/         # In-memory backend
     │   └── mod.rs      # MemoryBackend
@@ -189,16 +189,16 @@ pub enum VfsError {
 
 ## Backend Implementations
 
-### FsBackend (via strict-path)
+### VRootFsBackend (via strict-path)
 
 ```rust
 use strict_path::{VirtualRoot, VirtualPath as StrictPath};
 
-pub struct FsBackend {
+pub struct VRootFsBackend {
     root: VirtualRoot,
 }
 
-impl FsBackend {
+impl VRootFsBackend {
     pub fn new(root_dir: &Path) -> Result<Self, VfsError> {
         Ok(Self {
             root: VirtualRoot::new(root_dir)?,
@@ -206,7 +206,7 @@ impl FsBackend {
     }
 }
 
-impl VfsBackend for FsBackend {
+impl VfsBackend for VRootFsBackend {
     fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError> {
         let strict_path = to_strict_path(path)?;
         Ok(self.root.read(&strict_path)?)
@@ -276,7 +276,7 @@ impl VfsBackend for SqliteBackend {
 ## Usage Example
 
 ```rust
-use vfs_switchable::{VfsBackend, FsBackend, MemoryBackend, SqliteBackend, VirtualPath};
+use anyfs::{VfsBackend, VRootFsBackend, MemoryBackend, SqliteBackend, VirtualPath};
 
 // Pick any backend — same API
 fn process_files(vfs: &mut impl VfsBackend) -> Result<(), VfsError> {
@@ -293,7 +293,7 @@ fn process_files(vfs: &mut impl VfsBackend) -> Result<(), VfsError> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Filesystem backend
-    let mut fs = FsBackend::new(Path::new("/tmp/myapp"))?;
+    let mut fs = VRootFsBackend::new(Path::new("/tmp/myapp"))?;
     process_files(&mut fs)?;
     
     // Memory backend (for tests)
@@ -310,17 +310,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
-# Project 2: vfs-container
+# Project 2: anyfs-container
 
-**Purpose:** Tenant isolation and containment layer built on vfs-switchable.
+**Purpose:** Tenant isolation and containment layer built on anyfs.
 
-**Depends on:** `vfs-switchable`
+**Depends on:** `anyfs`
 
 ## Crate Structure
 
 ```
-vfs-container/
-├── Cargo.toml          # depends on vfs-switchable
+anyfs-container/
+├── Cargo.toml          # depends on anyfs
 └── src/
     ├── lib.rs
     ├── container.rs    # FilesContainer<B>
@@ -333,7 +333,7 @@ vfs-container/
 ## FilesContainer
 
 ```rust
-use vfs_switchable::{VfsBackend, VirtualPath, VfsError};
+use anyfs::{VfsBackend, VirtualPath, VfsError};
 
 /// A contained filesystem with quotas and isolation.
 pub struct FilesContainer<B: VfsBackend> {
@@ -495,8 +495,8 @@ impl<B: VfsBackend> ContainerBuilder<B> {
 ## Usage Example
 
 ```rust
-use vfs_switchable::{FsBackend, SqliteBackend, VirtualPath};
-use vfs_container::{FilesContainer, ContainerBuilder, CapacityLimits};
+use anyfs::{VRootFsBackend, SqliteBackend, VirtualPath};
+use anyfs_container::{FilesContainer, ContainerBuilder, CapacityLimits};
 
 // Create a tenant container with 100MB quota
 fn create_tenant(tenant_id: &str) -> Result<FilesContainer<SqliteBackend>, Error> {
@@ -533,11 +533,11 @@ fn tenant_operation(container: &mut FilesContainer<impl VfsBackend>) -> Result<(
 
 **Purpose:** Your application that uses FilesContainer.
 
-**Depends on:** `vfs-container` (which depends on `vfs-switchable`)
+**Depends on:** `anyfs-container` (which depends on `anyfs`)
 
 ```rust
-use vfs_container::{FilesContainer, ContainerBuilder};
-use vfs_switchable::SqliteBackend;
+use anyfs_container::{FilesContainer, ContainerBuilder};
+use anyfs::SqliteBackend;
 
 struct TenantManager {
     // Your app just works with FilesContainer
@@ -567,9 +567,9 @@ fn handle_upload(container: &mut FilesContainer<impl VfsBackend>, file: Uploaded
 
 | Project | Crate | Purpose | Depends On |
 |---------|-------|---------|------------|
-| 1 | `vfs-switchable` | Generic VFS with swappable backends | — |
-| 2 | `vfs-container` | Tenant isolation + quotas | `vfs-switchable` |
-| 3 | Your App | Business logic | `vfs-container` |
+| 1 | `anyfs` | Generic VFS with swappable backends | — |
+| 2 | `anyfs-container` | Tenant isolation + quotas | `anyfs` |
+| 3 | Your App | Business logic | `anyfs-container` |
 
 **Project 1** is the foundation — pure I/O abstraction.
 **Project 2** adds containment — quotas, limits, safety.
@@ -579,21 +579,21 @@ fn handle_upload(container: &mut FilesContainer<impl VfsBackend>, file: Uploaded
 
 # Implementation Plan
 
-## Phase 1: vfs-switchable (Week 1-2)
+## Phase 1: anyfs (Week 1-2)
 
 1. Core types: `VirtualPath`, `Metadata`, `DirEntry`, `VfsError`
 2. `VfsBackend` trait
-3. `FsBackend` via `strict-path`
+3. `VRootFsBackend` via `strict-path`
 4. `MemoryBackend` 
 5. Tests
 
-## Phase 2: vfs-switchable + SQLite (Week 3)
+## Phase 2: anyfs + SQLite (Week 3)
 
 1. `SqliteBackend` implementation
 2. Schema design (internal)
 3. All backends pass same test suite
 
-## Phase 3: vfs-container (Week 4)
+## Phase 3: anyfs-container (Week 4)
 
 1. `FilesContainer<B>`
 2. `CapacityLimits` + enforcement

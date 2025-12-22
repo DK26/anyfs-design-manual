@@ -10,8 +10,8 @@
 
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
-3. [Project 1: vfs-switchable](#3-project-1-vfs-switchable)
-4. [Project 2: vfs-container](#4-project-2-vfs-container)
+3. [Project 1: anyfs](#3-project-1-anyfs)
+4. [Project 2: anyfs-container](#4-project-2-anyfs-container)
 5. [Backend Implementations](#5-backend-implementations)
 6. [Open Design Questions](#6-open-design-questions)
 7. [Implementation Plan](#7-implementation-plan)
@@ -25,8 +25,8 @@
 
 A layered virtual filesystem ecosystem for Rust:
 
-- **Project 1 (`vfs-switchable`)**: Generic VFS abstraction with swappable backends
-- **Project 2 (`vfs-container`)**: Tenant isolation layer with capacity limits, built on Project 1
+- **Project 1 (`anyfs`)**: Generic VFS abstraction with swappable backends
+- **Project 2 (`anyfs-container`)**: Tenant isolation layer with capacity limits, built on Project 1
 
 ### 1.2 Goals
 
@@ -54,13 +54,13 @@ A layered virtual filesystem ecosystem for Rust:
 ┌─────────────────────────────────────────┐
 │  Your Application                       │  ← Uses clean API
 ├─────────────────────────────────────────┤
-│  vfs-container                          │  ← Quotas, isolation
+│  anyfs-container                          │  ← Quotas, isolation
 │  FilesContainer<B: VfsBackend>          │
 ├─────────────────────────────────────────┤
-│  vfs-switchable                         │  ← Core abstraction
+│  anyfs                         │  ← Core abstraction
 │  VfsBackend trait                       │
 ├──────────┬──────────┬───────────────────┤
-│ VRootFs  │  Memory  │  SQLite           │  ← Backends
+│ Fs  │  Memory  │  SQLite           │  ← Backends
 │ Backend  │  Backend │  Backend          │
 └──────────┴──────────┴───────────────────┘
      │
@@ -75,8 +75,8 @@ A layered virtual filesystem ecosystem for Rust:
 
 | Layer | Responsibility |
 |-------|---------------|
-| `vfs-switchable` | Defines `VfsBackend` trait, provides backend implementations |
-| `vfs-container` | Wraps any `VfsBackend`, adds capacity limits and usage tracking |
+| `anyfs` | Defines `VfsBackend` trait, provides backend implementations |
+| `anyfs-container` | Wraps any `VfsBackend`, adds capacity limits and usage tracking |
 | Application | Uses `FilesContainer`, doesn't know about backend details |
 
 ### 2.3 Containment Strategies
@@ -85,13 +85,13 @@ All three backends achieve isolation differently:
 
 | Backend | Containment Mechanism |
 |---------|----------------------|
-| `VRootFsBackend` | `strict-path::VirtualRoot` — real directory acts as root, paths clamped |
+| `FsBackend` | `strict-path::VirtualRoot` — real directory acts as root, paths clamped |
 | `SqliteBackend` | Each container is a `.db` file — complete isolation by file |
 | `MemoryBackend` | Each container is a separate instance — isolation by process memory |
 
 ---
 
-## 3. Project 1: vfs-switchable
+## 3. Project 1: anyfs
 
 ### 3.1 Purpose
 
@@ -145,7 +145,7 @@ pub trait VfsBackend: Send {
 ```
 
 **Path type rationale:** `impl AsRef<Path>` is idiomatic Rust for filesystem APIs. It accepts `&str`, `String`, `&Path`, `PathBuf`, etc. Each backend handles paths according to its storage:
-- `VRootFsBackend`: passes to `strict-path` directly
+- `FsBackend`: passes to `strict-path` directly
 - `MemoryBackend`: uses `PathBuf` as HashMap key
 - `SqliteBackend`: converts to string internally (its concern, not the API's)
 
@@ -210,7 +210,7 @@ pub enum VfsError {
 ### 3.5 Crate Structure
 
 ```
-vfs-switchable/
+anyfs/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs          # Re-exports
@@ -249,7 +249,7 @@ optional = true
 
 [features]
 default = ["vrootfs", "memory"]
-vrootfs = ["strict-path"]
+fs = ["strict-path"]
 memory = []
 sqlite = ["rusqlite"]
 full = ["vrootfs", "memory", "sqlite"]
@@ -257,7 +257,7 @@ full = ["vrootfs", "memory", "sqlite"]
 
 ---
 
-## 4. Project 2: vfs-container
+## 4. Project 2: anyfs-container
 
 ### 4.1 Purpose
 
@@ -270,7 +270,7 @@ Wrap any `VfsBackend` with:
 
 ```rust
 use std::path::Path;
-use vfs_switchable::VfsBackend;
+use anyfs::VfsBackend;
 
 /// A contained filesystem with capacity limits.
 pub struct FilesContainer<B: VfsBackend> {
@@ -382,7 +382,7 @@ pub enum ContainerError {
 ### 4.6 Crate Structure
 
 ```
-vfs-container/
+anyfs-container/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -400,7 +400,7 @@ vfs-container/
 
 ```toml
 [dependencies]
-vfs-switchable = { version = "0.1", path = "../vfs-switchable" }
+anyfs = { version = "0.1", path = "../anyfs" }
 thiserror = "1"
 ```
 
@@ -408,7 +408,7 @@ thiserror = "1"
 
 ## 5. Backend Implementations
 
-### 5.1 VRootFsBackend
+### 5.1 FsBackend
 
 Uses `strict-path::VirtualRoot` for containment.
 
@@ -416,11 +416,11 @@ Uses `strict-path::VirtualRoot` for containment.
 use std::path::Path;
 use strict_path::VirtualRoot;
 
-pub struct VRootFsBackend {
+pub struct FsBackend {
     vroot: VirtualRoot,
 }
 
-impl VRootFsBackend {
+impl FsBackend {
     /// Create backend with given directory as virtual root.
     /// The directory is created if it doesn't exist.
     pub fn new(root_dir: impl AsRef<Path>) -> Result<Self, VfsError> {
@@ -437,7 +437,7 @@ impl VRootFsBackend {
     }
 }
 
-impl VfsBackend for VRootFsBackend {
+impl VfsBackend for FsBackend {
     fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
         let vpath = self.vroot.virtual_join(path.as_ref())
             .map_err(|e| VfsError::InvalidPath(e.to_string()))?;
@@ -576,11 +576,11 @@ CREATE INDEX idx_entries_path ON entries(path);
 - Idiomatic Rust for filesystem APIs
 - Accepts `&str`, `String`, `&Path`, `PathBuf`, `&OsStr`, etc.
 - `Path` wraps `OsStr` — handles OS-specific semantics naturally
-- `VRootFsBackend` uses real filesystem — OS paths are natural
+- `FsBackend` uses real filesystem — OS paths are natural
 - SQLite is secondary use case — shouldn't dictate API design
 
 **How backends handle it:**
-- `VRootFsBackend`: Pass directly to `strict-path::VirtualRoot`
+- `FsBackend`: Pass directly to `strict-path::VirtualRoot`
 - `MemoryBackend`: Convert to `PathBuf` as HashMap key  
 - `SqliteBackend`: Convert to string internally (its internal concern)
 
@@ -605,7 +605,7 @@ NotFound(Box<Path>),
 
 **Question:** Should the trait support symlinks?
 
-- `VRootFsBackend`: The underlying filesystem has symlinks; `strict-path` handles them
+- `FsBackend`: The underlying filesystem has symlinks; `strict-path` handles them
 - `MemoryBackend`: Could support symlinks as a stored target path
 - `SqliteBackend`: Could store symlink targets
 
@@ -629,15 +629,15 @@ Options:
 ### Phase 1: Core Types (Week 1)
 
 - [x] ~~Decide path type~~ → `impl AsRef<Path>`
-- [ ] `vfs-switchable`: `VfsBackend` trait
-- [ ] `vfs-switchable`: `Metadata`, `DirEntry`, `FileType`
-- [ ] `vfs-switchable`: `VfsError`
-- [ ] `vfs-switchable`: `MemoryBackend` (simplest, for testing)
+- [ ] `anyfs`: `VfsBackend` trait
+- [ ] `anyfs`: `Metadata`, `DirEntry`, `FileType`
+- [ ] `anyfs`: `VfsError`
+- [ ] `anyfs`: `MemoryBackend` (simplest, for testing)
 
-### Phase 2: VRootFsBackend (Week 2)
+### Phase 2: FsBackend (Week 2)
 
 - [ ] Integrate `strict-path`
-- [ ] Implement `VRootFsBackend`
+- [ ] Implement `FsBackend`
 - [ ] Conformance tests (same tests as MemoryBackend)
 
 ### Phase 3: SqliteBackend (Week 3)
@@ -646,7 +646,7 @@ Options:
 - [ ] Implement `SqliteBackend`
 - [ ] Conformance tests
 
-### Phase 4: vfs-container (Week 4)
+### Phase 4: anyfs-container (Week 4)
 
 - [ ] `FilesContainer`
 - [ ] `CapacityLimits`, `CapacityUsage`
@@ -666,26 +666,26 @@ Options:
 
 ### vs. `vfs` crate
 
-| Feature | vfs | vfs-switchable |
+| Feature | vfs | anyfs |
 |---------|-----|----------------|
 | Path type | `&str` | TBD |
-| Backends | Physical, Memory, Overlay, Embedded | VRootFs, Memory, SQLite |
-| Capacity limits | ❌ | ✅ via vfs-container |
+| Backends | Physical, Memory, Overlay, Embedded | Fs, Memory, SQLite |
+| Capacity limits | ❌ | ✅ via anyfs-container |
 | Containment | ❌ | ✅ via strict-path |
 | Overlay/layering | ✅ | ❌ |
 
 ### vs. `OpenDAL`
 
-| Feature | OpenDAL | vfs-switchable |
+| Feature | OpenDAL | anyfs |
 |---------|---------|----------------|
 | Focus | Cloud/object storage | Local/embedded storage |
 | API style | Object storage (get/put) | Filesystem (read/write/mkdir) |
-| Backends | 50+ (S3, GCS, Azure, etc.) | 3 (VRootFs, Memory, SQLite) |
+| Backends | 50+ (S3, GCS, Azure, etc.) | 3 (Fs, Memory, SQLite) |
 | Async | ✅ | ❌ (sync only) |
 
 ### When to Use What
 
-- **vfs-switchable**: Local storage, tenant isolation, portable containers
+- **anyfs**: Local storage, tenant isolation, portable containers
 - **vfs crate**: Overlay filesystems, embedded resources
 - **OpenDAL**: Cloud storage, async workloads
 
@@ -693,10 +693,10 @@ Options:
 
 ## Appendix: Usage Examples
 
-### Basic Usage (vfs-switchable only)
+### Basic Usage (anyfs only)
 
 ```rust
-use vfs_switchable::{VfsBackend, VRootFsBackend, MemoryBackend};
+use anyfs::{VfsBackend, FsBackend, MemoryBackend};
 
 fn save_data(vfs: &mut impl VfsBackend, name: &str, data: &[u8]) -> Result<(), VfsError> {
     vfs.create_dir_all("/data")?;
@@ -705,7 +705,7 @@ fn save_data(vfs: &mut impl VfsBackend, name: &str, data: &[u8]) -> Result<(), V
 }
 
 // With filesystem
-let mut fs = VRootFsBackend::new("/var/myapp")?;
+let mut fs = FsBackend::new("/var/myapp")?;
 save_data(&mut fs, "report.txt", b"...")?;
 
 // With memory (for tests)
@@ -713,11 +713,11 @@ let mut mem = MemoryBackend::new();
 save_data(&mut mem, "report.txt", b"...")?;
 ```
 
-### With Container (vfs-container)
+### With Container (anyfs-container)
 
 ```rust
-use vfs_container::{FilesContainer, ContainerBuilder};
-use vfs_switchable::SqliteBackend;
+use anyfs_container::{FilesContainer, ContainerBuilder};
+use anyfs::SqliteBackend;
 
 // Create tenant with 100 MB quota
 let backend = SqliteBackend::create("tenant_123.db")?;
@@ -738,12 +738,12 @@ std::fs::rename("tenant_123.db", "archive/tenant_123.db")?;
 ### Multi-Tenant Setup
 
 ```rust
-use vfs_container::{FilesContainer, ContainerBuilder};
-use vfs_switchable::VRootFsBackend;
+use anyfs_container::{FilesContainer, ContainerBuilder};
+use anyfs::FsBackend;
 
-fn create_tenant_container(tenant_id: &str) -> Result<FilesContainer<VRootFsBackend>, Error> {
+fn create_tenant_container(tenant_id: &str) -> Result<FilesContainer<FsBackend>, Error> {
     let root = format!("/data/tenants/{}", tenant_id);
-    let backend = VRootFsBackend::new(&root)?;
+    let backend = FsBackend::new(&root)?;
     
     Ok(ContainerBuilder::new(backend)
         .max_total_size(100 * 1024 * 1024)

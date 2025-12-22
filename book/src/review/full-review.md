@@ -18,7 +18,7 @@
 - `06-comparison-and-positioning.md`
 - `08-technical-comparison-with-alternatives.md`
 - `09-build-vs-reuse-analysis.md`
-- `vfs-container-design.md`
+- `anyfs-container-design.md`
 
 ---
 
@@ -64,7 +64,7 @@ However, several critical gaps must be resolved **before** implementation, becau
 **Severity:** Critical (design/implementation ambiguity)
 
 **What’s happening**
-- `vfs-container-design.md` + ADRs define the backend as a **graph store** with `transact()` and `snapshot()` and node/edge/chunk primitives.
+- `anyfs-container-design.md` + ADRs define the backend as a **graph store** with `transact()` and `snapshot()` and node/edge/chunk primitives.
 - `08-technical-comparison-with-alternatives.md` shows a “StorageBackend (MVP Design)” that starts as **direct path-based operations** (`exists(path)`, `read(path)`, `write(path, ...)`, etc.), and then later in the same section also shows Snapshot/Transaction methods.
 
 **Why this matters**
@@ -72,7 +72,7 @@ However, several critical gaps must be resolved **before** implementation, becau
 - This also confuses reviewers and implementers (and will lead to the wrong backend being built).
 
 **Required action**
-- Declare **one** design as authoritative (recommended: the ADR + `vfs-container-design.md` graph-store trait).
+- Declare **one** design as authoritative (recommended: the ADR + `anyfs-container-design.md` graph-store trait).
 - Update or remove the “direct operations” trait definition from `08-technical-comparison-with-alternatives.md`.
 - Add a prominent note in `README.md` that ADRs are the source of truth.
 
@@ -217,7 +217,7 @@ You state xattrs are opt-in, and open questions recommend “64KB per attr”, b
 ---
 
 ### MP-3 — Doc numbering / TOC drift
-`vfs-container-design.md` has numbering inconsistencies:
+`anyfs-container-design.md` has numbering inconsistencies:
 - TOC points to “14. Open Questions” but the header is “15. Open Questions”.
 - “15. Open Questions” and “15. Future Considerations” both exist.
 - The “Open Questions” subsections are numbered “14.x”.

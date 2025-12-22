@@ -34,7 +34,7 @@ All of that lives in `FilesContainer`. Your backend just stores what it's told.
 
 ```toml
 [dependencies]
-vfs-core = "0.1"
+anyfs = "0.1"
 thiserror = "1"
 ```
 
@@ -43,7 +43,7 @@ thiserror = "1"
 ## Step 1: Define Your Backend Struct
 
 ```rust
-use vfs_core::{
+use anyfs::{
     StorageBackend, BackendLifecycle, Snapshot, Transaction,
     NodeId, ContentId, ChunkId, Name, Edge,
     NodeRecord, BackendError,
@@ -333,7 +333,7 @@ Every container needs a root directory (NodeId = 1):
 ```rust
 impl MyBackend {
     fn create_root_node(&mut self) -> Result<(), BackendError> {
-        use vfs_core::{NodeKind, NodeMetadata, Timestamp};
+        use anyfs::{NodeKind, NodeMetadata, Timestamp};
         
         let root = NodeRecord {
             id: NodeId(1),
@@ -375,7 +375,7 @@ mod tests {
     }
     
     // This generates ~50 tests
-    vfs_core::backend_conformance_tests!(create_test_backend);
+    anyfs::backend_conformance_tests!(create_test_backend);
     
     // Add your own backend-specific tests
     #[test]
@@ -434,7 +434,7 @@ If your storage doesn't support transactions natively, you need to implement the
 
 ### 5. Chunk size assumptions
 
-The core uses a fixed chunk size (`vfs_core::CHUNK_SIZE = 64KB`). Your backend doesn't need to enforce this, but it should handle any chunk size ≤ CHUNK_SIZE.
+The core uses a fixed chunk size (`anyfs::CHUNK_SIZE = 64KB`). Your backend doesn't need to enforce this, but it should handle any chunk size ≤ CHUNK_SIZE.
 
 ---
 
@@ -444,7 +444,7 @@ Here's a complete minimal implementation for reference:
 
 ```rust
 use std::collections::HashMap;
-use vfs_core::*;
+use anyfs::*;
 
 pub struct MemoryBackend {
     nodes: HashMap<NodeId, NodeRecord>,
@@ -632,4 +632,4 @@ If you run into issues implementing a backend:
 
 ---
 
-*For architecture details, see the [Design Document](./vfs-container-design.md).*
+*For architecture details, see the [Design Document](./anyfs-container-design.md).*

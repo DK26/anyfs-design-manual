@@ -1,6 +1,6 @@
 # VFS Ecosystem — Design Document
 
-**Version:** 0.2.0  
+**Version:** 0.1.0
 **Status:** Draft  
 **Last Updated:** 2025-12-22
 
@@ -10,8 +10,8 @@
 
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
-3. [Project 1: vfs-switchable](#3-project-1-vfs-switchable)
-4. [Project 2: vfs-container](#4-project-2-vfs-container)
+3. [Project 1: anyfs](#3-project-1-anyfs)
+4. [Project 2: anyfs-container](#4-project-2-anyfs-container)
 5. [Backend Implementations](#5-backend-implementations)
 6. [Open Design Questions](#6-open-design-questions)
 7. [Implementation Plan](#7-implementation-plan)
@@ -25,8 +25,8 @@
 
 A layered virtual filesystem ecosystem for Rust:
 
-- **Project 1 (`vfs-switchable`)**: Generic VFS abstraction with swappable backends
-- **Project 2 (`vfs-container`)**: Tenant isolation layer with capacity limits, built on Project 1
+- **Project 1 (`anyfs`)**: Generic VFS abstraction with swappable backends
+- **Project 2 (`anyfs-container`)**: Tenant isolation layer with capacity limits, built on Project 1
 
 ### 1.2 Goals
 
@@ -54,13 +54,13 @@ A layered virtual filesystem ecosystem for Rust:
 ┌─────────────────────────────────────────┐
 │  Your Application                       │  ← Uses clean API
 ├─────────────────────────────────────────┤
-│  vfs-container                          │  ← Quotas, isolation
+│  anyfs-container                          │  ← Quotas, isolation
 │  FilesContainer<B: VfsBackend>          │
 ├─────────────────────────────────────────┤
-│  vfs-switchable                         │  ← Core abstraction
+│  anyfs                         │  ← Core abstraction
 │  VfsBackend trait                       │
 ├──────────┬──────────┬───────────────────┤
-│ VRootFs  │  Memory  │  SQLite           │  ← Backends
+│ Fs  │  Memory  │  SQLite           │  ← Backends
 │ Backend  │  Backend │  Backend          │
 └──────────┴──────────┴───────────────────┘
      │
@@ -75,8 +75,8 @@ A layered virtual filesystem ecosystem for Rust:
 
 | Layer | Responsibility |
 |-------|---------------|
-| `vfs-switchable` | Defines `VfsBackend` trait, provides backend implementations |
-| `vfs-container` | Wraps any `VfsBackend`, adds capacity limits and usage tracking |
+| `anyfs` | Defines `VfsBackend` trait, provides backend implementations |
+| `anyfs-container` | Wraps any `VfsBackend`, adds capacity limits and usage tracking |
 | Application | Uses `FilesContainer`, doesn't know about backend details |
 
 ### 2.3 Containment Strategies
@@ -91,7 +91,7 @@ All three backends achieve isolation differently:
 
 ---
 
-## 3. Project 1: vfs-switchable
+## 3. Project 1: anyfs
 
 ### 3.1 Purpose
 
@@ -100,56 +100,82 @@ Provide a trait for virtual filesystem operations that any storage backend can i
 ### 3.2 The VfsBackend Trait
 
 ```rust
-use std::path::Path;
-
+/// A virtual filesystem backend.
+///
+/// Implementations provide storage; callers get uniform I/O.
 pub trait VfsBackend: Send {
+    // ─────────────────────────────────────────────────────────
+    // Read operations
+    // ─────────────────────────────────────────────────────────
+
     /// Read entire file contents
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError>;
-    
-    /// Read a byte range from a file
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, VfsError>;
-    
-    /// Write file contents (create or overwrite)
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError>;
-    
-    /// Append to file
-    fn append(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError>;
-    
+    fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError>;
+
+    /// Read a range of bytes from a file
+    fn read_range(&self, path: &VirtualPath, offset: u64, len: usize) -> Result<Vec<u8>, VfsError>;
+
+    /// Get metadata for a path
+    fn metadata(&self, path: &VirtualPath) -> Result<Metadata, VfsError>;
+
     /// Check if path exists
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError>;
-    
-    /// Get metadata
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, VfsError>;
-    
+    fn exists(&self, path: &VirtualPath) -> Result<bool, VfsError>;
+
     /// List directory contents
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Vec<DirEntry>, VfsError>;
-    
-    /// Create directory (parent must exist)
-    fn create_dir(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError>;
-    
+    fn list(&self, path: &VirtualPath) -> Result<Vec<DirEntry>, VfsError>;
+
+    // ─────────────────────────────────────────────────────────
+    // Write operations
+    // ─────────────────────────────────────────────────────────
+
+    /// Write entire file contents (create or overwrite)
+    fn write(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError>;
+
+    /// Append to file
+    fn append(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError>;
+
+    /// Create directory
+    fn mkdir(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+
     /// Create directory and all parents
-    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError>;
-    
+    fn mkdir_all(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+
     /// Remove file or empty directory
-    fn remove(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError>;
-    
+    fn remove(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+
     /// Remove directory and all contents
-    fn remove_all(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError>;
-    
+    fn remove_all(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+
     /// Rename/move
-    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), VfsError>;
-    
+    fn rename(&mut self, from: &VirtualPath, to: &VirtualPath) -> Result<(), VfsError>;
+
     /// Copy file
-    fn copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), VfsError>;
+    fn copy(&mut self, from: &VirtualPath, to: &VirtualPath) -> Result<(), VfsError>;
 }
 ```
 
-**Path type rationale:** `impl AsRef<Path>` is idiomatic Rust for filesystem APIs. It accepts `&str`, `String`, `&Path`, `PathBuf`, etc. Each backend handles paths according to its storage:
-- `VRootFsBackend`: passes to `strict-path` directly
-- `MemoryBackend`: uses `PathBuf` as HashMap key
-- `SqliteBackend`: converts to string internally (its concern, not the API's)
+**Path type rationale:** `&VirtualPath` provides stronger type safety than `impl AsRef<Path>`:
+- **Containment guarantee**: `VirtualPath` is pre-validated and normalized — it cannot escape root
+- **Lexical resolution**: `..` is resolved lexically, preventing path traversal attacks
+- **Backend simplicity**: Backends receive safe paths; no need to re-validate
+- **Consistency**: All backends use the same path semantics
 
-### 3.3 Types
+Each backend converts `VirtualPath` to its internal representation:
+- `VRootFsBackend`: Converts to `strict-path::VirtualPath` for filesystem access
+- `MemoryBackend`: Uses `VirtualPath` as HashMap key directly
+- `SqliteBackend`: Stores as string in database
+
+### 3.3 VirtualPath (re-exported from strict-path)
+
+`anyfs` re-exports `VirtualPath` from the `strict-path` crate:
+
+```rust
+// In anyfs/src/lib.rs
+pub use strict_path::VirtualPath;
+```
+
+This type provides validated, normalized paths that cannot escape root. See `strict-path` documentation for full API.
+
+### 3.4 Types
 
 ```rust
 /// File metadata
@@ -166,6 +192,7 @@ pub struct Metadata {
 pub enum FileType {
     File,
     Directory,
+    Symlink,
 }
 
 /// Directory entry
@@ -176,71 +203,69 @@ pub struct DirEntry {
 }
 ```
 
-### 3.4 Errors
+### 3.5 Errors
 
 ```rust
 #[derive(Debug, thiserror::Error)]
 pub enum VfsError {
     #[error("not found: {0}")]
-    NotFound(String),
-    
+    NotFound(VirtualPath),
+
     #[error("already exists: {0}")]
-    AlreadyExists(String),
-    
+    AlreadyExists(VirtualPath),
+
     #[error("not a file: {0}")]
-    NotAFile(String),
+    NotAFile(VirtualPath),
     
     #[error("not a directory: {0}")]
-    NotADirectory(String),
-    
+    NotADirectory(VirtualPath),
+
     #[error("directory not empty: {0}")]
-    DirectoryNotEmpty(String),
-    
+    DirectoryNotEmpty(VirtualPath),
+
     #[error("invalid path: {0}")]
-    InvalidPath(String),
-    
+    InvalidPath(#[from] strict_path::PathError),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("backend error: {0}")]
     Backend(String),
 }
 ```
 
-### 3.5 Crate Structure
+### 3.6 Crate Structure
 
 ```
-vfs-switchable/
+anyfs/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs          # Re-exports
 │   ├── backend.rs      # VfsBackend trait
+│   ├── path.rs         # VirtualPath (validated paths)
 │   ├── types.rs        # Metadata, DirEntry, FileType
-│   ├── error.rs        # VfsError
+│   ├── error.rs        # VfsError, PathError
 │   │
 │   ├── vrootfs/        # Filesystem backend via strict-path
-│   │   └── mod.rs
+│   │   └── mod.rs      # VRootFsBackend
 │   │
 │   ├── memory/         # In-memory backend
-│   │   └── mod.rs
+│   │   └── mod.rs      # MemoryBackend
 │   │
 │   └── sqlite/         # SQLite backend
-│       ├── mod.rs
-│       └── schema.rs
+│       ├── mod.rs      # SqliteBackend
+│       └── schema.rs   # Internal schema
 │
 └── tests/
     └── conformance.rs  # Tests all backends identically
 ```
 
-### 3.6 Dependencies
+### 3.7 Dependencies
 
 ```toml
 [dependencies]
 thiserror = "1"
-
-[dependencies.strict-path]
-version = "..."
-optional = true
+strict-path = "..."  # Required: provides VirtualPath
 
 [dependencies.rusqlite]
 version = "0.31"
@@ -249,15 +274,15 @@ optional = true
 
 [features]
 default = ["vrootfs", "memory"]
-vrootfs = ["strict-path"]
-memory = []
+vrootfs = []   # VRootFsBackend (uses strict-path for filesystem containment)
+memory = []    # MemoryBackend
 sqlite = ["rusqlite"]
 full = ["vrootfs", "memory", "sqlite"]
 ```
 
 ---
 
-## 4. Project 2: vfs-container
+## 4. Project 2: anyfs-container
 
 ### 4.1 Purpose
 
@@ -270,7 +295,7 @@ Wrap any `VfsBackend` with:
 
 ```rust
 use std::path::Path;
-use vfs_switchable::VfsBackend;
+use anyfs::{VfsBackend, VirtualPath};
 
 /// A contained filesystem with capacity limits.
 pub struct FilesContainer<B: VfsBackend> {
@@ -282,18 +307,32 @@ pub struct FilesContainer<B: VfsBackend> {
 impl<B: VfsBackend> FilesContainer<B> {
     pub fn new(backend: B) -> Self;
     pub fn with_limits(backend: B, limits: CapacityLimits) -> Self;
-    
-    // Delegated operations (with limit enforcement)
-    pub fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, ContainerError>;
-    pub fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), ContainerError>;
-    // ... all VfsBackend methods, wrapped
-    
+
+    // User-facing operations (accept flexible paths, convert internally)
+    pub fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, ContainerError> {
+        let vpath = VirtualPath::new(path.as_ref())?;  // Validate & convert
+        self.check_limits(&vpath)?;
+        Ok(self.backend.read(&vpath)?)  // Backend receives &VirtualPath
+    }
+
+    pub fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), ContainerError> {
+        let vpath = VirtualPath::new(path.as_ref())?;
+        self.check_file_size(data.len())?;
+        self.check_total_size(data.len())?;
+        self.backend.write(&vpath, data)?;
+        self.usage.add_bytes(data.len() as u64);
+        Ok(())
+    }
+    // ... other methods follow same pattern
+
     // Capacity management
     pub fn usage(&self) -> &CapacityUsage;
     pub fn limits(&self) -> &CapacityLimits;
     pub fn remaining(&self) -> CapacityRemaining;
 }
 ```
+
+**Key insight**: User-facing API accepts `impl AsRef<Path>` for ergonomics. Internally, paths are validated and converted to `VirtualPath` before reaching the backend.
 
 ### 4.3 Capacity Types
 
@@ -382,7 +421,7 @@ pub enum ContainerError {
 ### 4.6 Crate Structure
 
 ```
-vfs-container/
+anyfs-container/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -400,7 +439,7 @@ vfs-container/
 
 ```toml
 [dependencies]
-vfs-switchable = { version = "0.1", path = "../vfs-switchable" }
+anyfs = { version = "0.1", path = "../anyfs" }
 thiserror = "1"
 ```
 
@@ -414,7 +453,7 @@ Uses `strict-path::VirtualRoot` for containment.
 
 ```rust
 use std::path::Path;
-use strict_path::VirtualRoot;
+use strict_path::{VirtualRoot, VirtualPath};
 
 pub struct VRootFsBackend {
     vroot: VirtualRoot,
@@ -423,39 +462,36 @@ pub struct VRootFsBackend {
 impl VRootFsBackend {
     /// Create backend with given directory as virtual root.
     /// The directory is created if it doesn't exist.
-    pub fn new(root_dir: impl AsRef<Path>) -> Result<Self, VfsError> {
-        let vroot = VirtualRoot::try_new_create(root_dir.as_ref())
+    pub fn new(root_dir: &Path) -> Result<Self, VfsError> {
+        let vroot = VirtualRoot::try_new_create(root_dir)
             .map_err(|e| VfsError::Backend(e.to_string()))?;
         Ok(Self { vroot })
     }
-    
+
     /// Open existing directory as virtual root.
-    pub fn open(root_dir: impl AsRef<Path>) -> Result<Self, VfsError> {
-        let vroot = VirtualRoot::try_new(root_dir.as_ref())
+    pub fn open(root_dir: &Path) -> Result<Self, VfsError> {
+        let vroot = VirtualRoot::try_new(root_dir)
             .map_err(|e| VfsError::Backend(e.to_string()))?;
         Ok(Self { vroot })
     }
 }
 
 impl VfsBackend for VRootFsBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
-        let vpath = self.vroot.virtual_join(path.as_ref())
-            .map_err(|e| VfsError::InvalidPath(e.to_string()))?;
-        vpath.read().map_err(VfsError::Io)
+    fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError> {
+        // VirtualPath maps directly to strict-path operations
+        self.vroot.read(path).map_err(VfsError::Io)
     }
-    
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
-        let vpath = self.vroot.virtual_join(path.as_ref())
-            .map_err(|e| VfsError::InvalidPath(e.to_string()))?;
-        vpath.write(data).map_err(VfsError::Io)
+
+    fn write(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError> {
+        self.vroot.write(path, data).map_err(VfsError::Io)
     }
-    
+
     // ... delegate other methods via VirtualRoot
 }
 ```
 
 **Key behavior:**
-- Paths like `/etc/passwd` are **clamped** to `root_dir/etc/passwd`
+- `VirtualPath` is already validated — backend just delegates to `VirtualRoot`
 - Symlink escapes are prevented by `strict-path`
 - Uses real filesystem for storage
 
@@ -465,10 +501,10 @@ In-memory storage using HashMap.
 
 ```rust
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use strict_path::VirtualPath;
 
 pub struct MemoryBackend {
-    entries: HashMap<PathBuf, Entry>,
+    entries: HashMap<VirtualPath, Entry>,
 }
 
 enum Entry {
@@ -480,7 +516,7 @@ impl MemoryBackend {
     pub fn new() -> Self {
         let mut entries = HashMap::new();
         // Root directory always exists
-        entries.insert(PathBuf::from("/"), Entry::Directory {
+        entries.insert(VirtualPath::root(), Entry::Directory {
             modified: SystemTime::now(),
         });
         Self { entries }
@@ -488,27 +524,20 @@ impl MemoryBackend {
 }
 
 impl VfsBackend for MemoryBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
-        let key = normalize_path(path.as_ref());
-        match self.entries.get(&key) {
+    fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError> {
+        match self.entries.get(path) {
             Some(Entry::File { data, .. }) => Ok(data.clone()),
-            Some(Entry::Directory { .. }) => Err(VfsError::NotAFile(key.display().to_string())),
-            None => Err(VfsError::NotFound(key.display().to_string())),
+            Some(Entry::Directory { .. }) => Err(VfsError::NotAFile(path.clone())),
+            None => Err(VfsError::NotFound(path.clone())),
         }
     }
     
     // ... implement other methods
 }
-
-fn normalize_path(path: &Path) -> PathBuf {
-    // Normalize the path (handle . and .., ensure absolute)
-    // Implementation detail
-    todo!()
-}
 ```
 
 **Key behavior:**
-- Paths are normalized and used as HashMap keys
+- `VirtualPath` is already normalized — use directly as HashMap key
 - No persistence — data lost when dropped
 - Useful for testing
 
@@ -570,36 +599,36 @@ CREATE INDEX idx_entries_path ON entries(path);
 
 ### 6.1 Path Type in Trait — ✅ RESOLVED
 
-**Decision:** `impl AsRef<Path>`
+**Decision:** Two-layer approach:
+- **VfsBackend trait**: Uses `&VirtualPath` (from `strict-path`)
+- **FilesContainer API**: Uses `impl AsRef<Path>` for ergonomics
 
 **Rationale:**
-- Idiomatic Rust for filesystem APIs
-- Accepts `&str`, `String`, `&Path`, `PathBuf`, `&OsStr`, etc.
-- `Path` wraps `OsStr` — handles OS-specific semantics naturally
-- `VRootFsBackend` uses real filesystem — OS paths are natural
-- SQLite is secondary use case — shouldn't dictate API design
+- User-facing API is idiomatic Rust — accepts `&str`, `String`, `&Path`, `PathBuf`, etc.
+- Backend trait receives pre-validated `VirtualPath` — simpler, safer backends
+- Validation happens once in `FilesContainer`, not in every backend
+- `VirtualPath` guarantees containment (can't escape root)
 
-**How backends handle it:**
-- `VRootFsBackend`: Pass directly to `strict-path::VirtualRoot`
-- `MemoryBackend`: Convert to `PathBuf` as HashMap key  
-- `SqliteBackend`: Convert to string internally (its internal concern)
-
-### 6.2 Error Path Representation
-
-**Question:** Should `VfsError` variants store `String` or `PathBuf`?
-
+**How it works:**
 ```rust
-// Option A: String
-NotFound(String),
+// User calls with any path-like type
+container.read("/data/file.txt")?;
 
-// Option B: PathBuf
-NotFound(PathBuf),
+// FilesContainer validates and converts
+let vpath = VirtualPath::new(path.as_ref())?;
 
-// Option C: Box<Path> (owned, unsized)
-NotFound(Box<Path>),
+// Backend receives validated VirtualPath
+self.backend.read(&vpath)
 ```
 
-**Current leaning:** `String` — simpler, works for both real paths and SQLite keys.
+### 6.2 Error Path Representation — ✅ RESOLVED
+
+**Decision:** `VirtualPath`
+
+**Rationale:**
+- Errors originate from operations on validated paths
+- `VirtualPath` is already owned and cloneable
+- Consistent with the internal path representation
 
 ### 6.3 Symlink Support
 
@@ -629,10 +658,10 @@ Options:
 ### Phase 1: Core Types (Week 1)
 
 - [x] ~~Decide path type~~ → `impl AsRef<Path>`
-- [ ] `vfs-switchable`: `VfsBackend` trait
-- [ ] `vfs-switchable`: `Metadata`, `DirEntry`, `FileType`
-- [ ] `vfs-switchable`: `VfsError`
-- [ ] `vfs-switchable`: `MemoryBackend` (simplest, for testing)
+- [ ] `anyfs`: `VfsBackend` trait
+- [ ] `anyfs`: `Metadata`, `DirEntry`, `FileType`
+- [ ] `anyfs`: `VfsError`
+- [ ] `anyfs`: `MemoryBackend` (simplest, for testing)
 
 ### Phase 2: VRootFsBackend (Week 2)
 
@@ -646,7 +675,7 @@ Options:
 - [ ] Implement `SqliteBackend`
 - [ ] Conformance tests
 
-### Phase 4: vfs-container (Week 4)
+### Phase 4: anyfs-container (Week 4)
 
 - [ ] `FilesContainer`
 - [ ] `CapacityLimits`, `CapacityUsage`
@@ -666,26 +695,26 @@ Options:
 
 ### vs. `vfs` crate
 
-| Feature | vfs | vfs-switchable |
+| Feature | vfs | anyfs |
 |---------|-----|----------------|
 | Path type | `&str` | TBD |
-| Backends | Physical, Memory, Overlay, Embedded | VRootFs, Memory, SQLite |
-| Capacity limits | ❌ | ✅ via vfs-container |
+| Backends | Physical, Memory, Overlay, Embedded | Fs, Memory, SQLite |
+| Capacity limits | ❌ | ✅ via anyfs-container |
 | Containment | ❌ | ✅ via strict-path |
 | Overlay/layering | ✅ | ❌ |
 
 ### vs. `OpenDAL`
 
-| Feature | OpenDAL | vfs-switchable |
+| Feature | OpenDAL | anyfs |
 |---------|---------|----------------|
 | Focus | Cloud/object storage | Local/embedded storage |
 | API style | Object storage (get/put) | Filesystem (read/write/mkdir) |
-| Backends | 50+ (S3, GCS, Azure, etc.) | 3 (VRootFs, Memory, SQLite) |
+| Backends | 50+ (S3, GCS, Azure, etc.) | 3 (Fs, Memory, SQLite) |
 | Async | ✅ | ❌ (sync only) |
 
 ### When to Use What
 
-- **vfs-switchable**: Local storage, tenant isolation, portable containers
+- **anyfs**: Local storage, tenant isolation, portable containers
 - **vfs crate**: Overlay filesystems, embedded resources
 - **OpenDAL**: Cloud storage, async workloads
 
@@ -693,10 +722,10 @@ Options:
 
 ## Appendix: Usage Examples
 
-### Basic Usage (vfs-switchable only)
+### Basic Usage (anyfs only)
 
 ```rust
-use vfs_switchable::{VfsBackend, VRootFsBackend, MemoryBackend};
+use anyfs::{VfsBackend, VRootFsBackend, MemoryBackend};
 
 fn save_data(vfs: &mut impl VfsBackend, name: &str, data: &[u8]) -> Result<(), VfsError> {
     vfs.create_dir_all("/data")?;
@@ -713,11 +742,11 @@ let mut mem = MemoryBackend::new();
 save_data(&mut mem, "report.txt", b"...")?;
 ```
 
-### With Container (vfs-container)
+### With Container (anyfs-container)
 
 ```rust
-use vfs_container::{FilesContainer, ContainerBuilder};
-use vfs_switchable::SqliteBackend;
+use anyfs_container::{FilesContainer, ContainerBuilder};
+use anyfs::SqliteBackend;
 
 // Create tenant with 100 MB quota
 let backend = SqliteBackend::create("tenant_123.db")?;
@@ -738,13 +767,14 @@ std::fs::rename("tenant_123.db", "archive/tenant_123.db")?;
 ### Multi-Tenant Setup
 
 ```rust
-use vfs_container::{FilesContainer, ContainerBuilder};
-use vfs_switchable::VRootFsBackend;
+use anyfs_container::{FilesContainer, ContainerBuilder};
+use anyfs::VRootFsBackend;
+use std::path::Path;
 
 fn create_tenant_container(tenant_id: &str) -> Result<FilesContainer<VRootFsBackend>, Error> {
     let root = format!("/data/tenants/{}", tenant_id);
-    let backend = VRootFsBackend::new(&root)?;
-    
+    let backend = VRootFsBackend::new(Path::new(&root))?;
+
     Ok(ContainerBuilder::new(backend)
         .max_total_size(100 * 1024 * 1024)
         .build())

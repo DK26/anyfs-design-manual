@@ -40,7 +40,7 @@ The reviews identified three critical issues and several high/medium priority it
 
 **Actions:**
 - [x] Document 08 (Technical Comparison) MVP trait section will be marked as "exploratory/superseded"
-- [x] README will state: "ADRs and vfs-container-design.md are authoritative"
+- [x] README will state: "ADRs and anyfs-container-design.md are authoritative"
 - [x] Single trait definition in design doc is the source of truth
 
 **Authoritative Trait (for the record):**
@@ -96,8 +96,8 @@ pub trait Transaction: Snapshot {
 **MVP Crate Structure (revised):**
 
 ```
-vfs-container/
-├── vfs-core/       # Traits, types (StorageBackend, NodeId, VirtualPath)
+anyfs-container/
+├── anyfs/       # Traits, types (StorageBackend, NodeId, VirtualPath)
 ├── vfs-sqlite/     # SqliteBackend implementation
 ├── vfs-memory/     # MemoryBackend implementation
 └── vfs/            # FilesContainer + builder (batteries included)
@@ -420,9 +420,9 @@ FROM nodes;
 ## Updated Implementation Plan
 
 ### Phase 1: Core Foundation (Week 1)
-- `vfs-core`: VirtualPath, Name, NodeId, ContentId, ChunkId
-- `vfs-core`: Error types, NodeRecord, Edge, NodeMetadata
-- `vfs-core`: StorageBackend, Snapshot, Transaction traits
+- `anyfs`: VirtualPath, Name, NodeId, ContentId, ChunkId
+- `anyfs`: Error types, NodeRecord, Edge, NodeMetadata
+- `anyfs`: StorageBackend, Snapshot, Transaction traits
 
 ### Phase 2: Memory Backend (Week 2)
 - `vfs-memory`: MemoryBackend with clone-on-transact
