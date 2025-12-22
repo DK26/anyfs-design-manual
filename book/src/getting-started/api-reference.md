@@ -1,4 +1,4 @@
-# VFS Container — API Quick Reference
+# AnyFS — API Quick Reference
 
 **Condensed reference for developers**
 
@@ -8,14 +8,16 @@
 
 ```toml
 [dependencies]
-vfs = "0.1"
+anyfs = "0.1"
+anyfs-container = "0.1"
 ```
 
 With specific backends:
 
 ```toml
 [dependencies]
-vfs = { version = "0.1", features = ["sqlite", "memory"] }
+anyfs = { version = "0.1", features = ["sqlite", "vrootfs"] }
+anyfs-container = "0.1"
 ```
 
 ---
@@ -23,7 +25,8 @@ vfs = { version = "0.1", features = ["sqlite", "memory"] }
 ## Creating a Container
 
 ```rust
-use vfs::{FilesContainer, SqliteBackend, MemoryBackend, VirtualPath};
+use anyfs::{MemoryBackend, SqliteBackend};
+use anyfs_container::{FilesContainer, ContainerBuilder};
 
 // In-memory (testing)
 let container = FilesContainer::new(MemoryBackend::new());
@@ -34,8 +37,7 @@ let container = FilesContainer::new(
 );
 
 // Full configuration
-let container = FilesContainer::builder()
-    .backend(SqliteBackend::open_or_create("data.db")?)
+let container = ContainerBuilder::new(SqliteBackend::open_or_create("data.db")?)
     .symlinks(true)
     .hard_links(false)
     .max_total_size(100 * 1024 * 1024)  // 100 MB
@@ -43,7 +45,6 @@ let container = FilesContainer::builder()
     .max_node_count(10_000)
     .max_dir_entries(1_000)
     .max_path_depth(64)
-    .max_name_length(255)
     .build()?;
 ```
 
@@ -51,24 +52,28 @@ let container = FilesContainer::builder()
 
 ## Path Handling
 
+FilesContainer accepts any path-like type (`&str`, `String`, `&Path`, `PathBuf`):
+
 ```rust
-use vfs::VirtualPath;
-
-// Create paths
-let path = VirtualPath::new("/documents/report.pdf")?;
-let root = VirtualPath::root();  // "/"
-
-// Path operations
-path.parent()           // Some("/documents")
-path.file_name()        // Some("report.pdf")
-path.depth()            // 2
-path.components()       // ["documents", "report.pdf"]
-path.join("v2")?        // "/documents/report.pdf/v2"
-path.as_str()           // "/documents/report.pdf"
+// All of these work
+container.write("/documents/report.pdf", data)?;
+container.write(String::from("/file.txt"), data)?;
+container.write(Path::new("/data.bin"), data)?;
 
 // Normalization (automatic)
-VirtualPath::new("//a/../b/./c")  // → "/b/c"
-VirtualPath::new("/../../../a")   // → "/a" (can't escape root)
+// "//a/../b/./c"  → "/b/c"
+// "/../../../a"   → "/a" (can't escape root)
+```
+
+For custom backends, use `VirtualPath` directly:
+
+```rust
+use anyfs::VirtualPath;
+
+let path = VirtualPath::new("/documents/report.pdf")?;
+path.parent()           // Some(VirtualPath("/documents"))
+path.file_name()        // Some("report.pdf")
+path.as_str()           // "/documents/report.pdf"
 ```
 
 ---
@@ -79,78 +84,57 @@ VirtualPath::new("/../../../a")   // → "/a" (can't escape root)
 
 ```rust
 // Check existence
-container.exists(&path)                    // → bool
+container.exists("/path")?                    // → bool
 
 // Get metadata
-let meta = container.metadata(&path)?;
-meta.size                                  // file size
-meta.kind                                  // File | Directory | Symlink
-meta.created_at                            // Option<Timestamp>
-meta.modified_at
-meta.permissions                           // Option<Permissions>
+let meta = container.metadata("/path")?;
+meta.size                                     // file size
+meta.file_type                                // File | Directory | Symlink
+meta.created                                  // Option<SystemTime>
+meta.modified                                 // Option<SystemTime>
 
 // Read file
-let bytes = container.read(&path)?;        // → Vec<u8>
-let chunk = container.read_range(&path, 0, 1024)?;  // partial read
+let bytes = container.read("/path")?;         // → Vec<u8>
+let chunk = container.read_range("/path", 0, 1024)?;  // partial read
 
 // List directory
-let entries = container.list(&path)?;      // → Vec<DirEntry>
+let entries = container.list("/path")?;       // → Vec<DirEntry>
 for entry in entries {
-    println!("{}: {:?}", entry.name, entry.kind);
+    println!("{}: {:?}", entry.name, entry.file_type);
 }
 
 // Read symlink target (without following)
-let target = container.read_link(&path)?;  // → VirtualPath
+let target = container.read_link("/path")?;   // → VirtualPath
 ```
 
 ### Writing
 
 ```rust
 // Create directory
-container.mkdir(&path)?;                   // single level
-container.mkdir_all(&path)?;               // recursive
+container.mkdir("/path")?;                    // single level
+container.mkdir_all("/path")?;                // recursive
 
 // Write file (create or overwrite)
-container.write(&path, b"content")?;
+container.write("/path", b"content")?;
 
 // Append to file
-container.append(&path, b"more")?;
+container.append("/path", b"more")?;
 
 // Create symlink (requires .symlinks(true))
-container.symlink(&link_path, &target_path)?;
+container.symlink("/link", "/target")?;
 
 // Create hard link (requires .hard_links(true))
-container.hard_link(&link_path, &target_path)?;
+container.hard_link("/link", "/target")?;
 
 // Delete
-container.remove(&path)?;                  // file or empty dir
-container.remove_all(&path)?;              // recursive
+container.remove("/path")?;                   // file or empty dir
+container.remove_all("/path")?;               // recursive
 
 // Rename/move
-container.rename(&from, &to)?;
+container.rename("/from", "/to")?;
 
 // Copy
-container.copy(&from, &to)?;               // single file
-container.copy_all(&from, &to)?;           // recursive
-```
-
-### Metadata Operations
-
-```rust
-// Permissions (requires .permissions(true))
-container.set_permissions(&path, Permissions { mode: 0o644 })?;
-
-// Timestamps
-container.set_times(&path, Times {
-    accessed: Some(Timestamp::now()),
-    modified: Some(Timestamp::now()),
-})?;
-
-// Extended attributes (requires .extended_attrs(true))
-container.set_xattr(&path, "user.tag", b"important")?;
-let val = container.get_xattr(&path, "user.tag")?;  // Option<Vec<u8>>
-container.remove_xattr(&path, "user.tag")?;
-let names = container.list_xattrs(&path)?;          // Vec<String>
+container.copy("/from", "/to")?;              // single file
 ```
 
 ---
@@ -163,13 +147,13 @@ use std::path::Path;
 // Import from host filesystem
 let stats = container.import_from_host(
     Path::new("/real/path/to/folder"),
-    &VirtualPath::new("/imported")?,
+    "/imported",
 )?;
 println!("Imported {} files, {} bytes", stats.files_imported, stats.bytes_imported);
 
 // Export to host filesystem
 let stats = container.export_to_host(
-    &VirtualPath::new("/documents")?,
+    "/documents",
     Path::new("/real/export/path"),
 )?;
 ```
@@ -185,7 +169,6 @@ usage.total_size       // bytes used
 usage.node_count       // total nodes
 usage.file_count
 usage.directory_count
-usage.symlink_count
 
 // Check limits
 let limits = container.limits();
@@ -197,12 +180,6 @@ let remaining = container.remaining()?;
 remaining.bytes        // Option<u64>
 remaining.nodes
 remaining.can_write    // quick check
-
-// Clear all content
-container.clear()?;
-
-// Destroy backing storage (if supported)
-container.destroy()?;  // consumes container
 ```
 
 ---
@@ -210,29 +187,28 @@ container.destroy()?;  // consumes container
 ## Error Handling
 
 ```rust
-use vfs::{VfsError, CapacityError, PathError};
+use anyfs_container::ContainerError;
 
-match container.write(&path, &data) {
+match container.write("/path", &data) {
     Ok(()) => println!("Written"),
-    
-    Err(VfsError::NotFound(p)) => println!("Path not found: {}", p),
-    Err(VfsError::AlreadyExists(p)) => println!("Already exists: {}", p),
-    Err(VfsError::NotADirectory(p)) => println!("Not a directory: {}", p),
-    Err(VfsError::NotAFile(p)) => println!("Not a file: {}", p),
-    Err(VfsError::DirectoryNotEmpty(p)) => println!("Not empty: {}", p),
-    Err(VfsError::SymlinkLoop(p)) => println!("Symlink loop at: {}", p),
-    
-    Err(VfsError::Capacity(CapacityError::TotalSizeExceeded { used, limit })) => {
+
+    Err(ContainerError::NotFound(p)) => println!("Path not found: {}", p),
+    Err(ContainerError::AlreadyExists(p)) => println!("Already exists: {}", p),
+    Err(ContainerError::NotADirectory(p)) => println!("Not a directory: {}", p),
+    Err(ContainerError::NotAFile(p)) => println!("Not a file: {}", p),
+    Err(ContainerError::DirectoryNotEmpty(p)) => println!("Not empty: {}", p),
+
+    Err(ContainerError::TotalSizeExceeded { used, limit }) => {
         println!("Storage full: {} / {} bytes", used, limit);
     }
-    Err(VfsError::Capacity(CapacityError::FileSizeExceeded { size, limit })) => {
+    Err(ContainerError::FileSizeExceeded { size, limit }) => {
         println!("File too large: {} > {} bytes", size, limit);
     }
-    
-    Err(VfsError::FeatureNotEnabled(feature)) => {
+
+    Err(ContainerError::FeatureNotEnabled(feature)) => {
         println!("Feature not enabled: {}", feature);
     }
-    
+
     Err(e) => println!("Other error: {}", e),
 }
 ```
@@ -242,7 +218,7 @@ match container.write(&path, &data) {
 ## Backend Lifecycle
 
 ```rust
-use vfs::{SqliteBackend, BackendLifecycle};
+use anyfs::SqliteBackend;
 
 // Create new (fails if exists)
 let backend = SqliteBackend::create("new.db")?;
@@ -252,9 +228,6 @@ let backend = SqliteBackend::open("existing.db")?;
 
 // Open or create
 let backend = SqliteBackend::open_or_create("data.db")?;
-
-// Destroy
-backend.destroy()?;  // deletes the file
 ```
 
 ---
@@ -264,13 +237,16 @@ backend.destroy()?;  // deletes the file
 ### Ensure parent directories exist
 
 ```rust
-fn write_with_parents(
-    container: &mut FilesContainer<impl StorageBackend>,
-    path: &VirtualPath,
+use anyfs::VfsBackend;
+use anyfs_container::FilesContainer;
+
+fn write_with_parents<B: VfsBackend>(
+    container: &mut FilesContainer<B>,
+    path: &str,
     data: &[u8],
-) -> Result<(), VfsError> {
-    if let Some(parent) = path.parent() {
-        container.mkdir_all(&parent)?;
+) -> Result<(), ContainerError> {
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        container.mkdir_all(parent)?;
     }
     container.write(path, data)
 }
@@ -279,15 +255,18 @@ fn write_with_parents(
 ### Walk directory tree
 
 ```rust
-fn walk(
-    container: &FilesContainer<impl StorageBackend>,
-    path: &VirtualPath,
-    f: &mut impl FnMut(&VirtualPath, &DirEntry),
-) -> Result<(), VfsError> {
+use anyfs::VfsBackend;
+use anyfs_container::FilesContainer;
+
+fn walk<B: VfsBackend>(
+    container: &FilesContainer<B>,
+    path: &str,
+    f: &mut impl FnMut(&str, &DirEntry),
+) -> Result<(), ContainerError> {
     for entry in container.list(path)? {
-        let child_path = path.join(entry.name.as_str())?;
+        let child_path = format!("{}/{}", path, entry.name);
         f(&child_path, &entry);
-        if entry.kind == NodeKind::Directory {
+        if entry.file_type == FileType::Directory {
             walk(container, &child_path, f)?;
         }
     }
@@ -295,59 +274,39 @@ fn walk(
 }
 ```
 
-### Calculate directory size
-
-```rust
-fn dir_size(
-    container: &FilesContainer<impl StorageBackend>,
-    path: &VirtualPath,
-) -> Result<u64, VfsError> {
-    let mut total = 0u64;
-    for entry in container.list(path)? {
-        let child = path.join(entry.name.as_str())?;
-        match entry.kind {
-            NodeKind::File { size, .. } => total += size,
-            NodeKind::Directory => total += dir_size(container, &child)?,
-            _ => {}
-        }
-    }
-    Ok(total)
-}
-```
-
 ---
 
 ## Type Reference
 
+### From `anyfs-traits` (re-exported by `anyfs`)
+
+| Type | Description |
+|------|-------------|
+| `VfsBackend` | Core trait for backends |
+| `VirtualPath` | Validated, normalized path |
+| `FileType` | `File`, `Directory`, `Symlink` |
+| `Metadata` | File/directory metadata |
+| `DirEntry` | Directory listing entry |
+| `VfsError` | Backend-level errors |
+
+### From `anyfs`
+
+| Type | Description |
+|------|-------------|
+| `MemoryBackend` | In-memory storage |
+| `SqliteBackend` | SQLite-backed storage |
+| `VRootFsBackend` | Host filesystem (contained) |
+
+### From `anyfs-container`
+
 | Type | Description |
 |------|-------------|
 | `FilesContainer<B>` | Main API, generic over backend |
-| `VirtualPath` | Validated, normalized path |
-| `NodeId` | Unique node identifier |
-| `ContentId` | Unique content identifier |
-| `Name` | Validated filename component |
-| `NodeKind` | `File`, `Directory`, `Symlink` |
-| `Metadata` | File/directory metadata |
-| `DirEntry` | Directory listing entry |
-| `Permissions` | Unix-style mode bits |
-| `Timestamp` | Milliseconds since epoch |
+| `ContainerBuilder<B>` | Builder for FilesContainer |
 | `CapacityLimits` | Quota configuration |
 | `CapacityUsage` | Current usage stats |
-
-| Trait | Description |
-|-------|-------------|
-| `StorageBackend` | Core storage operations |
-| `BackendLifecycle` | Create/open/destroy |
-| `Snapshot` | Read-only view |
-| `Transaction` | Read-write operations |
-
-| Error | Description |
-|-------|-------------|
-| `VfsError` | Top-level container errors |
-| `BackendError` | Storage-level errors |
-| `PathError` | Path parsing errors |
-| `CapacityError` | Quota exceeded errors |
+| `ContainerError` | Container-level errors |
 
 ---
 
-*For full details, see the [Design Document](../architecture/anyfs-container-design.md).*
+*For full details, see the [Design Overview](../architecture/design-overview.md).*
