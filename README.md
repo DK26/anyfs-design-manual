@@ -42,7 +42,9 @@ save(&mut mem)?;
 
 ## Documentation
 
-**Authoritative design document:** [`vfs-design.md`](./vfs-design.md)
+**Authoritative design document:** [`book/src/architecture/design-overview.md`](./book/src/architecture/design-overview.md)
+
+Browse the full documentation with `mdbook serve book/`.
 
 ## Status
 
@@ -53,8 +55,8 @@ save(&mut mem)?;
 
 ## Key Design Decisions
 
-See [Section 6 of the design doc](./vfs-design.md#6-open-design-questions) for details:
+See the [Architecture Decision Records](./book/src/architecture/adrs.md) for details:
 
 1. ✅ **Path type**: VfsBackend uses `&VirtualPath`, FilesContainer uses `impl AsRef<Path>`
 2. ✅ **Error paths**: Use `VirtualPath`
-3. ⏳ **Symlink support**: Deferred to v2
+3. ✅ **Symlink/hardlink support**: Built-in to all backends (simulated for Memory/SQLite, real for VRootFs)

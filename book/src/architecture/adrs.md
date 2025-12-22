@@ -18,7 +18,7 @@
 | [ADR-008](#adr-008-synchronous-first-api) | Synchronous-First API | **Accepted** |
 | [ADR-009](#adr-009-no-posix-compliance) | No POSIX Compliance | **Accepted** |
 | [ADR-010](#adr-010-feature-gated-backends) | Feature-Gated Backends | **Accepted** |
-| [ADR-011](#adr-011-stdfssfs-aligned-method-names) | std::fs Aligned Method Names | **Accepted** |
+| [ADR-011](#adr-011-stdfs-aligned-method-names) | std::fs Aligned Method Names | **Accepted** |
 
 ### Superseded ADRs (Historical)
 
