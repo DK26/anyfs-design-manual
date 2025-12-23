@@ -5,7 +5,7 @@ authors = ["David Krasnitsky"]
 language = "en"
 
 [build]
-build-dir = "build"
+build-dir = "docs"
 
 [output.html]
 git-repository-url = "https://github.com/DK26/vfs-design-manual"
