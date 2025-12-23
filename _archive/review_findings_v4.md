@@ -19,6 +19,10 @@ This file tracks the documentation consistency work needed to align the manual w
 3. Missing implementation plan
    - Added `book/src/implementation/plan.md` and linked it from `book/src/SUMMARY.md`.
 
+4. Implementation docs aligned
+   - `book/src/implementation/plan.md` and `book/src/implementation/backend-guide.md` now match the path-based `VfsBackend` design.
+   - `README.md` now reflects the current crate structure and least-privilege defaults.
+
 ---
 
 ## Additional inconsistencies fixed (not in original v4 list)
@@ -34,3 +38,4 @@ This file tracks the documentation consistency work needed to align the manual w
 
 - Encoding cleanup: several historical docs still contain mojibake/box-drawing artifacts. Consider normalizing to UTF-8 and using plain `Yes/No/Varies` tables in the book.
 - Add an explicit "backend conformance test suite" section (or a small dedicated chapter) to document expected semantics across backends.
+- Consider clarifying symlink policy as two distinct concerns: (1) creating symlinks, (2) following symlinks during path traversal (especially for host filesystem backends where TOCTOU matters).

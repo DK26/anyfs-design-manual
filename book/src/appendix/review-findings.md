@@ -1,4 +1,12 @@
-# VFS Documentation Review Findings
+# Historical: VFS Documentation Review Findings
+
+> This review predates the current AnyFS design and references an earlier architecture (`vfs-switchable` naming, etc.).
+>
+> The current AnyFS design uses three crates: `anyfs-traits`, `anyfs`, `anyfs-container` with a path-based `VfsBackend` trait.
+>
+> For current design, see:
+> - `book/src/architecture/adrs.md`
+> - `book/src/architecture/design-overview.md`
 
 ## Executive Summary
 

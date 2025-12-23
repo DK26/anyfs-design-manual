@@ -21,21 +21,21 @@
 # Design & Architecture
 
 - [Design Overview](./architecture/design-overview.md)
-- [Two-Layer Architecture](./architecture/two-layer-design.md)
+- [Two-Layer Path Handling](./architecture/two-layer-design.md)
 - [Architecture Decision Records](./architecture/adrs.md)
 
 ---
 
 # Traits & APIs
 
-- [Vfs Trait (anyfs)](./traits/vfs-trait.md)
+- [VfsBackend Trait (anyfs-traits)](./traits/vfs-trait.md)
 - [FilesContainer (anyfs-container)](./traits/files-container.md)
 
 ---
 
 # Guides
 
-- [Which Layer Should I Use?](./guides/which-layer.md)
+- [Which Crate Should I Use?](./guides/which-layer.md)
 
 ---
 
@@ -67,4 +67,4 @@
 
 - [Historical: Graph-Store Container RFC](./architecture/vfs-container-design.md)
 - [Historical: Pre-Container Design](./appendix/pre-container-design.md)
-- [Historical: Review Findings](./appendix/review-findings.md)
+- [Historical: Early Review Findings](./appendix/review-findings.md)

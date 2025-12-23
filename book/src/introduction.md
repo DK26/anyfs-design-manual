@@ -1,34 +1,32 @@
-# VFS Ecosystem
+﻿# AnyFS Ecosystem
 
-**Switchable virtual filesystem backends for Rust**
+Pluggable virtual filesystem backends for Rust.
 
 ---
 
 ## Overview
 
-Three crates:
+AnyFS is a three-crate ecosystem:
 
 | Crate | Purpose |
 |-------|---------|
-| `anyfs-traits` | Minimal — trait definition + types (for custom backend implementers) |
-| `anyfs` | Built-in backends (feature-gated), re-exports traits |
-| `anyfs-container` | Higher-level wrapper — capacity limits, tenant isolation |
+| `anyfs-traits` | Minimal contract: `VfsBackend` + core types; re-exports `VirtualPath` |
+| `anyfs` | Re-exports `anyfs-traits` + built-in backends (feature-gated) |
+| `anyfs-container` | `FilesContainer<B: VfsBackend>` policy layer (limits + least-privilege feature whitelist) |
 
-```
-┌─────────────────────────────────────────┐
-│  Your Application                       │
-├─────────────────────────────────────────┤
-│  anyfs-container (quotas, isolation)    │
-├─────────────────────────────────────────┤
-│  anyfs (built-in backends)              │
-├──────────┬──────────┬───────────────────┤
-│ VRootFs  │  Memory  │  SQLite           │
-├──────────┴──────────┴───────────────────┤
-│  anyfs-traits (VfsBackend trait)        │
-└─────────────────────────────────────────┘
+High-level data flow:
+
+```text
+Your application
+  -> anyfs-container (FilesContainer: ergonomic paths + policy)
+      -> anyfs (built-in backends)
+          -> anyfs-traits (VfsBackend + types)
+              -> strict-path (VirtualPath, VirtualRoot)
 ```
 
-## Quick Example
+---
+
+## Quick example
 
 ```rust
 use anyfs::MemoryBackend;
@@ -36,42 +34,41 @@ use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut container = FilesContainer::new(MemoryBackend::new());
+
     container.create_dir_all("/data")?;
     container.write("/data/file.txt", b"hello")?;
+
     Ok(())
 }
 ```
 
-## How to Use This Manual
+---
 
-This manual is organized into logical sections for different audiences:
+## How to use this manual
 
 | Section | Audience | Purpose |
 |---------|----------|---------|
-| [Overview](./overview/executive-summary.md) | Stakeholders, Decision-makers | High-level understanding |
-| [Getting Started](./getting-started/guide.md) | Developers | Practical introduction |
-| [Design & Architecture](./architecture/design-overview.md) | Architects, Contributors | Technical deep-dive |
-| [Comparisons](./comparisons/positioning.md) | Evaluators | How we compare to alternatives |
-| [Implementation](./implementation/backend-guide.md) | Backend Implementers | Custom backend creation |
-| [Review & Decisions](./review/decisions.md) | Contributors | Historical review record (graph-store era) |
+| Overview | Stakeholders | One-page understanding |
+| Getting Started | Developers | Practical examples |
+| Design & Architecture | Contributors | Detailed design |
+| Traits & APIs | Backend authors | Contract and types |
+| Implementation | Implementers | Plan + backend guide |
+| Review | Contributors | Historical review record |
+
+---
 
 ## Status
 
 | Component | Status |
 |-----------|--------|
-| Design | Completed |
+| Design | Complete |
 | Implementation | Not started |
-
-## Authoritative Documents
-
-The following documents are authoritative sources of truth:
-
-1. **[Design Overview](./architecture/design-overview.md)** - Current architecture and API
-2. **[Architecture Decision Records](./architecture/adrs.md)** - Key design decisions
-3. **[Project Structure](./overview/project-structure.md)** - Crate layout and type contracts
-
-The `book/src/review/` documents are kept for historical context and describe an earlier (rejected) graph-store design.
 
 ---
 
-*For questions about specific features, start with the [Getting Started Guide](./getting-started/guide.md).*
+## Authoritative documents
+
+1. `book/src/architecture/design-overview.md`
+2. `book/src/architecture/adrs.md`
+
+If something conflicts with `AGENTS.md`, treat `AGENTS.md` as authoritative.

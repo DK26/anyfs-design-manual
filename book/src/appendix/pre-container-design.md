@@ -1,8 +1,16 @@
-# VFS Container — Design Document
+# Historical: VFS Container — Pre-Container Design Document
 
-**Version:** 0.1.0-draft  
-**Status:** RFC (Request for Comments)  
-**Authors:** [TBD]  
+> This document is historical and reflects an early design iteration before the current architecture was finalized.
+>
+> The current AnyFS design uses three crates: `anyfs-traits`, `anyfs`, `anyfs-container` with a path-based `VfsBackend` trait (20 methods).
+>
+> For current design, see:
+> - `book/src/architecture/adrs.md`
+> - `book/src/architecture/design-overview.md`
+
+**Version:** 0.1.0-draft
+**Status:** Historical (superseded)
+**Authors:** [TBD]
 **Last Updated:** 2025-01-XX
 
 ---

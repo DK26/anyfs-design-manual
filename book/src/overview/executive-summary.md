@@ -1,95 +1,69 @@
-# AnyFS — Executive Summary
+﻿# AnyFS - Executive Summary
 
-**One-page overview for stakeholders and decision-makers**
-
----
-
-## What Is It?
-
-AnyFS is a **virtual filesystem library** for Rust with swappable storage backends. Store files in SQLite, memory, or the host filesystem — your code stays the same.
-
-```
-Traditional Filesystem          AnyFS Container
-─────────────────────          ─────────────────
-/home/user/docs/               ┌─────────────────┐
-├── report.pdf        →        │  tenant_1.db    │  ← Single portable file
-├── notes.txt                  │  (SQLite)       │
-└── images/                    └─────────────────┘
-    └── photo.jpg
-```
+One-page overview for stakeholders and decision-makers.
 
 ---
 
-## Why Does It Matter?
+## What is it?
 
-| Problem | How AnyFS Solves It |
-|---------|---------------------|
-| **Multi-tenant isolation** | Each tenant gets their own container. Complete namespace isolation. |
-| **Portability** | SQLite backend: single file works on Windows, Mac, Linux. |
-| **Security** | Path traversal attacks are structurally impossible via `VirtualPath`. |
-| **Resource control** | Built-in quotas: max storage, max file size, max files. |
-| **Testing** | In-memory backend for fast, deterministic tests. No temp file cleanup. |
+AnyFS is a virtual filesystem library for Rust with swappable storage backends.
 
----
-
-## Who Is It For?
-
-- **SaaS platforms** needing per-tenant file storage
-- **AI/ML systems** requiring sandboxed file operations
-- **Desktop applications** wanting portable user data
-- **Testing frameworks** needing reproducible filesystem state
-- **Embedded systems** needing portable storage without OS dependencies
+You get a familiar, `std::fs`-aligned API (read/write/create_dir/read_dir/etc.) while choosing where the data lives:
+- in-memory (tests)
+- a single SQLite database file (portable storage)
+- a contained host filesystem directory (sandboxed by a virtual root)
 
 ---
 
-## Key Properties
+## Why does it matter?
 
-| Property | Guarantee |
-|----------|-----------|
-| **Isolated** | Virtual paths never touch the host filesystem |
-| **Portable** | SQLite backend: single file, cross-platform |
-| **Bounded** | Configurable limits on size, file count, depth |
-| **Extensible** | Pluggable backends (SQLite, memory, host FS, custom) |
-
----
-
-## What It's NOT
-
-- Not a replacement for OS filesystems
-- Not a container runtime (Docker, etc.)
-- Not a distributed filesystem
-- Not optimized for maximum throughput
+| Problem | How AnyFS helps |
+|---------|------------------|
+| Multi-tenant isolation | One container per tenant, separate namespaces |
+| Portability | SQLite backend: a tenant filesystem is a single `.db` file |
+| Security | Paths are validated via `VirtualPath` (`strict-path`) |
+| Resource control | Built-in limits: max bytes, max file size, max nodes, etc. |
+| Testing | In-memory backend is fast and deterministic |
 
 ---
 
-## Technical Approach
+## Key design points
 
-Three crates with clear separation of concerns:
+- **Three-crate structure**
+  - `anyfs-traits`: minimal backend contract (`VfsBackend`) and types
+  - `anyfs`: built-in backends (feature-gated), re-exports traits
+  - `anyfs-container`: `FilesContainer<B>` policy layer (limits + least privilege)
 
-```
-┌─────────────────────────────────────┐
-│  anyfs-container                    │  ← Your code talks to this
-│  FilesContainer<B>                  │
-│  - read, write, copy, delete        │
-│  - quota enforcement                │
-├─────────────────────────────────────┤
-│  anyfs                              │  ← Built-in backends
-├──────────┬──────────┬───────────────┤
-│ VRootFs  │  Memory  │  SQLite       │
-├──────────┴──────────┴───────────────┤
-│  anyfs-traits                       │  ← VfsBackend trait
-│  (for custom backend implementers)  │
-└─────────────────────────────────────┘
+- **Two-layer path handling**
+  - User APIs accept `impl AsRef<Path>` for ergonomics.
+  - Backends receive `&VirtualPath` (validated and normalized).
+
+- **Least privilege by default**
+  - Advanced behavior is denied unless explicitly enabled per container:
+    - symlinks
+    - hard links
+    - permission mutation
+
+---
+
+## Quick example
+
+```rust
+use anyfs::SqliteBackend;
+use anyfs_container::ContainerBuilder;
+
+let mut fs = ContainerBuilder::new(SqliteBackend::open_or_create("tenant_123.db")?)
+    .max_total_size(100 * 1024 * 1024)
+    .build()?;
+
+fs.create_dir_all("/documents")?;
+fs.write("/documents/hello.txt", b"Hello!")?;
+let content = fs.read("/documents/hello.txt")?;
 ```
 
-This means:
-- Swapping storage backends doesn't change application code
-- Custom backends only need to depend on `anyfs-traits`
-- All filesystem complexity is handled once, in the core
-
 ---
 
-## Project Status
+## Status
 
 | Phase | Status |
 |-------|--------|
@@ -98,27 +72,4 @@ This means:
 
 ---
 
-## Quick Example
-
-```rust
-use anyfs::SqliteBackend;
-use anyfs_container::{FilesContainer, ContainerBuilder};
-
-// Create a container backed by SQLite
-let mut container = ContainerBuilder::new(
-        SqliteBackend::open_or_create("tenant_123.db")?
-    )
-    .max_total_size(100 * 1024 * 1024)  // 100 MB quota
-    .build()?;
-
-// Use familiar filesystem operations
-container.create_dir("/documents")?;
-container.write("/documents/hello.txt", b"Hello!")?;
-
-let content = container.read("/documents/hello.txt")?;
-// content == b"Hello!"
-```
-
----
-
-*For technical details, see the [Design Overview](../architecture/design-overview.md).*
+For details, see `book/src/architecture/design-overview.md`.

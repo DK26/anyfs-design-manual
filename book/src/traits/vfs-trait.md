@@ -1,214 +1,73 @@
-# Vfs Trait (anyfs)
+# VfsBackend Trait (anyfs-traits)
 
-**The low-level filesystem interface for backend implementers**
+**The core backend contract for AnyFS**
 
 ---
 
 ## Overview
 
-The `Vfs` trait is the foundation of anyfs. It defines how backends store inodes and content.
+`VfsBackend` is the minimal interface a storage backend implements.
 
-## Target Audience
+- It is **path-based** and aligned with `std::fs` naming.
+- It uses `&VirtualPath` (from `strict-path`) so all paths are validated.
+- It does not include quotas or application policy; that lives in `anyfs-container`.
 
-**Backend implementers** — people creating new storage backends.
-
-**Not for:** Application developers (use `FilesContainer` instead).
-
----
-
-## Key Characteristics
-
-| Aspect | Description |
-|--------|-------------|
-| Path handling | **None** — uses `InodeId` |
-| Semantics | **None** — raw operations |
-| Capacity limits | **None** — just storage |
+If you are implementing a custom backend, depend only on `anyfs-traits`.
 
 ---
 
-## Trait Definition
+## Trait Surface
 
 ```rust
-/// Low-level filesystem trait.
-/// Backend implementers work directly with inodes, not paths.
-pub trait Vfs: Send {
-    // ═══════════════════════════════════════════════════════════
-    // INODE LIFECYCLE
-    // ═══════════════════════════════════════════════════════════
+use strict_path::VirtualPath;
 
-    /// Create a new inode (file, directory, or symlink)
-    fn create_inode(&mut self, kind: InodeKind, mode: u32) -> Result<InodeId, VfsError>;
+pub trait VfsBackend: Send {
+    // Read
+    fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError>;
+    fn read_to_string(&self, path: &VirtualPath) -> Result<String, VfsError>;
+    fn read_range(&self, path: &VirtualPath, offset: u64, len: usize) -> Result<Vec<u8>, VfsError>;
+    fn exists(&self, path: &VirtualPath) -> Result<bool, VfsError>;
+    fn metadata(&self, path: &VirtualPath) -> Result<Metadata, VfsError>;
+    fn symlink_metadata(&self, path: &VirtualPath) -> Result<Metadata, VfsError>;
+    fn read_dir(&self, path: &VirtualPath) -> Result<Vec<DirEntry>, VfsError>;
+    fn read_link(&self, path: &VirtualPath) -> Result<VirtualPath, VfsError>;
 
-    /// Get inode metadata
-    fn get_inode(&self, id: InodeId) -> Result<InodeData, VfsError>;
+    // Write
+    fn write(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError>;
+    fn append(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError>;
+    fn create_dir(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+    fn create_dir_all(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+    fn remove_file(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+    fn remove_dir(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+    fn remove_dir_all(&mut self, path: &VirtualPath) -> Result<(), VfsError>;
+    fn rename(&mut self, from: &VirtualPath, to: &VirtualPath) -> Result<(), VfsError>;
+    fn copy(&mut self, from: &VirtualPath, to: &VirtualPath) -> Result<(), VfsError>;
 
-    /// Update inode metadata (mode, timestamps, etc.)
-    fn update_inode(&mut self, id: InodeId, data: InodeData) -> Result<(), VfsError>;
+    // Links
+    fn symlink(&mut self, original: &VirtualPath, link: &VirtualPath) -> Result<(), VfsError>;
+    fn hard_link(&mut self, original: &VirtualPath, link: &VirtualPath) -> Result<(), VfsError>;
 
-    /// Delete inode (must have nlink=0)
-    fn delete_inode(&mut self, id: InodeId) -> Result<(), VfsError>;
-
-    // ═══════════════════════════════════════════════════════════
-    // DIRECTORY OPERATIONS
-    // ═══════════════════════════════════════════════════════════
-
-    /// Add entry to directory: parent[name] = child
-    fn link(&mut self, parent: InodeId, name: &str, child: InodeId) -> Result<(), VfsError>;
-
-    /// Remove entry from directory, returns removed child inode
-    fn unlink(&mut self, parent: InodeId, name: &str) -> Result<InodeId, VfsError>;
-
-    /// Lookup child by name in directory
-    fn lookup(&self, parent: InodeId, name: &str) -> Result<InodeId, VfsError>;
-
-    /// List all entries in directory
-    fn readdir(&self, dir: InodeId) -> Result<Vec<(String, InodeId)>, VfsError>;
-
-    // ═══════════════════════════════════════════════════════════
-    // CONTENT I/O
-    // ═══════════════════════════════════════════════════════════
-
-    /// Read bytes from file at offset
-    fn read(&self, id: InodeId, offset: u64, buf: &mut [u8]) -> Result<usize, VfsError>;
-
-    /// Write bytes to file at offset
-    fn write(&mut self, id: InodeId, offset: u64, data: &[u8]) -> Result<usize, VfsError>;
-
-    /// Truncate or extend file to size
-    fn truncate(&mut self, id: InodeId, size: u64) -> Result<(), VfsError>;
-
-    // ═══════════════════════════════════════════════════════════
-    // SYNC & ROOT
-    // ═══════════════════════════════════════════════════════════
-
-    /// Flush all pending writes to durable storage
-    fn sync(&mut self) -> Result<(), VfsError>;
-
-    /// Get root directory inode
-    fn root(&self) -> InodeId;
+    // Permissions
+    fn set_permissions(&mut self, path: &VirtualPath, perm: Permissions) -> Result<(), VfsError>;
 }
 ```
 
 ---
 
-## Types
+## Notes on Semantics
 
-### InodeId
+- `read`/`write`/`metadata`/`exists`/`copy` follow symlinks.
+- `symlink_metadata` and `read_link` do not follow.
+- `remove_file` removes the symlink itself, not the target.
 
-```rust
-/// Unique inode identifier within a storage backend.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct InodeId(pub u64);
-```
-
-### InodeKind
-
-```rust
-#[derive(Clone, Debug)]
-pub enum InodeKind {
-    File,
-    Directory,
-    Symlink { target: String },
-}
-```
-
-### InodeData
-
-```rust
-#[derive(Clone, Debug)]
-pub struct InodeData {
-    pub ino: u64,
-    pub kind: InodeKind,
-    pub mode: u32,              // Unix permission bits
-    pub uid: u32,
-    pub gid: u32,
-    pub nlink: u64,             // Hard link count
-    pub size: u64,
-    pub atime: Option<SystemTime>,
-    pub mtime: Option<SystemTime>,
-    pub ctime: Option<SystemTime>,
-}
-```
+The container layer may still deny certain operations via feature whitelisting.
 
 ---
 
 ## Implementing a Backend
 
-See [Backend Implementer's Guide](../implementation/backend-guide.md) for a complete walkthrough.
+- Depend on `anyfs-traits` only.
+- Use `VirtualPath` as your canonical path type.
+- Implement the semantics consistently across backends (a shared conformance suite is recommended).
 
-### Minimal Example
-
-```rust
-use anyfs::{Vfs, InodeId, InodeKind, InodeData, VfsError};
-use std::collections::HashMap;
-
-pub struct SimpleVfs {
-    inodes: HashMap<InodeId, InodeData>,
-    content: HashMap<InodeId, Vec<u8>>,
-    entries: HashMap<(InodeId, String), InodeId>,
-    next_id: u64,
-}
-
-impl Vfs for SimpleVfs {
-    fn create_inode(&mut self, kind: InodeKind, mode: u32) -> Result<InodeId, VfsError> {
-        let id = InodeId(self.next_id);
-        self.next_id += 1;
-
-        self.inodes.insert(id, InodeData {
-            ino: id.0,
-            kind,
-            mode,
-            uid: 0,
-            gid: 0,
-            nlink: 1,
-            size: 0,
-            atime: None,
-            mtime: None,
-            ctime: None,
-        });
-
-        Ok(id)
-    }
-
-    fn lookup(&self, parent: InodeId, name: &str) -> Result<InodeId, VfsError> {
-        self.entries
-            .get(&(parent, name.to_string()))
-            .copied()
-            .ok_or(VfsError::NotFound)
-    }
-
-    // ... implement remaining methods
-}
-```
-
----
-
-## Method Reference
-
-| Method | Purpose |
-|--------|---------|
-| `create_inode` | Allocate new inode |
-| `get_inode` | Read inode metadata |
-| `update_inode` | Modify inode metadata |
-| `delete_inode` | Remove inode (must have nlink=0) |
-| `link` | Add directory entry |
-| `unlink` | Remove directory entry |
-| `lookup` | Find child by name |
-| `readdir` | List directory entries |
-| `read` | Read file content |
-| `write` | Write file content |
-| `truncate` | Resize file |
-| `sync` | Flush to durable storage |
-| `root` | Get root inode |
-
----
-
-## Important Notes
-
-1. **No paths:** The Vfs trait never receives paths. Path resolution is done by `FilesContainer`.
-
-2. **nlink tracking:** Backends must track hard link counts. An inode can only be deleted when `nlink == 0`.
-
-3. **Symlinks:** Stored as `InodeKind::Symlink { target }`. The target is just a string — resolution is done at the container level.
-
-4. **Root inode:** Must exist before any operations. Typically created in the backend constructor.
+See `book/src/implementation/backend-guide.md` for a step-by-step guide.

@@ -1,134 +1,93 @@
-# Implementation Plan
+﻿# Implementation Plan
 
-This plan describes a phased rollout of the **Two-Layer AnyFS Architecture**:
+This plan describes a phased rollout of the AnyFS ecosystem:
 
-- **Layer 1 (`anyfs`)**: Inode-based `Vfs` trait + built-in backends
-- **Layer 2 (`anyfs-container`)**: Path-based `FilesContainer` + `FsSemantics` + capacity limits
-
----
-
-## Phase 1: `anyfs` Core (the foundation)
-
-**Goal:** Define the inode-based storage trait and core types.
-
-- Define `Vfs` trait with **13 inode-based methods**:
-  - Inode lifecycle: `create_inode`, `get_inode`, `update_inode`, `delete_inode`
-  - Directory ops: `link`, `unlink`, `lookup`, `readdir`
-  - Content I/O: `read`, `write`, `truncate`
-  - Sync & root: `sync`, `root`
-- Define core types: `InodeId`, `InodeKind`, `InodeData`
-- Define `VfsError` (errors reference `InodeId`, not paths)
-- Implement `MemoryVfs` as the reference implementation
-
-**Key insight:** No paths in this layer. Only `InodeId` and entry names.
-
-**Exit criteria:** `MemoryVfs` passes all inode-based conformance tests.
+- `anyfs-traits`: minimal contract (`VfsBackend` + core types, re-export `VirtualPath`)
+- `anyfs`: built-in backends (feature-gated) + re-exports
+- `anyfs-container`: `FilesContainer<B: VfsBackend>` policy layer (limits + feature whitelist)
 
 ---
 
-## Phase 2: Additional Backends
+## Phase 1: `anyfs-traits` (core contract)
 
-**Goal:** Provide production-ready backends behind Cargo features.
+**Goal:** Define the stable backend interface and shared types.
 
-| Feature | Backend | Storage |
-|---------|---------|---------|
-| `memory` (default) | `MemoryVfs` | HashMap |
-| `sqlite` | `SqliteVfs` | Single `.db` file |
-| `vrootfs` | `VRootVfs` | Real filesystem via `strict-path` |
+- Re-export `strict_path::VirtualPath`
+- Define core types (`Metadata`, `Permissions`, `FileType`, `DirEntry`)
+- Define `VfsError` (errors carry `VirtualPath` where relevant)
+- Define `VfsBackend` trait (20 `std::fs`-aligned, path-based methods)
 
-Each backend implements the `Vfs` trait (13 methods).
-
-**Exit criteria:** All backends pass the same conformance test suite.
+**Exit criteria:** `anyfs-traits` stands alone with minimal dependencies (`strict-path`, `thiserror`).
 
 ---
 
-## Phase 3: `anyfs-container` (the user-facing layer)
+## Phase 2: `anyfs` (built-in backends)
 
-**Goal:** Provide the ergonomic `std::fs`-like API for application developers.
+**Goal:** Provide a small set of reference/production backends behind Cargo features.
 
-### 3.1 FsSemantics Trait
+- `memory` (default): `MemoryBackend`
+- `vrootfs` (optional): `VRootFsBackend` using `strict_path::VirtualRoot` for containment
+- `sqlite` (optional): `SqliteBackend` storing an entire filesystem in a single `.db`
 
-Define pluggable path resolution:
-
-```rust
-pub trait FsSemantics: Send + Sync {
-    fn separator(&self) -> char;
-    fn components<'a>(&self, path: &'a str) -> Vec<&'a str>;
-    fn normalize(&self, path: &str) -> String;
-    fn case_sensitive(&self) -> bool;
-    fn max_symlink_depth(&self) -> u32;
-}
-```
-
-Implement: `LinuxSemantics`, `WindowsSemantics`, `SimpleSemantics`
-
-### 3.2 FilesContainer
-
-```rust
-pub struct FilesContainer<V: Vfs, S: FsSemantics> {
-    vfs: V,
-    semantics: S,
-    limits: CapacityLimits,
-    usage: CapacityUsage,
-}
-```
-
-- Methods take `impl AsRef<Path>` (ergonomic)
-- Path resolution via `FsSemantics`
-- Delegates to `Vfs` after resolving paths to inodes
-- **20 methods aligned with `std::fs`**: `read`, `write`, `create_dir`, `create_dir_all`, `remove_file`, `remove_dir`, `remove_dir_all`, `rename`, `copy`, `read_dir`, `metadata`, `symlink_metadata`, `read_link`, `symlink`, `hard_link`, `set_permissions`, `read_to_string`, `exists`
-
-### 3.3 Capacity Limits
-
-- Enforce quotas: `max_total_size`, `max_file_size`, `max_node_count`, `max_dir_entries`, `max_path_depth`
-- Track usage: `total_size`, `node_count`, `file_count`, `directory_count`
-- Define `ContainerError` separating backend failures from limit violations
-
-**Exit criteria:** Application code uses familiar `std::fs`-like methods; all path handling is centralized in the container.
+**Exit criteria:** Each backend implements `VfsBackend` and passes the shared conformance suite.
 
 ---
 
-## Phase 4: Conformance Test Suite
+## Phase 3: `anyfs-container` (policy + ergonomics)
 
-**Goal:** Prevent backend divergence and document expected semantics.
+**Goal:** Provide the user-facing `std::fs`-aligned API with consistent policy enforcement.
 
-### Layer 1 Tests (Vfs trait)
+- `FilesContainer<B>` accepts `impl AsRef<Path>` for ergonomics
+- Centralizes path validation: convert once to `VirtualPath`, then call backend
+- Enforces limits (quota and structural constraints):
+  - `max_total_size`
+  - `max_file_size`
+  - `max_node_count`
+  - `max_dir_entries`
+  - `max_path_depth`
+- Implements a least-privilege feature whitelist (default deny):
+  - `symlinks()` (+ `max_symlink_resolution`, default 40)
+  - `hard_links()`
+  - `permissions()`
 
-- Inode creation and deletion
-- Directory entries (`link`, `unlink`, `lookup`, `readdir`)
-- Content I/O at various offsets
-- Hard link behavior (`nlink` tracking)
-- Symlink storage (`InodeKind::Symlink`)
-
-### Layer 2 Tests (FilesContainer)
-
-- Path resolution with different `FsSemantics`
-- Symlink following and loop detection
-- Capacity limit enforcement
-- Error mapping (`NotFound`, `AlreadyExists`, etc.)
-- `std::fs` method compatibility
-
-**Exit criteria:** `MemoryVfs`, `SqliteVfs`, and `VRootVfs` all pass the same suite.
+**Exit criteria:** An application can use `FilesContainer` as a drop-in for common `std::fs` patterns while gaining quotas + default-deny policy.
 
 ---
 
-## Phase 5: Documentation and Examples
+## Phase 4: Conformance test suite
 
-**Goal:** Make the two-layer design easy to understand.
+**Goal:** Prevent backend divergence and make semantics explicit.
 
-- `backend-guide.md`: How to implement a custom `Vfs` backend
-- `semantics-guide.md`: How to implement custom `FsSemantics` (future)
-- Keep `design-overview.md` and ADRs authoritative
-- Examples showing both layers:
-  - Application developer: `FilesContainer` with `LinuxSemantics`
-  - Backend implementer: Custom `Vfs` implementation
+Recommended structure:
+
+- Backend conformance tests (run against every `VfsBackend` implementation)
+  - `read`/`write`/`append` semantics
+  - directory operations (`create_dir*`, `read_dir`, `remove_dir*`)
+  - `rename` and `copy` semantics
+  - link behavior (`symlink`, `read_link`, `hard_link`, `nlink`)
+  - permissions (`set_permissions`) where meaningful
+- Container policy tests
+  - limit enforcement and usage accounting
+  - whitelist behavior (`FeatureNotEnabled`)
+  - symlink resolution depth limit (when enabled)
+
+**Exit criteria:** All built-in backends pass the same suite; container policy tests are backend-agnostic.
 
 ---
 
-## Future Work (out of scope for MVP)
+## Phase 5: Documentation + examples
+
+- Keep `book/src/architecture/design-overview.md` + `book/src/architecture/adrs.md` authoritative
+- Provide at least one complete example per backend
+- Provide a backend implementer guide for `anyfs-traits`
+
+---
+
+## Future work (out of scope for MVP)
 
 - Streaming I/O (file handles)
-- Async API (`AsyncVfs` trait)
-- Import/export helpers (SQLAR, tar, etc.)
+- Async API
+- Import/export helpers (host path <-> container path)
 - Extended attributes
-- FUSE adapter using `Vfs` directly
+- Encryption-at-rest helpers (backend-specific)
+- Capability negotiation (optional): detect when a backend cannot support certain operations

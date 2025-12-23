@@ -1,99 +1,64 @@
-# AnyFS — Virtual Filesystem for Rust
+﻿# AnyFS - Virtual filesystem backends for Rust
 
-**A two-layer virtual filesystem abstraction with pluggable backends and semantics**
+AnyFS is a small Rust ecosystem for virtual filesystem backends with an optional policy/container layer.
+
+It is designed for:
+- portable application storage (SQLite backend = single `.db` file)
+- tenant isolation (one container per tenant)
+- quotas/limits (enforced in the container layer)
+- containment and safe path handling (`strict-path`)
 
 ---
 
-## Overview
+## Crates
 
-A two-layer architecture separating storage from semantics:
+| Crate | Purpose |
+|------|---------|
+| `anyfs-traits` | Minimal contract: `VfsBackend` + core types + `VirtualPath` re-export |
+| `anyfs` | Re-exports `anyfs-traits` + built-in backends (feature-gated) |
+| `anyfs-container` | `FilesContainer<B: VfsBackend>` policy layer (limits + least-privilege feature whitelist) |
 
-| Layer | Crate | API Style | For |
-|-------|-------|-----------|-----|
-| **Low-level** | `anyfs` | Inode-based (`Vfs` trait) | Backend implementers |
-| **High-level** | `anyfs-container` | `std::fs`-like (paths) | Application developers |
+---
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  Application: container.write("/data/file.txt", b"hello")  │
-├─────────────────────────────────────────────────────────────┤
-│  anyfs-container: std::fs-like API + capacity limits       │
-│  (FilesContainer<V, S> with FsSemantics)                   │
-├─────────────────────────────────────────────────────────────┤
-│  anyfs: Vfs trait (inode operations)                       │
-├──────────────────┬──────────────────┬───────────────────────┤
-│  MemoryVfs       │  SqliteVfs       │  VRootVfs            │
-└──────────────────┴──────────────────┴───────────────────────┘
-```
-
-## Quick Example
-
-### For Application Developers (std::fs-like)
+## Quick example
 
 ```rust
-use anyfs_container::{FilesContainer, LinuxSemantics};
-use anyfs::MemoryVfs;
+use anyfs::SqliteBackend;
+use anyfs_container::ContainerBuilder;
 
-// Create container with memory backend
-let mut container = FilesContainer::new(
-    MemoryVfs::new(),
-    LinuxSemantics::new(),
-);
+let mut fs = ContainerBuilder::new(SqliteBackend::open_or_create("tenant.db")?)
+    .max_total_size(100 * 1024 * 1024)
+    // advanced features are opt-in (default deny)
+    .symlinks()
+    .hard_links()
+    .build()?;
 
-// Use exactly like std::fs!
-container.create_dir_all("/data/nested")?;
-container.write("/data/nested/file.txt", b"hello")?;
-
-let content = container.read("/data/nested/file.txt")?;
-assert_eq!(content, b"hello");
-
-for entry in container.read_dir("/data")? {
-    println!("{}", entry.name());
-}
+fs.create_dir_all("/docs")?;
+fs.write("/docs/hello.txt", b"hello")?;
+let bytes = fs.read("/docs/hello.txt")?;
 ```
 
-### For Backend Implementers (Low-Level)
+---
 
-```rust
-use anyfs::{Vfs, InodeId, InodeKind, InodeData, VfsError};
+## Feature selection
 
-struct MyCustomVfs { /* ... */ }
+There are two independent knobs:
 
-impl Vfs for MyCustomVfs {
-    fn create_inode(&mut self, kind: InodeKind, mode: u32) -> Result<InodeId, VfsError> {
-        // Allocate and store inode in your storage
-    }
+- Compile-time (Cargo features on `anyfs`): `memory` (default), `sqlite`, `vrootfs`
+- Runtime policy (per-container whitelist): `.symlinks()`, `.hard_links()`, `.permissions()`
 
-    fn lookup(&self, parent: InodeId, name: &str) -> Result<InodeId, VfsError> {
-        // Find child by name in parent directory
-    }
-
-    fn read(&self, id: InodeId, offset: u64, buf: &mut [u8]) -> Result<usize, VfsError> {
-        // Read bytes from file content
-    }
-
-    // ... implement other Vfs methods
-}
-```
+---
 
 ## Documentation
 
-**Authoritative design document:** [`book/src/architecture/design-overview.md`](./book/src/architecture/design-overview.md)
+The manual lives in `book/`:
+- `book/src/architecture/design-overview.md`
+- `book/src/architecture/adrs.md`
 
-Browse the full documentation with `mdbook serve book/`.
+Build locally: `mdbook serve book`
+
+---
 
 ## Status
 
-| Component | Status |
-|-----------|--------|
-| Design | Complete |
-| Implementation | Not started |
-
-## Key Design Decisions
-
-See the [Architecture Decision Records](./book/src/architecture/adrs.md) for details:
-
-1. **Two-layer architecture**: `anyfs` (inodes) + `anyfs-container` (paths)
-2. **Pluggable semantics**: `LinuxSemantics`, `WindowsSemantics`, `SimpleSemantics`
-3. **Inode-based storage**: Enables hard links, efficient renames, FUSE support
-4. **Capacity limits**: Enforced at container layer, not in backends
+Design complete; implementation not started.

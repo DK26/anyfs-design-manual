@@ -19,7 +19,7 @@ When you call `backend.symlink()`, `backend.write()`, or `backend.hard_link()`:
 
 | Backend | `write("/foo", data)` | `symlink("/target", "/link")` | `hard_link("/a", "/b")` |
 |---------|----------------------|------------------------------|------------------------|
-| **MemoryBackend** | Stores bytes in a `HashMap` | Stores target path in an `Entry::Symlink` | Two entries share same `ContentId` |
+| **MemoryBackend** | Stores bytes in a `HashMap` | Stores target path in an `Entry::Symlink` | Two entries share the same backend-internal content key |
 | **SqliteBackend** | Inserts row in `contents` table | Inserts row with `entry_type='symlink'` | Two rows reference same `content_id` |
 | **VRootFsBackend** | Calls real `fs::write()` via strict-path | Calls real `std::os::unix::fs::symlink()` | Calls real `std::fs::hard_link()` |
 
@@ -32,11 +32,13 @@ When you call `backend.symlink()`, `backend.write()`, or `backend.hard_link()`:
 
 pub struct MemoryBackend {
     entries: HashMap<VirtualPath, Entry>,
-    contents: HashMap<ContentId, Vec<u8>>,
+    contents: HashMap<ContentKey, Vec<u8>>,
 }
 
+type ContentKey = u64; // backend-internal handle for shared file content (hard links)
+
 enum Entry {
-    File { content_id: ContentId, ... },
+    File { content_id: ContentKey, ... },
     Directory { ... },
     Symlink { target: VirtualPath, ... },  // Just a stored path, not a real symlink
 }
@@ -221,7 +223,7 @@ pub trait VfsBackend: Send {
 | **File** | `write()` | `HashMap` entry | DB row + blob | Real file |
 | **Directory** | `create_dir()` | `HashMap` entry | DB row | Real directory |
 | **Symlink** | `symlink()` | Stored target path | DB row with target | Real OS symlink |
-| **Hard link** | `hard_link()` | Shared `ContentId` | Shared `content_id` | Real OS hard link |
+| **Hard link** | `hard_link()` | Shared content key | Shared `content_id` | Real OS hard link |
 | **Read** | `read()` | HashMap lookup | SQL query | Real `fs::read()` |
 | **Follows symlinks** | Yes (API contract) | HashMap resolution | SQL joins | OS resolution |
 
