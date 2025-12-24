@@ -14,6 +14,26 @@ AnyFS is an open standard for pluggable virtual filesystem backends in Rust. It 
 
 ---
 
+## AnyFS vs AgentFS
+
+AnyFS is a **filesystem abstraction**. [AgentFS](https://github.com/tursodatabase/agentfs) is an **agent runtime**.
+
+| | AnyFS | AgentFS |
+|-|-------|---------|
+| Scope | Filesystem only | FS + KV store + tool auditing |
+| Backends | Multiple (Memory, SQLite, VRootFs) | SQLite only |
+| Middleware | Composable layers | Monolithic |
+
+**They complement each other:**
+- AnyFS could provide the filesystem layer for AgentFS
+- AgentFS-compatible `VfsBackend` could be implemented
+
+**Do NOT add to AnyFS:**
+- Key-value store (different abstraction)
+- Tool call auditing in core trait (use `Tracing` middleware)
+
+---
+
 ## Architecture (Tower-style Middleware)
 
 ```

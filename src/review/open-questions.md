@@ -75,24 +75,65 @@ This is an implementation detail of the backend, not visible to the `FilesContai
 
 ## AgentFS Comparison
 
-[AgentFS](https://github.com/tursodatabase/agentfs) is a filesystem designed for AI agents with:
-- **Auditability**: Every operation recorded in SQLite
-- **Reproducibility**: Snapshot and restore agent state
-- **Portability**: Everything in a single SQLite file
+**Note:** There are two projects named "AgentFS":
 
-**Similarities with AnyFS:**
-- SQLite as portable storage
-- Single-file deployment
-- Agent/tenant isolation
+| Project | Description |
+|---------|-------------|
+| [tursodatabase/agentfs](https://github.com/tursodatabase/agentfs) | Full AI agent runtime (Turso/libSQL) |
+| [cryptopatrick/agentfs](https://github.com/cryptopatrick/agentfs) | Related to [AgentDB](https://lib.rs/crates/agentdb) abstraction layer |
 
-**Differences:**
-- AgentFS is specialized for AI agent workflows (includes key-value store, tool call logging)
-- AnyFS is a general-purpose virtual filesystem abstraction
-- AgentFS has more features; AnyFS has more flexibility
+This section focuses on **Turso's AgentFS**, which has a [published spec](https://github.com/tursodatabase/agentfs/blob/main/SPEC.md).
 
-**Could AnyFS use AgentFS?** Possibly as a backend, but AgentFS's API is different from `VfsBackend`. Integration would require an adapter.
+### What AgentFS Provides
 
-**Takeaway:** AgentFS validates the SQLite-based portable filesystem approach. We could learn from their audit logging if we add hooks in the future.
+AgentFS is an **agent runtime**, not just a filesystem. It provides three integrated subsystems:
+
+1. **Virtual Filesystem** - POSIX-like, inode-based, chunked storage in SQLite
+2. **Key-Value Store** - Agent state and context storage
+3. **Tool Call Audit Trail** - Records all tool invocations for debugging/compliance
+
+### AnyFS vs AgentFS: Different Abstractions
+
+| Concern | AnyFS | AgentFS |
+|---------|-------|---------|
+| **Scope** | Filesystem abstraction | Agent runtime |
+| **Filesystem** | ✅ Full | ✅ Full |
+| **Key-Value store** | ❌ Not our domain | ✅ Included |
+| **Tool auditing** | ⚠️ `Tracing` middleware | ✅ Built-in |
+| **Backends** | Memory, SQLite, VRootFs, custom | SQLite only (spec) |
+| **Middleware** | ✅ Composable layers | ❌ Monolithic |
+
+### Relationship Options
+
+**AnyFS could be used BY AgentFS:**
+- AgentFS could implement its filesystem portion using `VfsBackend`
+- Our middleware (Quota, PathFilter, etc.) would work with their system
+
+**AgentFS-compatible backend for AnyFS:**
+- Someone could implement `VfsBackend` using AgentFS's SQLite schema
+- Would enable interop with AgentFS tooling
+
+**What we should NOT do:**
+- Add KV store to `VfsBackend` (different abstraction, scope creep)
+- Add tool call auditing to core trait (that's what `Tracing` middleware is for)
+
+### When to Use Which
+
+| Use Case | Recommendation |
+|----------|----------------|
+| Need just filesystem operations | **AnyFS** |
+| Need composable middleware (quota, sandboxing) | **AnyFS** |
+| Need full agent runtime (FS + KV + auditing) | **AgentFS** |
+| Need multiple backend types (memory, real FS) | **AnyFS** |
+| Need AgentFS-compatible SQLite format | **AgentFS** or custom AnyFS backend |
+
+### Takeaway
+
+AnyFS and AgentFS solve different problems at different layers:
+- **AnyFS** = filesystem abstraction with composable middleware
+- **AgentFS** = complete agent runtime with integrated storage
+
+They can complement each other rather than compete.
 
 ---
 
