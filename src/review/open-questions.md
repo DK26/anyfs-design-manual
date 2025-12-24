@@ -1,7 +1,7 @@
 # Open Questions & Future Considerations
 
 **Status:** Under Discussion
-**Last Updated:** 2025-12-23
+**Last Updated:** 2025-12-24
 
 ---
 
@@ -9,20 +9,187 @@ This document captures open questions and design considerations that may influen
 
 ---
 
-## Symlink Handling with VRootFsBackend
+## Symlink Security: Following vs Creating
 
-**Question:** If VRootFsBackend wraps a real filesystem directory, and the user has symlinks disabled at the FilesContainer level, what happens to symlinks that exist in the underlying host filesystem?
+**IMPORTANT:** The current discussion about symlinks has been fundamentally reconsidered.
 
-**Considerations:**
+### The Correct Understanding
 
-1. **VRootFsBackend inherits real FS behavior**: The underlying filesystem still has symlinks. Even if we don't expose symlink *creation* APIs, operations like `read` or `metadata` might still follow symlinks on the host.
+| Action | Security Concern? | Why |
+|--------|-------------------|-----|
+| **Creating symlinks** | No | Symlinks are just data. Creating them is harmless. |
+| **Following symlinks** | **YES** | Following a symlink can escape containment. |
 
-2. **Options:**
-   - **Transparent following**: VRootFsBackend always follows symlinks on the host (simplest, matches host behavior)
-   - **Refuse symlinks**: VRootFsBackend returns an error if it encounters a symlink
-   - **Configurable per-backend**: Let VRootFsBackend accept a `follow_symlinks: bool` option
+**Example attack:**
+```
+/sandbox/escape -> /etc/passwd
 
-3. **Recommendation:** VRootFsBackend should transparently follow symlinks on the host filesystem. The "symlinks disabled" policy at the container level means *creating* symlinks is disabled, not that the backend must refuse to traverse existing ones.
+If we follow the symlink:
+  read("/sandbox/escape") → reads /etc/passwd → JAIL ESCAPE
+```
+
+The security feature is **controlling symlink resolution**, not symlink creation.
+
+### Virtual vs Real Backends: A Fundamental Difference
+
+| Backend | Who Controls Symlink Resolution? |
+|---------|----------------------------------|
+| `MemoryBackend` | **We do** (symlinks are stored data, we choose whether to follow) |
+| `SqliteBackend` | **We do** (symlinks are stored data, we choose whether to follow) |
+| `VRootFsBackend` | **The OS does** (we call `std::fs::read`, OS follows symlinks) |
+
+**This is the core problem:** For virtual backends, we have full control. For real filesystem backends, the OS controls symlink resolution and we cannot easily change that.
+
+### Options Analysis
+
+#### Option 1: Custom Path Resolution for VRootFsBackend
+
+Walk each path component manually using `lstat` (symlink_metadata):
+
+```rust
+fn resolve_no_follow(&self, path: &Path) -> Result<PathBuf, VfsError> {
+    let mut current = self.root.clone();
+    for component in path.components() {
+        current = current.join(component);
+        let meta = std::fs::symlink_metadata(&current)?;
+        if meta.file_type().is_symlink() {
+            return Err(VfsError::SymlinkNotAllowed { path: current });
+        }
+    }
+    Ok(current)
+}
+```
+
+| Pros | Cons |
+|------|------|
+| Would work | Complex implementation |
+| Consistent with virtual backends | TOCTOU vulnerability (symlink created between check and use) |
+| | Performance overhead (lstat per component) |
+| | Platform differences (Windows junctions, etc.) |
+
+#### Option 2: Two Different Traits
+
+```rust
+/// Virtual backends where we control everything
+pub trait VirtualVfsBackend: VfsBackend {
+    fn set_symlink_resolution(&mut self, enabled: bool);
+}
+
+/// Real filesystem backends where OS controls symlink resolution
+pub trait RealFsBackend: VfsBackend {
+    // OS controls symlinks, we just ensure containment
+}
+```
+
+| Pros | Cons |
+|------|------|
+| Honest about capabilities | Complicates API |
+| Clear separation of concerns | Middleware must handle both |
+| No false promises | Harder to swap backends |
+| | Users must understand the difference |
+
+#### Option 3: Capability Query
+
+```rust
+pub trait VfsBackend {
+    fn capabilities(&self) -> Capabilities;
+    // ...
+}
+
+pub struct Capabilities {
+    pub can_control_symlink_following: bool,
+    pub supports_hard_links: bool,
+    // ...
+}
+```
+
+| Pros | Cons |
+|------|------|
+| Single trait surface | Runtime capability discovery |
+| Backends self-describe | Middleware becomes conditional |
+| Extensible | Can't enforce at compile time |
+
+#### Option 4: Accept the Limitation
+
+- For virtual backends: We control symlink following
+- For VRootFsBackend: Rely on `strict-path` to prevent escapes
+- Document that `FeatureGuard` symlink control only applies to virtual backends
+
+| Pros | Cons |
+|------|------|
+| Simple | Inconsistent behavior |
+| Honest | Feature doesn't work everywhere |
+| No complexity | |
+
+#### Option 5: Drop the Symlink Control Feature
+
+User's suggestion: Low ROI, just drop it.
+
+- Virtual backends: Symlinks are data, inherently safe
+- VRootFsBackend: `strict-path` prevents escapes anyway
+
+| Pros | Cons |
+|------|------|
+| Simplest | Loses archive extraction use case |
+| No false expectations | |
+| Focus on what we can actually control | |
+
+### The Archive Extraction Use Case
+
+One valid use case for symlink control:
+
+> "Someone using our files container to contain their own user-based-tenants or as an archive extraction, where they wish to prevent symlinks as an easy resolution to make sure there is no jail-escape."
+
+For this use case:
+- **Virtual backends**: Works perfectly - we can refuse to follow symlinks
+- **VRootFsBackend**: Would need custom path resolution or OS-specific flags
+
+### What `strict-path` Actually Does
+
+`strict-path::VirtualRoot`:
+1. Takes a user path
+2. Canonicalizes it (follows symlinks, resolves `.` and `..`)
+3. Checks the canonical path is within the root
+4. Returns the safe path
+
+**Key insight:** `strict-path` FOLLOWS symlinks but ensures the final path is contained. It does NOT prevent symlink following.
+
+```
+/root/link -> ../escape
+User requests: /link
+strict-path: canonicalize(/root/link) = /escape
+strict-path: /escape is NOT within /root → DENIED
+```
+
+This is secure against escape, but it's "follow and check" not "don't follow".
+
+### Recommendation
+
+**For v1, we should:**
+
+1. **Remove the misleading "allow symlinks" feature from FeatureGuard** - it doesn't mean what we thought
+
+2. **Document the real situation:**
+   - Virtual backends: We control symlink resolution
+   - VRootFsBackend: OS controls symlink resolution, `strict-path` prevents escapes
+
+3. **For archive extraction safety:**
+   - Virtual backends: Can add a `follow_symlinks: bool` option to path resolution
+   - VRootFsBackend: `strict-path` provides escape protection (different model)
+
+4. **Consider for future:**
+   - Option 2 (two traits) if the abstraction mismatch becomes painful
+   - Option 3 (capabilities) for gradual feature discovery
+
+### Questions for Discussion
+
+1. **Is the two-trait approach worth the complexity?** Would it actually help users, or just confuse them?
+
+2. **Should VRootFsBackend implement custom path resolution?** The TOCTOU and complexity costs are real.
+
+3. **Is escape prevention (strict-path) sufficient?** Or do users need "no symlink following at all"?
+
+4. **Should we rename `FeatureGuard`?** Current name implies features we can't reliably provide.
 
 ---
 
@@ -34,11 +201,13 @@ This document captures open questions and design considerations that may influen
 
 | Backend Type | Path Resolution | Symlink Handling |
 |--------------|-----------------|------------------|
-| MemoryBackend | Pure lexical (in our code) | We control everything |
-| SqliteBackend | Pure lexical (in our code) | We control everything |
-| VRootFsBackend | OS handles it | OS follows symlinks on host |
+| MemoryBackend | Pure lexical (our code) | We control everything |
+| SqliteBackend | Pure lexical (our code) | We control everything |
+| VRootFsBackend | OS handles it | OS follows symlinks |
 
-**Recommendation:** For virtual backends, we perform lexical path resolution ourselves. For VRootFsBackend, we delegate to the OS via `std::fs`. The `strict-path::VirtualRoot` ensures we can't escape the root directory, but symlink resolution within that root is handled by the OS.
+**Current design:** For virtual backends, we perform lexical path resolution ourselves. For VRootFsBackend, we delegate to the OS via `std::fs`, with `strict-path::VirtualRoot` ensuring containment.
+
+**Open question:** Should we abstract this difference, accept it, or use two traits?
 
 ---
 
@@ -97,11 +266,11 @@ AgentFS is an **agent runtime**, not just a filesystem. It provides three integr
 | Concern | AnyFS | AgentFS |
 |---------|-------|---------|
 | **Scope** | Filesystem abstraction | Agent runtime |
-| **Filesystem** | ✅ Full | ✅ Full |
-| **Key-Value store** | ❌ Not our domain | ✅ Included |
-| **Tool auditing** | ⚠️ `Tracing` middleware | ✅ Built-in |
+| **Filesystem** | Full | Full |
+| **Key-Value store** | Not our domain | Included |
+| **Tool auditing** | `Tracing` middleware | Built-in |
 | **Backends** | Memory, SQLite, VRootFs, custom | SQLite only (spec) |
-| **Middleware** | ✅ Composable layers | ❌ Monolithic |
+| **Middleware** | Composable layers | Monolithic |
 
 ### Relationship Options
 
@@ -250,29 +419,27 @@ Based on review feedback, the following naming concerns were raised:
 
 ## Summary
 
-These questions inform future development but don't block v1:
-
 | Topic | v1 Decision |
 |-------|-------------|
-| Symlinks with VRootFsBackend | Transparent following on host |
+| Symlink security | **NEEDS REDESIGN** - see discussion above |
 | Path resolution | Virtual = lexical; VRootFs = OS |
 | Compression/encryption | Backend responsibility |
 | Hooks/callbacks | Defer to v2 |
 | FUSE mount | Possible with current trait (has truncate, fsync, statfs) |
 | Type-system protection | Defer |
 | POSIX compatibility | Not a goal |
-| `truncate` | ✅ Added to VfsBackend |
-| `sync` / `fsync` | ✅ Added to VfsBackend |
-| Async support | ✅ Sync-first, async-ready (ADR-010) |
-| Layer trait | ✅ Tower-style composition (ADR-011) |
-| Logging | ✅ Tracing with tracing ecosystem (ADR-012) |
-| Extension methods | ✅ VfsBackendExt (ADR-013) |
-| Zero-copy bytes | ✅ Optional `bytes` feature (ADR-014) |
-| Error context | ✅ Contextual VfsError (ADR-015) |
-| BackendStack builder | ✅ Fluent API in anyfs-container |
-| Path-based access control | ✅ PathFilter middleware (ADR-016) |
-| Read-only mode | ✅ ReadOnly middleware (ADR-017) |
-| Rate limiting | ✅ RateLimit middleware (ADR-018) |
-| Dry-run testing | ✅ DryRun middleware (ADR-019) |
-| Read caching | ✅ Cache middleware (ADR-020) |
-| Union filesystem | ✅ Overlay middleware (ADR-021) |
+| `truncate` | Added to VfsBackend |
+| `sync` / `fsync` | Added to VfsBackend |
+| Async support | Sync-first, async-ready (ADR-010) |
+| Layer trait | Tower-style composition (ADR-011) |
+| Logging | Tracing with tracing ecosystem (ADR-012) |
+| Extension methods | VfsBackendExt (ADR-013) |
+| Zero-copy bytes | Optional `bytes` feature (ADR-014) |
+| Error context | Contextual VfsError (ADR-015) |
+| BackendStack builder | Fluent API in anyfs-container |
+| Path-based access control | PathFilter middleware (ADR-016) |
+| Read-only mode | ReadOnly middleware (ADR-017) |
+| Rate limiting | RateLimit middleware (ADR-018) |
+| Dry-run testing | DryRun middleware (ADR-019) |
+| Read caching | Cache middleware (ADR-020) |
+| Union filesystem | Overlay middleware (ADR-021) |
