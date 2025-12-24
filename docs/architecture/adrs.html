@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -205,6 +205,12 @@
 <tr><td>ADR-013</td><td>VfsBackendExt for extension methods</td><td>Accepted</td></tr>
 <tr><td>ADR-014</td><td>Optional Bytes support</td><td>Accepted</td></tr>
 <tr><td>ADR-015</td><td>Contextual VfsError</td><td>Accepted</td></tr>
+<tr><td>ADR-016</td><td>PathFilter for path-based access control</td><td>Accepted</td></tr>
+<tr><td>ADR-017</td><td>ReadOnly for preventing writes</td><td>Accepted</td></tr>
+<tr><td>ADR-018</td><td>RateLimit for operation throttling</td><td>Accepted</td></tr>
+<tr><td>ADR-019</td><td>DryRun for testing and debugging</td><td>Accepted</td></tr>
+<tr><td>ADR-020</td><td>Cache for read performance</td><td>Accepted</td></tr>
+<tr><td>ADR-021</td><td>Overlay for union filesystem</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -282,6 +288,12 @@
 <li>Limits are policy, not storage semantics.</li>
 <li>Written once, works with any backend.</li>
 <li>Optional - users who don’t need limits skip this middleware.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>On construction, scan existing backend to initialize usage counters.</li>
+<li>Wrap <code>open_write</code> streams with <code>CountingWriter</code> to track streamed bytes.</li>
+<li>Check limits before operations, update usage after successful operations.</li>
 </ul>
 <hr>
 <h2 id="adr-007-featureguard-for-least-privilege"><a class="header" href="#adr-007-featureguard-for-least-privilege">ADR-007: FeatureGuard for least-privilege</a></h2>
@@ -455,7 +467,24 @@ impl&lt;B: VfsBackend&gt; VfsBackendExt for B {}
 <li>Optional - users who don’t need it avoid the dependency.</li>
 <li>Default remains <code>Vec&lt;u8&gt;</code> for simplicity.</li>
 </ul>
-<p><strong>Trade-off:</strong> With <code>bytes</code> feature, <code>read</code> returns <code>Bytes</code> instead of <code>Vec&lt;u8&gt;</code>. This is a compile-time choice.</p>
+<p><strong>Implementation:</strong> Use a type alias to avoid breaking API:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In anyfs-backend/src/types.rs
+
+#[cfg(feature = "bytes")]
+pub type FileContent = bytes::Bytes;
+
+#[cfg(not(feature = "bytes"))]
+pub type FileContent = Vec&lt;u8&gt;;
+
+// In trait definition
+pub trait VfsBackend: Send {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;FileContent, VfsError&gt;;
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Middleware compatibility:</strong> Middleware passes <code>FileContent</code> through unchanged. No special handling needed - both <code>Vec&lt;u8&gt;</code> and <code>Bytes</code> implement <code>AsRef&lt;[u8]&gt;</code> and <code>Deref&lt;Target=[u8]&gt;</code>.</p>
 <hr>
 <h2 id="adr-015-contextual-vfserror"><a class="header" href="#adr-015-contextual-vfserror">ADR-015: Contextual VfsError</a></h2>
 <p><strong>Decision:</strong> <code>VfsError</code> variants include context for better debugging.</p>
@@ -478,6 +507,180 @@ VfsError::QuotaExceeded {
 <li>No need for separate error context crate (like anyhow) for basic usage.</li>
 <li>Operation field helps distinguish “file not found during read” vs “during metadata”.</li>
 <li>Quota errors include all relevant numbers for debugging.</li>
+</ul>
+<hr>
+<h2 id="adr-016-pathfilter-for-path-based-access-control"><a class="header" href="#adr-016-pathfilter-for-path-based-access-control">ADR-016: PathFilter for path-based access control</a></h2>
+<p><strong>Decision:</strong> Provide <code>PathFilter&lt;B&gt;</code> middleware for glob-based path access control.</p>
+<p><strong>Configuration:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>PathFilter::new(backend)
+    .allow("/workspace/**")    // Allow workspace access
+    .deny("**/.env")           // Deny .env files anywhere
+    .deny("**/secrets/**")     // Deny secrets directories
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Rules are evaluated in order; first match wins.</li>
+<li>If no rules match, access is denied (deny by default).</li>
+<li>Uses glob patterns (e.g., <code>**</code> for recursive, <code>*</code> for single segment).</li>
+<li>Returns <code>VfsError::AccessDenied</code> for denied paths.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Essential for AI agent sandboxing - restrict to specific directories.</li>
+<li>Prevents access to sensitive files (.env, secrets, credentials).</li>
+<li>Separate from backend - works with any backend.</li>
+<li>Inspired by AgentFS and similar AI sandbox patterns.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>Use <code>globset</code> crate for efficient glob pattern matching.</li>
+<li><code>read_dir</code> filters out denied entries from results (don’t expose existence of denied files).</li>
+<li>Check path at operation start, then delegate to inner backend.</li>
+</ul>
+<hr>
+<h2 id="adr-017-readonly-for-preventing-writes"><a class="header" href="#adr-017-readonly-for-preventing-writes">ADR-017: ReadOnly for preventing writes</a></h2>
+<p><strong>Decision:</strong> Provide <code>ReadOnly&lt;B&gt;</code> middleware that blocks all write operations.</p>
+<p><strong>Usage:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let readonly_fs = ReadOnly::new(backend);
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>All read operations pass through to inner backend.</li>
+<li>All write operations return <code>VfsError::ReadOnly</code>.</li>
+<li>Simple, no configuration needed.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Safe browsing of container contents without modification risk.</li>
+<li>Useful for debugging, inspection, auditing.</li>
+<li>Simpler than configuring FeatureGuard for read-only use case.</li>
+</ul>
+<hr>
+<h2 id="adr-018-ratelimit-for-operation-throttling"><a class="header" href="#adr-018-ratelimit-for-operation-throttling">ADR-018: RateLimit for operation throttling</a></h2>
+<p><strong>Decision:</strong> Provide <code>RateLimit&lt;B&gt;</code> middleware to limit operations per time window.</p>
+<p><strong>Configuration:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>RateLimit::new(backend)
+    .max_ops(1000)
+    .per_second()
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Tracks operation count in sliding time window.</li>
+<li>Returns <code>VfsError::RateLimitExceeded</code> when limit exceeded.</li>
+<li>Counter resets after window expires.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Protects against runaway processes consuming resources.</li>
+<li>Essential for multi-tenant environments.</li>
+<li>Prevents denial-of-service from misbehaving code.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>Use <code>std::time::Instant</code> for timing.</li>
+<li>Store window start time and counter; reset when window expires.</li>
+<li>Count operation calls (including <code>open_read</code>/<code>open_write</code>), not bytes transferred.</li>
+<li>Return error immediately when limit exceeded (no blocking/waiting).</li>
+</ul>
+<hr>
+<h2 id="adr-019-dryrun-for-testing-and-debugging"><a class="header" href="#adr-019-dryrun-for-testing-and-debugging">ADR-019: DryRun for testing and debugging</a></h2>
+<p><strong>Decision:</strong> Provide <code>DryRun&lt;B&gt;</code> middleware that logs write operations without executing them.</p>
+<p><strong>Usage:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut dry_run = DryRun::new(backend);
+dry_run.write("/test.txt", b"hello")?;  // Logged but not written
+let ops = dry_run.operations();         // ["write /test.txt (5 bytes)"]
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Read operations execute normally against inner backend.</li>
+<li>Write operations are logged but return <code>Ok(())</code> without executing.</li>
+<li>Operations log can be inspected for verification.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Test code paths without side effects.</li>
+<li>Debug complex operation sequences.</li>
+<li>Audit what would happen before committing.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>Read operations delegate to inner backend (test against real state).</li>
+<li>Write operations log and return <code>Ok(())</code> without executing.</li>
+<li><code>open_write</code> returns <code>std::io::sink()</code> - writes are discarded.</li>
+<li>Useful for: “What would this code do?” not “Run this in isolation.”</li>
+</ul>
+<hr>
+<h2 id="adr-020-cache-for-read-performance"><a class="header" href="#adr-020-cache-for-read-performance">ADR-020: Cache for read performance</a></h2>
+<p><strong>Decision:</strong> Provide <code>Cache&lt;B&gt;</code> middleware with LRU caching for read operations.</p>
+<p><strong>Configuration:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>Cache::new(backend)
+    .max_entries(1000)
+    .max_entry_size(1024 * 1024)  // 1MB max per entry
+    .ttl(Duration::from_secs(60))
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Read operations check cache first, populate on miss.</li>
+<li>Write operations invalidate relevant cache entries.</li>
+<li>LRU eviction when max entries exceeded.</li>
+<li>TTL-based expiration for freshness.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Improves performance for repeated reads.</li>
+<li>Reduces load on underlying backend (especially for SQLite/network).</li>
+<li>Configurable to balance memory vs performance.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>Cache bulk reads only: <code>read()</code>, <code>read_to_string()</code>, <code>read_range()</code>, <code>metadata()</code>, <code>exists()</code>.</li>
+<li>Do NOT cache <code>open_read()</code> - streams are for large files that shouldn’t be cached.</li>
+<li>Invalidate cache entry on any write to that path.</li>
+<li>Use <code>lru</code> crate or similar for LRU eviction.</li>
+<li>Check TTL on cache hits; evict expired entries.</li>
+</ul>
+<hr>
+<h2 id="adr-021-overlay-for-union-filesystem"><a class="header" href="#adr-021-overlay-for-union-filesystem">ADR-021: Overlay for union filesystem</a></h2>
+<p><strong>Decision:</strong> Provide <code>Overlay&lt;B1, B2&gt;</code> middleware for copy-on-write layered filesystems.</p>
+<p><strong>Usage:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let base = SqliteBackend::open("base.db")?;  // Read-only base
+let upper = MemoryBackend::new();             // Writable upper layer
+
+let overlay = Overlay::new(base, upper);
+<span class="boring">}</span></code></pre>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Read: check upper layer first, fall back to base if not found.</li>
+<li>Write: always to upper layer (copy-on-write).</li>
+<li>Delete: create whiteout marker in upper layer (file appears deleted but base unchanged).</li>
+<li>Directory listing: merge results from both layers.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Docker-like layered filesystem for containers.</li>
+<li>Base image with per-instance modifications.</li>
+<li>Testing with isolated changes over shared baseline.</li>
+<li>Inspired by OverlayFS and VFS crate patterns.</li>
+</ul>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>Whiteout convention: <code>.wh.&lt;filename&gt;</code> marks deleted files from base layer.</li>
+<li><code>read_dir</code> must merge results from both layers, excluding whiteouts and whited-out files.</li>
+<li><code>exists</code> checks upper first, then base (respecting whiteouts).</li>
+<li>All writes go to upper layer; base is never modified.</li>
+<li>Consider <code>opaque</code> directories (<code>.wh..wh..opq</code>) to hide entire base directories.</li>
 </ul>
 
                     </main>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -293,6 +293,23 @@ fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&l
 fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt;;
 fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, VfsError&gt;;
 <span class="boring">}</span></code></pre>
+<p><strong>Streaming implementation options:</strong></p>
+<p>For <code>MemoryBackend</code> or similar, you can use <code>std::io::Cursor</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt; {
+    let data = self.read(path)?;
+    Ok(Box::new(std::io::Cursor::new(data)))
+}
+<span class="boring">}</span></code></pre>
+<p>For <code>VRootFsBackend</code>, return the actual file handle:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt; {
+    let file = std::fs::File::open(self.resolve(path)?)?;
+    Ok(Box::new(file))
+}
+<span class="boring">}</span></code></pre>
 <h3 id="step-6-implement-truncate"><a class="header" href="#step-6-implement-truncate">Step 6: Implement truncate</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -405,6 +422,168 @@ mod tests {
 <h2 id="note-on-vrootfsbackend"><a class="header" href="#note-on-vrootfsbackend">Note on VRootFsBackend</a></h2>
 <p>If you are implementing a backend that wraps a <strong>real host filesystem directory</strong>, consider using <code>strict-path::VirtualPath</code> and <code>strict-path::VirtualRoot</code> internally for path containment. This ensures paths cannot escape the designated root directory.</p>
 <p>This is an implementation choice for filesystem-based backends, not a requirement of the <code>VfsBackend</code> trait.</p>
+<hr>
+<h2 id="for-middleware-authors-wrapping-streams"><a class="header" href="#for-middleware-authors-wrapping-streams">For Middleware Authors: Wrapping Streams</a></h2>
+<p>Middleware that needs to intercept streaming I/O must wrap the returned <code>Box&lt;dyn Read/Write&gt;</code>.</p>
+<h3 id="countingwriter-example"><a class="header" href="#countingwriter-example">CountingWriter Example</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::io::{self, Write};
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+
+pub struct CountingWriter&lt;W: Write&gt; {
+    inner: W,
+    bytes_written: Arc&lt;AtomicU64&gt;,
+}
+
+impl&lt;W: Write&gt; CountingWriter&lt;W&gt; {
+    pub fn new(inner: W, counter: Arc&lt;AtomicU64&gt;) -&gt; Self {
+        Self { inner, bytes_written: counter }
+    }
+}
+
+impl&lt;W: Write + Send&gt; Write for CountingWriter&lt;W&gt; {
+    fn write(&amp;mut self, buf: &amp;[u8]) -&gt; io::Result&lt;usize&gt; {
+        let n = self.inner.write(buf)?;
+        self.bytes_written.fetch_add(n as u64, Ordering::Relaxed);
+        Ok(n)
+    }
+
+    fn flush(&amp;mut self) -&gt; io::Result&lt;()&gt; {
+        self.inner.flush()
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="using-in-quota-middleware"><a class="header" href="#using-in-quota-middleware">Using in Quota Middleware</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl&lt;B: VfsBackend&gt; VfsBackend for Quota&lt;B&gt; {
+    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, VfsError&gt; {
+        // Check if we're at quota before opening
+        if self.usage.total_bytes &gt;= self.limits.max_total_size {
+            return Err(VfsError::QuotaExceeded { ... });
+        }
+
+        let inner = self.inner.open_write(path)?;
+        Ok(Box::new(CountingWriter::new(inner, self.usage.bytes_counter.clone())))
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="alternatives-to-wrapping"><a class="header" href="#alternatives-to-wrapping">Alternatives to Wrapping</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Middleware</th><th>Alternative to wrapping</th></tr>
+</thead>
+<tbody>
+<tr><td>PathFilter</td><td>Check path at open time, pass stream through</td></tr>
+<tr><td>ReadOnly</td><td>Block <code>open_write</code> entirely</td></tr>
+<tr><td>RateLimit</td><td>Count the open call, not stream bytes</td></tr>
+<tr><td>Tracing</td><td>Log the open call, pass stream through</td></tr>
+<tr><td>DryRun</td><td>Return <code>std::io::sink()</code> instead of real writer</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="creating-custom-middleware"><a class="header" href="#creating-custom-middleware">Creating Custom Middleware</a></h2>
+<p>Custom middleware only requires <code>anyfs-backend</code> as a dependency - same as backends.</p>
+<h3 id="dependency-1"><a class="header" href="#dependency-1">Dependency</a></h3>
+<pre><code class="language-toml">[dependencies]
+anyfs-backend = "0.1"
+</code></pre>
+<h3 id="complete-example-encryption-middleware"><a class="header" href="#complete-example-encryption-middleware">Complete Example: Encryption Middleware</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::{VfsBackend, Layer, VfsError, Metadata, DirEntry, Permissions, StatFs};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+/// Middleware that encrypts/decrypts file contents transparently.
+pub struct Encrypted&lt;B: VfsBackend&gt; {
+    inner: B,
+    key: [u8; 32],
+}
+
+impl&lt;B: VfsBackend&gt; Encrypted&lt;B&gt; {
+    pub fn new(inner: B, key: [u8; 32]) -&gt; Self {
+        Self { inner, key }
+    }
+
+    fn encrypt(&amp;self, data: &amp;[u8]) -&gt; Vec&lt;u8&gt; {
+        // Your encryption logic here
+        data.iter().map(|b| b ^ self.key[0]).collect()
+    }
+
+    fn decrypt(&amp;self, data: &amp;[u8]) -&gt; Vec&lt;u8&gt; {
+        // Your decryption logic here (symmetric for XOR)
+        self.encrypt(data)
+    }
+}
+
+impl&lt;B: VfsBackend&gt; VfsBackend for Encrypted&lt;B&gt; {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+        let encrypted = self.inner.read(path)?;
+        Ok(self.decrypt(&amp;encrypted))
+    }
+
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt; {
+        let encrypted = self.encrypt(data);
+        self.inner.write(path, &amp;encrypted)
+    }
+
+    // Most methods just delegate:
+    fn exists(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, VfsError&gt; {
+        self.inner.exists(path)
+    }
+
+    fn metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, VfsError&gt; {
+        self.inner.metadata(path)
+    }
+
+    // ... implement all 25 methods
+}
+
+/// Layer for creating Encrypted middleware.
+pub struct EncryptedLayer {
+    key: [u8; 32],
+}
+
+impl EncryptedLayer {
+    pub fn new(key: [u8; 32]) -&gt; Self {
+        Self { key }
+    }
+}
+
+impl&lt;B: VfsBackend&gt; Layer&lt;B&gt; for EncryptedLayer {
+    type Backend = Encrypted&lt;B&gt;;
+
+    fn layer(self, backend: B) -&gt; Self::Backend {
+        Encrypted::new(backend, self.key)
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::MemoryBackend;
+use my_middleware::{EncryptedLayer, Encrypted};
+
+// Direct construction
+let fs = Encrypted::new(MemoryBackend::new(), key);
+
+// Or via Layer trait
+let fs = MemoryBackend::new()
+    .layer(EncryptedLayer::new(key));
+<span class="boring">}</span></code></pre>
+<h3 id="middleware-checklist"><a class="header" href="#middleware-checklist">Middleware Checklist</a></h3>
+<ul>
+<li><input disabled="" type="checkbox"> Depends only on <code>anyfs-backend</code></li>
+<li><input disabled="" type="checkbox"> Implements <code>VfsBackend</code> for <code>MyMiddleware&lt;B: VfsBackend&gt;</code></li>
+<li><input disabled="" type="checkbox"> Implements <code>Layer&lt;B&gt;</code> for <code>MyMiddlewareLayer</code></li>
+<li><input disabled="" type="checkbox"> Delegates unmodified operations to inner backend</li>
+<li><input disabled="" type="checkbox"> Handles streaming I/O appropriately (wrap, pass-through, or block)</li>
+<li><input disabled="" type="checkbox"> Documents which operations are intercepted vs delegated</li>
+</ul>
 <hr>
 <h2 id="checklist"><a class="header" href="#checklist">Checklist</a></h2>
 <ul>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -180,116 +180,143 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="anyfs-container---build-vs-reuse-analysis"><a class="header" href="#anyfs-container---build-vs-reuse-analysis">AnyFS Container - Build vs. Reuse Analysis</a></h1>
+                        <h1 id="anyfs---build-vs-reuse-analysis"><a class="header" href="#anyfs---build-vs-reuse-analysis">AnyFS - Build vs. Reuse Analysis</a></h1>
 <p><strong>Can your goals be achieved with existing crates, or does this project need to exist?</strong></p>
 <hr>
 <h2 id="core-requirements"><a class="header" href="#core-requirements">Core Requirements</a></h2>
 <ol>
+<li><strong>Backend flexibility</strong> - swap storage without changing application code</li>
+<li><strong>Composable middleware</strong> - add/remove capabilities (quotas, sandboxing, logging)</li>
 <li><strong>Tenant isolation</strong> - each tenant gets an isolated namespace</li>
-<li><strong>Capacity limits</strong> - per-tenant quotas and safe failure modes</li>
-<li><strong>Portable storage option</strong> - a single-file backend (SQLite) for easy move/copy/backup</li>
-<li><strong>Filesystem semantics</strong> - <code>std::fs</code>-aligned operations including opt-in symlinks and hard links</li>
-<li><strong>Containment by construction</strong> - prevent path traversal and symlink escapes</li>
+<li><strong>Portable storage</strong> - single-file backend (SQLite) for easy move/copy/backup</li>
+<li><strong>Filesystem semantics</strong> - <code>std::fs</code>-aligned operations including symlinks and hard links</li>
+<li><strong>Path containment</strong> - prevent traversal attacks</li>
 </ol>
 <hr>
 <h2 id="what-already-exists"><a class="header" href="#what-already-exists">What Already Exists</a></h2>
 <h3 id="vfs-crate-rust"><a class="header" href="#vfs-crate-rust"><code>vfs</code> crate (Rust)</a></h3>
-<p><strong>What it is:</strong> A general virtual filesystem abstraction with multiple backends.</p>
-<p><strong>What it does well:</strong></p>
+<p><strong>What it provides:</strong></p>
 <ul>
-<li>Provides an abstraction layer similar to <code>std::fs</code></li>
-<li>Has multiple existing backends</li>
+<li>Filesystem abstraction with multiple backends</li>
+<li>MemoryFS, PhysicalFS, AltrootFS, OverlayFS, EmbeddedFS</li>
 </ul>
-<p><strong>What it does not provide (out of the box):</strong></p>
+<p><strong>What it lacks:</strong></p>
 <ul>
-<li>SQLite-backed portable storage</li>
-<li>Capacity limits / quota enforcement</li>
-<li>Built-in tenant isolation patterns</li>
-<li>Two-layer path handling (ergonomic user paths + validated internal paths)</li>
+<li>SQLite backend</li>
+<li>Composable middleware pattern</li>
+<li>Quota/limit enforcement</li>
+<li>Policy layers (feature gating, path filtering)</li>
 </ul>
-<p>You <em>can</em> implement a SQLite backend for <code>vfs</code>, but you still need to design quotas + isolation yourself.</p>
+<h3 id="agentfs-turso"><a class="header" href="#agentfs-turso">AgentFS (Turso)</a></h3>
+<p><strong>What it provides:</strong></p>
+<ul>
+<li>SQLite-based filesystem for AI agents</li>
+<li>Key-value store</li>
+<li>Tool call auditing</li>
+<li>FUSE mounting</li>
+</ul>
+<p><strong>What it lacks:</strong></p>
+<ul>
+<li>Multiple backend types (SQLite only)</li>
+<li>Composable middleware</li>
+<li>Backend-agnostic abstraction</li>
+</ul>
 <h3 id="rusqlite"><a class="header" href="#rusqlite"><code>rusqlite</code></a></h3>
-<p><strong>What it is:</strong> SQLite bindings.</p>
-<p><strong>What it provides:</strong> DB access, transactions, blobs (with features), migrations.</p>
-<p><strong>What it does not provide:</strong> Filesystem semantics or path safety.</p>
+<p><strong>What it provides:</strong> SQLite bindings, transactions, blobs.</p>
+<p><strong>What it lacks:</strong> Filesystem semantics, quota enforcement.</p>
 <h3 id="strict-path"><a class="header" href="#strict-path"><code>strict-path</code></a></h3>
-<p><strong>What it is:</strong> Path validation + containment primitives (<code>VirtualRoot</code>, <code>VirtualPath</code>).</p>
-<p><strong>What it provides:</strong> The “can’t escape the root” guarantee that the whole design depends on.</p>
-<p><strong>What it does not provide:</strong> Storage backends (SQLite, memory, etc.) or a filesystem API.</p>
-<h3 id="sqlar-sqlite-archive-format"><a class="header" href="#sqlar-sqlite-archive-format">SQLAR (SQLite archive format)</a></h3>
-<p><strong>What it is:</strong> A standardized “files in a SQLite table” archive format.</p>
-<p><strong>Why it’s not enough:</strong> It’s an archive format, not a filesystem API with quotas, isolation, and link semantics.</p>
+<p><strong>What it provides:</strong> Path validation and containment (<code>VirtualRoot</code>).</p>
+<p><strong>What it lacks:</strong> Storage backends, filesystem API.</p>
 <hr>
 <h2 id="gap-analysis"><a class="header" href="#gap-analysis">Gap Analysis</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Requirement</th><th style="text-align: right"><code>vfs</code> crate</th><th style="text-align: right">SQLAR</th><th style="text-align: right"><code>rusqlite</code></th><th style="text-align: right"><code>strict-path</code></th></tr>
+<tr><th>Requirement</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center"><code>rusqlite</code></th><th style="text-align: center"><code>strict-path</code></th></tr>
 </thead>
 <tbody>
-<tr><td>Filesystem API</td><td style="text-align: right">Yes</td><td style="text-align: right">No</td><td style="text-align: right">No</td><td style="text-align: right">No</td></tr>
-<tr><td>SQLite-backed portable storage</td><td style="text-align: right">No</td><td style="text-align: right">Yes (format)</td><td style="text-align: right">Yes (raw)</td><td style="text-align: right">No</td></tr>
-<tr><td>Tenant isolation model</td><td style="text-align: right">No</td><td style="text-align: right">No</td><td style="text-align: right">Manual</td><td style="text-align: right">No</td></tr>
-<tr><td>Capacity limits / quotas</td><td style="text-align: right">No</td><td style="text-align: right">No</td><td style="text-align: right">Manual</td><td style="text-align: right">No</td></tr>
-<tr><td>Path traversal safety</td><td style="text-align: right">Backend-dependent</td><td style="text-align: right">Manual</td><td style="text-align: right">Manual</td><td style="text-align: right">Yes</td></tr>
-<tr><td>Link semantics (symlink + hard link)</td><td style="text-align: right">Backend-dependent</td><td style="text-align: right">Not the focus</td><td style="text-align: right">Manual</td><td style="text-align: right">N/A</td></tr>
+<tr><td>Filesystem API</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Multiple backends</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">N/A</td><td style="text-align: center">No</td></tr>
+<tr><td>SQLite backend</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (raw)</td><td style="text-align: center">No</td></tr>
+<tr><td>Composable middleware</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Quota enforcement</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Manual</td><td style="text-align: center">No</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Manual</td><td style="text-align: center">Yes</td></tr>
+<tr><td>Symlink/hard link control</td><td style="text-align: center">Backend-dep</td><td style="text-align: center">Yes</td><td style="text-align: center">Manual</td><td style="text-align: center">N/A</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Conclusion:</strong> You can reuse key building blocks, but no existing crate composes into:</p>
+<p><strong>Conclusion:</strong> No existing crate provides:</p>
 <blockquote>
-<p>“A tenant-isolated filesystem API with quotas, backed by SQLite, with containment guarantees.”</p>
+<p>“Backend-agnostic filesystem abstraction with composable middleware for quotas, sandboxing, and policy enforcement.”</p>
 </blockquote>
 <hr>
-<h2 id="options"><a class="header" href="#options">Options</a></h2>
-<h3 id="option-a-implement-a-sqlite-backend-for-the-vfs-crate"><a class="header" href="#option-a-implement-a-sqlite-backend-for-the-vfs-crate">Option A: Implement a SQLite backend for the <code>vfs</code> crate</a></h3>
-<p><strong>Pros</strong></p>
-<ul>
-<li>Immediate ecosystem compatibility</li>
-<li>Familiar trait surface area</li>
-</ul>
-<p><strong>Cons</strong></p>
-<ul>
-<li>Still need to build tenant isolation + quotas outside the trait</li>
-<li>Path containment becomes backend/adapter responsibility</li>
-<li>Streaming handle APIs can increase SQLite complexity</li>
-</ul>
-<h3 id="option-b-current-anyfs-architecture-recommended"><a class="header" href="#option-b-current-anyfs-architecture-recommended">Option B: Current AnyFS architecture (recommended)</a></h3>
-<p><strong>Approach:</strong> Keep responsibilities separated into three crates:</p>
-<ul>
-<li><code>anyfs-traits</code>: <code>VfsBackend</code> + types, uses <code>&amp;VirtualPath</code></li>
-<li><code>anyfs</code>: feature-gated built-in backends (<code>MemoryBackend</code>, <code>VRootFsBackend</code>, <code>SqliteBackend</code>)</li>
-<li><code>anyfs-container</code>: <code>FilesContainer</code> wrapper (ergonomic <code>impl AsRef&lt;Path&gt;</code> + quotas)</li>
-</ul>
-<p><strong>Why this exists:</strong> It makes containment a property of the type system and concentrates validation in one place:
-<code>FilesContainer</code> validates user paths once, then calls the backend with <code>&amp;VirtualPath</code>.</p>
-<h3 id="option-c-stay-on-raw-rusqlite--your-own-helpers"><a class="header" href="#option-c-stay-on-raw-rusqlite--your-own-helpers">Option C: Stay on raw <code>rusqlite</code> (+ your own helpers)</a></h3>
-<p>Fastest to prototype, but it becomes an ad-hoc filesystem without a stable contract, and quotas/isolation are easy to get wrong.</p>
-<h3 id="option-d-add-a-compatibility-adapter-later-optional"><a class="header" href="#option-d-add-a-compatibility-adapter-later-optional">Option D: Add a compatibility adapter later (optional)</a></h3>
-<p>Implement AnyFS as designed, then (optionally) provide an adapter that implements <code>vfs</code> traits on top of <code>FilesContainer</code>.</p>
-<hr>
-<h2 id="minimal-example-per-tenant-sqlite-file"><a class="header" href="#minimal-example-per-tenant-sqlite-file">Minimal Example (per-tenant SQLite file)</a></h2>
+<h2 id="why-anyfs-exists"><a class="header" href="#why-anyfs-exists">Why AnyFS Exists</a></h2>
+<p>AnyFS fills the gap by separating concerns:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Responsibility</th></tr>
+</thead>
+<tbody>
+<tr><td><code>anyfs-backend</code></td><td>Trait (<code>VfsBackend</code>, <code>Layer</code>) + types</td></tr>
+<tr><td><code>anyfs</code></td><td>Backends + middleware implementations</td></tr>
+<tr><td><code>anyfs-container</code></td><td>Ergonomic wrapper (<code>FilesContainer</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The middleware pattern (like Tower/Axum) enables composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
-use anyfs_container::ContainerBuilder;
+</span>use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs_container::FilesContainer;
 
-let tenant_db = "tenant_123.db";
+let backend = Tracing::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(SqliteBackend::open("tenant.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+    )
+    .allow("/workspace/**")
+);
 
-let mut container = ContainerBuilder::new(SqliteBackend::open_or_create(tenant_db)?)
-    .max_total_size(100 * 1024 * 1024) // 100 MiB per tenant
-    .build()?;
-
-container.create_dir_all("/documents")?;
-container.write("/documents/report.pdf", b"...")?;
-
-// Portability: moving/copying the tenant is just moving/copying the DB file.
-std::fs::copy(tenant_db, "tenant_123.backup.db")?;
+let mut fs = FilesContainer::new(backend);
+fs.write("/workspace/doc.txt", b"hello")?;
 <span class="boring">}</span></code></pre>
 <hr>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives Considered</a></h2>
+<h3 id="option-a-implement-sqlite-backend-for-vfs-crate"><a class="header" href="#option-a-implement-sqlite-backend-for-vfs-crate">Option A: Implement SQLite backend for <code>vfs</code> crate</a></h3>
+<p><strong>Pros:</strong> Ecosystem compatibility.</p>
+<p><strong>Cons:</strong></p>
+<ul>
+<li>No middleware pattern for quotas/policies</li>
+<li>Would still need to build quota/sandboxing outside the trait</li>
+<li>Doesn’t solve the composability problem</li>
+</ul>
+<h3 id="option-b-use-agentfs"><a class="header" href="#option-b-use-agentfs">Option B: Use AgentFS</a></h3>
+<p><strong>Pros:</strong> Already exists, SQLite-based, FUSE support.</p>
+<p><strong>Cons:</strong></p>
+<ul>
+<li>Locked to SQLite (can’t swap to memory/real FS)</li>
+<li>No composable middleware</li>
+<li>Includes KV store and auditing we may not need</li>
+</ul>
+<h3 id="option-c-anyfs-recommended"><a class="header" href="#option-c-anyfs-recommended">Option C: AnyFS (recommended)</a></h3>
+<p><strong>Pros:</strong></p>
+<ul>
+<li>Backend-agnostic (swap storage without code changes)</li>
+<li>Composable middleware (add/remove capabilities)</li>
+<li>Clean separation of concerns</li>
+<li>Third-party extensibility</li>
+</ul>
+<p><strong>Cons:</strong></p>
+<ul>
+<li>New project, not yet widely adopted</li>
+</ul>
+<hr>
 <h2 id="recommendation"><a class="header" href="#recommendation">Recommendation</a></h2>
-<p>Build on existing primitives (<code>strict-path</code>, <code>rusqlite</code>, <code>thiserror</code>), but keep the AnyFS split (traits / backends / container). That combination is what makes the design both ergonomic and hard to misuse.</p>
-<p>For a concrete phased rollout, see <code>book/src/implementation/plan.md</code>.</p>
+<p>Build AnyFS with reusable primitives (<code>rusqlite</code>, <code>strict-path</code>, <code>thiserror</code>, <code>tracing</code>) but maintain the three-crate split. The middleware pattern is what makes the design both flexible and safe.</p>
+<p><strong>Compatibility option:</strong> Later, provide an adapter that implements <code>vfs</code> traits on top of <code>VfsBackend</code> for projects that need <code>vfs</code> compatibility.</p>
 
                     </main>
 

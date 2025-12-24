@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -183,54 +183,120 @@
                         <h1 id="which-crate-should-i-use"><a class="header" href="#which-crate-should-i-use">Which Crate Should I Use?</a></h1>
 <hr>
 <h2 id="decision-guide"><a class="header" href="#decision-guide">Decision Guide</a></h2>
-<ul>
-<li>Building an application? Use <code>anyfs-container</code> (<code>FilesContainer</code>).</li>
-<li>Need a built-in backend (memory/sqlite/vrootfs)? Use <code>anyfs</code>.</li>
-<li>Implementing your own backend? Depend only on <code>anyfs-traits</code>.</li>
-</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>You want to…</th><th>Use</th></tr>
+</thead>
+<tbody>
+<tr><td>Build an application</td><td><code>anyfs</code> + <code>anyfs-container</code></td></tr>
+<tr><td>Use built-in backends (Memory, SQLite, VRootFs)</td><td><code>anyfs</code></td></tr>
+<tr><td>Use built-in middleware (Quota, PathFilter, etc.)</td><td><code>anyfs</code></td></tr>
+<tr><td>Implement a custom backend</td><td><code>anyfs-backend</code> only</td></tr>
+<tr><td>Implement custom middleware</td><td><code>anyfs-backend</code> only</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
 <h2 id="quick-examples"><a class="header" href="#quick-examples">Quick Examples</a></h2>
-<h3 id="application-code-recommended"><a class="header" href="#application-code-recommended">Application code (recommended)</a></h3>
+<h3 id="simple-usage"><a class="header" href="#simple-usage">Simple usage</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::MemoryBackend;
 use anyfs_container::FilesContainer;
 
-let mut container = FilesContainer::new(MemoryBackend::new());
-container.create_dir_all("/data")?;
-container.write("/data/file.txt", b"hello")?;
+let mut fs = FilesContainer::new(MemoryBackend::new());
+fs.create_dir_all("/data")?;
+fs.write("/data/file.txt", b"hello")?;
 <span class="boring">}</span></code></pre>
-<h3 id="application-code-with-policy-quotas--feature-whitelist"><a class="header" href="#application-code-with-policy-quotas--feature-whitelist">Application code with policy (quotas + feature whitelist)</a></h3>
+<h3 id="with-middleware-quotas-sandboxing-tracing"><a class="header" href="#with-middleware-quotas-sandboxing-tracing">With middleware (quotas, sandboxing, tracing)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
-use anyfs_container::ContainerBuilder;
+</span>use anyfs::{SqliteBackend, Quota, FeatureGuard, PathFilter, Tracing};
+use anyfs_container::FilesContainer;
 
-let mut container = ContainerBuilder::new(SqliteBackend::open_or_create("tenant.db")?)
-    .max_total_size(100 * 1024 * 1024)
-    .symlinks()
-    .max_symlink_resolution(40)
-    .build()?;
+let backend = SqliteBackend::open("tenant.db")?;
+
+let stack = Tracing::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(backend)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+    )
+    .allow("/workspace/**")
+    .deny("**/.env")
+);
+
+let mut fs = FilesContainer::new(stack);
+<span class="boring">}</span></code></pre>
+<h3 id="using-layer-trait-alternative-syntax"><a class="header" href="#using-layer-trait-alternative-syntax">Using Layer trait (alternative syntax)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
+use anyfs_container::FilesContainer;
+
+let backend = SqliteBackend::open("tenant.db")?
+    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGuardLayer::new())
+    .layer(TracingLayer::new());
+
+let mut fs = FilesContainer::new(backend);
 <span class="boring">}</span></code></pre>
 <h3 id="custom-backend-implementation"><a class="header" href="#custom-backend-implementation">Custom backend implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_traits::{VfsBackend, VirtualPath};
+</span>use anyfs_backend::{VfsBackend, VfsError, Metadata, DirEntry};
+use std::path::Path;
 
 pub struct MyBackend;
 
 impl VfsBackend for MyBackend {
-    fn read(&amp;self, path: &amp;VirtualPath) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
         todo!()
     }
 
-    // ... implement the remaining methods
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt; {
+        todo!()
+    }
+
+    // ... implement all 25 methods
+}
+<span class="boring">}</span></code></pre>
+<h3 id="custom-middleware-implementation"><a class="header" href="#custom-middleware-implementation">Custom middleware implementation</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::{VfsBackend, Layer, VfsError};
+use std::path::Path;
+
+pub struct MyMiddleware&lt;B: VfsBackend&gt; {
+    inner: B,
+}
+
+impl&lt;B: VfsBackend&gt; VfsBackend for MyMiddleware&lt;B&gt; {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+        // Intercept, transform, or delegate
+        self.inner.read(path)
+    }
+    // ... implement all methods
+}
+
+pub struct MyMiddlewareLayer;
+
+impl&lt;B: VfsBackend&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
+    type Backend = MyMiddleware&lt;B&gt;;
+    fn layer(self, backend: B) -&gt; Self::Backend {
+        MyMiddleware { inner: backend }
+    }
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="common-mistake"><a class="header" href="#common-mistake">Common Mistake</a></h2>
-<p>If you are implementing a backend, avoid depending on <code>anyfs</code> unless you specifically need built-in backends.
-Use <code>anyfs-traits</code> as your dependency.</p>
+<h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
+<ul>
+<li><strong>Don’t depend on <code>anyfs</code></strong> if you’re only implementing a backend or middleware. Use <code>anyfs-backend</code>.</li>
+<li><strong>Don’t put policy in backends.</strong> Use middleware (Quota, PathFilter, etc.).</li>
+<li><strong>Don’t put policy in FilesContainer.</strong> It’s just an ergonomic wrapper.</li>
+</ul>
 
                     </main>
 

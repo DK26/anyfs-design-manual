@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -272,6 +272,75 @@ backend.remaining()    // -&gt; Remaining { bytes, can_write, ... }
     .with_level(tracing::Level::DEBUG)
 <span class="boring">}</span></code></pre>
 <hr>
+<h2 id="pathfilter-methods"><a class="header" href="#pathfilter-methods">PathFilter Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>PathFilter::new(backend)
+    .allow("/workspace/**")    // Allow glob pattern
+    .deny("**/.env")           // Deny glob pattern
+    .deny("**/secrets/**")
+
+// Rules evaluated in order; first match wins
+// No match = denied (deny by default)
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="readonly-methods"><a class="header" href="#readonly-methods">ReadOnly Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>ReadOnly::new(backend)
+
+// All read operations pass through
+// All write operations return VfsError::ReadOnly
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="ratelimit-methods"><a class="header" href="#ratelimit-methods">RateLimit Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>RateLimit::new(backend)
+    .max_ops(1000)           // Operation limit
+    .per_second()            // Window: 1 second
+    // or
+    .per_minute()            // Window: 60 seconds
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="dryrun-methods"><a class="header" href="#dryrun-methods">DryRun Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut dry_run = DryRun::new(backend);
+
+// Read operations execute normally
+// Write operations are logged but not executed
+dry_run.write("/file.txt", b"data")?;  // Logged, returns Ok
+
+// Inspect logged operations
+let ops = dry_run.operations();        // -&gt; &amp;[Operation]
+dry_run.clear();                       // Clear the log
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="cache-methods"><a class="header" href="#cache-methods">Cache Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>Cache::new(backend)
+    .max_entries(1000)                     // LRU cache size
+    .max_entry_size(1024 * 1024)          // 1MB max per entry
+    .ttl(std::time::Duration::from_secs(60))  // Expiration
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="overlay-methods"><a class="header" href="#overlay-methods">Overlay Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{SqliteBackend, MemoryBackend, Overlay};
+
+let base = SqliteBackend::open("base.db")?;  // Read-only base
+let upper = MemoryBackend::new();             // Writable upper
+
+let overlay = Overlay::new(base, upper);
+
+// Read: check upper first, fall back to base
+// Write: always to upper layer
+// Delete: whiteout marker in upper
+<span class="boring">}</span></code></pre>
+<hr>
 <h2 id="vfsbackendext-methods"><a class="header" href="#vfsbackendext-methods">VfsBackendExt Methods</a></h2>
 <p>Extension methods available on all backends:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -348,6 +417,7 @@ fs.fsync("/path")?;                      // Flush writes for one file
 </span>use anyfs_backend::VfsError;
 
 match result {
+    // Path errors
     Err(VfsError::NotFound { path, operation }) =&gt; {
         // e.g., path="/file.txt", operation="read"
     }
@@ -355,11 +425,27 @@ match result {
     Err(VfsError::NotADirectory { path }) =&gt; ...
     Err(VfsError::NotAFile { path }) =&gt; ...
     Err(VfsError::DirectoryNotEmpty { path }) =&gt; ...
+
+    // Quota middleware errors
     Err(VfsError::QuotaExceeded { limit, requested, usage }) =&gt; ...
     Err(VfsError::FileSizeExceeded { path, size, limit }) =&gt; ...
+
+    // FeatureGuard middleware errors
     Err(VfsError::FeatureNotEnabled { feature, operation }) =&gt; ...
-    Err(VfsError::Serialization(msg)) =&gt; ...   // from VfsBackendExt
-    Err(VfsError::Deserialization(msg)) =&gt; ... // from VfsBackendExt
+
+    // PathFilter middleware errors
+    Err(VfsError::AccessDenied { path, reason }) =&gt; ...
+
+    // ReadOnly middleware errors
+    Err(VfsError::ReadOnly { operation }) =&gt; ...
+
+    // RateLimit middleware errors
+    Err(VfsError::RateLimitExceeded { limit, window_secs }) =&gt; ...
+
+    // VfsBackendExt errors
+    Err(VfsError::Serialization(msg)) =&gt; ...
+    Err(VfsError::Deserialization(msg)) =&gt; ...
+
     Err(e) =&gt; ...
 }
 <span class="boring">}</span></code></pre>
@@ -387,7 +473,13 @@ match result {
 <tbody>
 <tr><td><code>Quota&lt;B&gt;</code></td><td>Quota enforcement</td></tr>
 <tr><td><code>FeatureGuard&lt;B&gt;</code></td><td>Least privilege</td></tr>
+<tr><td><code>PathFilter&lt;B&gt;</code></td><td>Path-based access control</td></tr>
+<tr><td><code>ReadOnly&lt;B&gt;</code></td><td>Prevent write operations</td></tr>
+<tr><td><code>RateLimit&lt;B&gt;</code></td><td>Operation throttling</td></tr>
 <tr><td><code>Tracing&lt;B&gt;</code></td><td>Instrumentation (tracing ecosystem)</td></tr>
+<tr><td><code>DryRun&lt;B&gt;</code></td><td>Log without executing</td></tr>
+<tr><td><code>Cache&lt;B&gt;</code></td><td>LRU read caching</td></tr>
+<tr><td><code>Overlay&lt;B1,B2&gt;</code></td><td>Union filesystem</td></tr>
 </tbody>
 </table>
 </div>
@@ -401,7 +493,13 @@ match result {
 <tbody>
 <tr><td><code>QuotaLayer</code></td><td><code>Quota&lt;B&gt;</code></td></tr>
 <tr><td><code>FeatureGuardLayer</code></td><td><code>FeatureGuard&lt;B&gt;</code></td></tr>
+<tr><td><code>PathFilterLayer</code></td><td><code>PathFilter&lt;B&gt;</code></td></tr>
+<tr><td><code>ReadOnlyLayer</code></td><td><code>ReadOnly&lt;B&gt;</code></td></tr>
+<tr><td><code>RateLimitLayer</code></td><td><code>RateLimit&lt;B&gt;</code></td></tr>
 <tr><td><code>TracingLayer</code></td><td><code>Tracing&lt;B&gt;</code></td></tr>
+<tr><td><code>DryRunLayer</code></td><td><code>DryRun&lt;B&gt;</code></td></tr>
+<tr><td><code>CacheLayer</code></td><td><code>Cache&lt;B&gt;</code></td></tr>
+<tr><td><code>OverlayLayer</code></td><td><code>Overlay&lt;B1,B2&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -438,10 +536,22 @@ match result {
 <tr><td><code>VRootFsBackend</code></td><td>Host FS backend</td></tr>
 <tr><td><code>Quota&lt;B&gt;</code></td><td>Quota middleware</td></tr>
 <tr><td><code>FeatureGuard&lt;B&gt;</code></td><td>Feature gate middleware</td></tr>
+<tr><td><code>PathFilter&lt;B&gt;</code></td><td>Path access control middleware</td></tr>
+<tr><td><code>ReadOnly&lt;B&gt;</code></td><td>Read-only middleware</td></tr>
+<tr><td><code>RateLimit&lt;B&gt;</code></td><td>Rate limiting middleware</td></tr>
 <tr><td><code>Tracing&lt;B&gt;</code></td><td>Tracing middleware</td></tr>
+<tr><td><code>DryRun&lt;B&gt;</code></td><td>Dry-run middleware</td></tr>
+<tr><td><code>Cache&lt;B&gt;</code></td><td>Caching middleware</td></tr>
+<tr><td><code>Overlay&lt;B1,B2&gt;</code></td><td>Union filesystem middleware</td></tr>
 <tr><td><code>QuotaLayer</code></td><td>Layer for Quota</td></tr>
 <tr><td><code>FeatureGuardLayer</code></td><td>Layer for FeatureGuard</td></tr>
+<tr><td><code>PathFilterLayer</code></td><td>Layer for PathFilter</td></tr>
+<tr><td><code>ReadOnlyLayer</code></td><td>Layer for ReadOnly</td></tr>
+<tr><td><code>RateLimitLayer</code></td><td>Layer for RateLimit</td></tr>
 <tr><td><code>TracingLayer</code></td><td>Layer for Tracing</td></tr>
+<tr><td><code>DryRunLayer</code></td><td>Layer for DryRun</td></tr>
+<tr><td><code>CacheLayer</code></td><td>Layer for Cache</td></tr>
+<tr><td><code>OverlayLayer</code></td><td>Layer for Overlay</td></tr>
 </tbody>
 </table>
 </div>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -183,92 +183,91 @@
                         <h1 id="implementation-plan"><a class="header" href="#implementation-plan">Implementation Plan</a></h1>
 <p>This plan describes a phased rollout of the AnyFS ecosystem:</p>
 <ul>
-<li><code>anyfs-traits</code>: minimal contract (<code>VfsBackend</code> + core types, re-export <code>VirtualPath</code>)</li>
-<li><code>anyfs</code>: built-in backends (feature-gated) + re-exports</li>
-<li><code>anyfs-container</code>: <code>FilesContainer&lt;B: VfsBackend&gt;</code> policy layer (limits + feature whitelist)</li>
+<li><code>anyfs-backend</code>: Core trait (<code>VfsBackend</code>, <code>Layer</code>) + types</li>
+<li><code>anyfs</code>: Built-in backends + middleware (feature-gated)</li>
+<li><code>anyfs-container</code>: <code>FilesContainer&lt;B&gt;</code> ergonomic wrapper</li>
 </ul>
 <hr>
-<h2 id="phase-1-anyfs-traits-core-contract"><a class="header" href="#phase-1-anyfs-traits-core-contract">Phase 1: <code>anyfs-traits</code> (core contract)</a></h2>
-<p><strong>Goal:</strong> Define the stable backend interface and shared types.</p>
+<h2 id="phase-1-anyfs-backend-core-contract"><a class="header" href="#phase-1-anyfs-backend-core-contract">Phase 1: <code>anyfs-backend</code> (core contract)</a></h2>
+<p><strong>Goal:</strong> Define the stable backend interface and composition traits.</p>
 <ul>
-<li>Re-export <code>strict_path::VirtualPath</code></li>
-<li>Define core types (<code>Metadata</code>, <code>Permissions</code>, <code>FileType</code>, <code>DirEntry</code>)</li>
-<li>Define <code>VfsError</code> (errors carry <code>VirtualPath</code> where relevant)</li>
-<li>Define <code>VfsBackend</code> trait (20 <code>std::fs</code>-aligned, path-based methods)</li>
+<li>Define <code>VfsBackend</code> trait (25 <code>std::fs</code>-aligned methods)</li>
+<li>Define <code>Layer</code> trait (Tower-style middleware composition)</li>
+<li>Define <code>VfsBackendExt</code> trait (extension methods)</li>
+<li>Define core types (<code>Metadata</code>, <code>Permissions</code>, <code>FileType</code>, <code>DirEntry</code>, <code>StatFs</code>)</li>
+<li>Define <code>VfsError</code> with contextual variants</li>
 </ul>
-<p><strong>Exit criteria:</strong> <code>anyfs-traits</code> stands alone with minimal dependencies (<code>strict-path</code>, <code>thiserror</code>).</p>
+<p><strong>Exit criteria:</strong> <code>anyfs-backend</code> stands alone with minimal dependencies (<code>thiserror</code>).</p>
 <hr>
-<h2 id="phase-2-anyfs-built-in-backends"><a class="header" href="#phase-2-anyfs-built-in-backends">Phase 2: <code>anyfs</code> (built-in backends)</a></h2>
-<p><strong>Goal:</strong> Provide a small set of reference/production backends behind Cargo features.</p>
+<h2 id="phase-2-anyfs-backends--middleware"><a class="header" href="#phase-2-anyfs-backends--middleware">Phase 2: <code>anyfs</code> (backends + middleware)</a></h2>
+<p><strong>Goal:</strong> Provide reference backends and core middleware.</p>
+<h3 id="backends-feature-gated"><a class="header" href="#backends-feature-gated">Backends (feature-gated)</a></h3>
 <ul>
 <li><code>memory</code> (default): <code>MemoryBackend</code></li>
-<li><code>vrootfs</code> (optional): <code>VRootFsBackend</code> using <code>strict_path::VirtualRoot</code> for containment</li>
-<li><code>sqlite</code> (optional): <code>SqliteBackend</code> storing an entire filesystem in a single <code>.db</code></li>
+<li><code>sqlite</code> (optional): <code>SqliteBackend</code></li>
+<li><code>vrootfs</code> (optional): <code>VRootFsBackend</code> using <code>strict-path</code> for containment</li>
 </ul>
-<p><strong>Exit criteria:</strong> Each backend implements <code>VfsBackend</code> and passes the shared conformance suite.</p>
+<h3 id="middleware"><a class="header" href="#middleware">Middleware</a></h3>
+<ul>
+<li><code>Quota&lt;B&gt;</code> + <code>QuotaLayer</code> - Resource limits</li>
+<li><code>FeatureGuard&lt;B&gt;</code> + <code>FeatureGuardLayer</code> - Feature whitelist</li>
+<li><code>PathFilter&lt;B&gt;</code> + <code>PathFilterLayer</code> - Path-based access control</li>
+<li><code>ReadOnly&lt;B&gt;</code> + <code>ReadOnlyLayer</code> - Block writes</li>
+<li><code>RateLimit&lt;B&gt;</code> + <code>RateLimitLayer</code> - Operation throttling</li>
+<li><code>Tracing&lt;B&gt;</code> + <code>TracingLayer</code> - Instrumentation</li>
+<li><code>DryRun&lt;B&gt;</code> + <code>DryRunLayer</code> - Log without executing</li>
+<li><code>Cache&lt;B&gt;</code> + <code>CacheLayer</code> - LRU read cache</li>
+<li><code>Overlay&lt;B1,B2&gt;</code> + <code>OverlayLayer</code> - Union filesystem</li>
+</ul>
+<p><strong>Exit criteria:</strong> Each backend implements <code>VfsBackend</code> and passes conformance suite. Each middleware wraps any <code>VfsBackend</code>.</p>
 <hr>
-<h2 id="phase-3-anyfs-container-policy--ergonomics"><a class="header" href="#phase-3-anyfs-container-policy--ergonomics">Phase 3: <code>anyfs-container</code> (policy + ergonomics)</a></h2>
-<p><strong>Goal:</strong> Provide the user-facing <code>std::fs</code>-aligned API with consistent policy enforcement.</p>
+<h2 id="phase-3-anyfs-container-ergonomics"><a class="header" href="#phase-3-anyfs-container-ergonomics">Phase 3: <code>anyfs-container</code> (ergonomics)</a></h2>
+<p><strong>Goal:</strong> Provide user-facing ergonomic wrapper.</p>
 <ul>
-<li><code>FilesContainer&lt;B&gt;</code> accepts <code>impl AsRef&lt;Path&gt;</code> for ergonomics</li>
-<li>Centralizes path validation: convert once to <code>VirtualPath</code>, then call backend</li>
-<li>Enforces limits (quota and structural constraints):
-<ul>
-<li><code>max_total_size</code></li>
-<li><code>max_file_size</code></li>
-<li><code>max_node_count</code></li>
-<li><code>max_dir_entries</code></li>
-<li><code>max_path_depth</code></li>
+<li><code>FilesContainer&lt;B&gt;</code> - Thin wrapper with <code>std::fs</code>-aligned API</li>
+<li>Accepts <code>impl AsRef&lt;Path&gt;</code> for convenience</li>
+<li>Delegates all operations to wrapped backend</li>
 </ul>
-</li>
-<li>Implements a least-privilege feature whitelist (default deny):
-<ul>
-<li><code>symlinks()</code> (+ <code>max_symlink_resolution</code>, default 40)</li>
-<li><code>hard_links()</code></li>
-<li><code>permissions()</code></li>
-</ul>
-</li>
-</ul>
-<p><strong>Exit criteria:</strong> An application can use <code>FilesContainer</code> as a drop-in for common <code>std::fs</code> patterns while gaining quotas + default-deny policy.</p>
+<p><strong>Note:</strong> <code>FilesContainer</code> contains NO policy logic. Policy is handled by middleware.</p>
+<p><strong>Exit criteria:</strong> Applications can use <code>FilesContainer</code> as drop-in for <code>std::fs</code> patterns.</p>
 <hr>
 <h2 id="phase-4-conformance-test-suite"><a class="header" href="#phase-4-conformance-test-suite">Phase 4: Conformance test suite</a></h2>
-<p><strong>Goal:</strong> Prevent backend divergence and make semantics explicit.</p>
-<p>Recommended structure:</p>
-<ul>
-<li>Backend conformance tests (run against every <code>VfsBackend</code> implementation)
+<p><strong>Goal:</strong> Prevent backend divergence and validate middleware behavior.</p>
+<h3 id="backend-conformance-tests"><a class="header" href="#backend-conformance-tests">Backend conformance tests</a></h3>
 <ul>
 <li><code>read</code>/<code>write</code>/<code>append</code> semantics</li>
-<li>directory operations (<code>create_dir*</code>, <code>read_dir</code>, <code>remove_dir*</code>)</li>
+<li>Directory operations (<code>create_dir*</code>, <code>read_dir</code>, <code>remove_dir*</code>)</li>
 <li><code>rename</code> and <code>copy</code> semantics</li>
-<li>link behavior (<code>symlink</code>, <code>read_link</code>, <code>hard_link</code>, <code>nlink</code>)</li>
-<li>permissions (<code>set_permissions</code>) where meaningful</li>
+<li>Link behavior (<code>symlink</code>, <code>read_link</code>, <code>hard_link</code>)</li>
+<li>Streaming I/O (<code>open_read</code>, <code>open_write</code>)</li>
+<li><code>truncate</code>, <code>sync</code>, <code>fsync</code>, <code>statfs</code></li>
 </ul>
-</li>
-<li>Container policy tests
+<h3 id="middleware-tests"><a class="header" href="#middleware-tests">Middleware tests</a></h3>
 <ul>
-<li>limit enforcement and usage accounting</li>
-<li>whitelist behavior (<code>FeatureNotEnabled</code>)</li>
-<li>symlink resolution depth limit (when enabled)</li>
+<li><code>Quota</code>: Limit enforcement, usage tracking</li>
+<li><code>FeatureGuard</code>: Feature blocking</li>
+<li><code>PathFilter</code>: Glob pattern matching</li>
+<li><code>RateLimit</code>: Throttling behavior</li>
+<li>Middleware composition order</li>
 </ul>
-</li>
-</ul>
-<p><strong>Exit criteria:</strong> All built-in backends pass the same suite; container policy tests are backend-agnostic.</p>
+<p><strong>Exit criteria:</strong> All backends pass same suite; middleware tests are backend-agnostic.</p>
 <hr>
 <h2 id="phase-5-documentation--examples"><a class="header" href="#phase-5-documentation--examples">Phase 5: Documentation + examples</a></h2>
 <ul>
-<li>Keep <code>book/src/architecture/design-overview.md</code> + <code>book/src/architecture/adrs.md</code> authoritative</li>
-<li>Provide at least one complete example per backend</li>
-<li>Provide a backend implementer guide for <code>anyfs-traits</code></li>
+<li>Keep <code>AGENTS.md</code> and <code>src/architecture/design-overview.md</code> authoritative</li>
+<li>Provide example per backend</li>
+<li>Provide backend implementer guide</li>
+<li>Provide middleware implementer guide</li>
 </ul>
 <hr>
-<h2 id="future-work-out-of-scope-for-mvp"><a class="header" href="#future-work-out-of-scope-for-mvp">Future work (out of scope for MVP)</a></h2>
+<h2 id="future-work-post-mvp"><a class="header" href="#future-work-post-mvp">Future work (post-MVP)</a></h2>
 <ul>
-<li>Streaming I/O (file handles)</li>
-<li>Async API</li>
-<li>Import/export helpers (host path &lt;-&gt; container path)</li>
+<li>Async API (<code>AsyncVfsBackend</code> trait)</li>
+<li>Import/export helpers (host path &lt;-&gt; container)</li>
 <li>Extended attributes</li>
-<li>Encryption-at-rest helpers (backend-specific)</li>
-<li>Capability negotiation (optional): detect when a backend cannot support certain operations</li>
+<li>Encryption middleware</li>
+<li>Compression middleware</li>
+<li><code>vfs</code> crate compatibility adapter</li>
 </ul>
 
                     </main>

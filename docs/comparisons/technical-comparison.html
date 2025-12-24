@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -180,168 +180,195 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="anyfs-container---technical-comparison-with-alternatives"><a class="header" href="#anyfs-container---technical-comparison-with-alternatives">AnyFS Container - Technical Comparison with Alternatives</a></h1>
-<p>This document compares AnyFS (especially <code>anyfs-container</code>) with existing Rust filesystem abstractions.</p>
+                        <h1 id="anyfs---technical-comparison-with-alternatives"><a class="header" href="#anyfs---technical-comparison-with-alternatives">AnyFS - Technical Comparison with Alternatives</a></h1>
+<p>This document compares AnyFS with existing Rust filesystem abstractions.</p>
 <hr>
-<h2 id="executive-summary"><a class="header" href="#executive-summary">Executive summary</a></h2>
-<p>AnyFS is opinionated around three goals:</p>
+<h2 id="executive-summary"><a class="header" href="#executive-summary">Executive Summary</a></h2>
+<p>AnyFS is <strong>to filesystems what Axum/Tower is to HTTP</strong>: a composable middleware stack with pluggable backends.</p>
+<p><strong>Key differentiators:</strong></p>
 <ul>
-<li><strong>Safety by construction</strong>: container APIs accept <code>impl AsRef&lt;Path&gt;</code>, but backends only see validated <code>&amp;VirtualPath</code> (from <code>strict-path</code>).</li>
-<li><strong>Least privilege by default</strong>: advanced behaviors (symlinks, hard links, permission mutation) are denied unless explicitly enabled per container.</li>
-<li><strong>Portable storage</strong>: the SQLite backend turns a tenant filesystem into a single portable <code>.db</code> file.</li>
+<li><strong>Composable middleware</strong> - Stack quota, sandboxing, tracing, caching as independent layers</li>
+<li><strong>Backend agnostic</strong> - Swap Memory/SQLite/RealFS without code changes</li>
+<li><strong>Policy separation</strong> - Storage logic separate from policy enforcement</li>
+<li><strong>Third-party extensibility</strong> - Custom backends and middleware depend only on <code>anyfs-backend</code></li>
 </ul>
 <hr>
-<h2 id="compared-solutions"><a class="header" href="#compared-solutions">Compared solutions</a></h2>
+<h2 id="compared-solutions"><a class="header" href="#compared-solutions">Compared Solutions</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Solution</th><th>What it is</th><th>Where it fits</th></tr>
+<tr><th>Solution</th><th>What it is</th><th style="text-align: center">Middleware</th><th style="text-align: center">Multiple Backends</th></tr>
 </thead>
 <tbody>
-<tr><td><code>vfs</code></td><td>General-purpose VFS trait + backends</td><td>Simple path-based abstraction, streaming handles</td></tr>
-<tr><td><code>virtual-filesystem</code></td><td>std::fs-like interface with sandbox option</td><td>Small abstraction for in-process sandboxing</td></tr>
-<tr><td>OpenDAL</td><td>Object storage access layer</td><td>Cloud/object storage (async-first)</td></tr>
-<tr><td>AgentFS</td><td>SQLite-backed agent sandbox</td><td>OS-level sandboxing + auditing (product-focused)</td></tr>
-<tr><td>AnyFS</td><td>VFS backends + policy layer</td><td>Embedded storage, multi-tenant quotas, portability</td></tr>
+<tr><td><code>vfs</code></td><td>VFS trait + backends</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>AgentFS</td><td>SQLite agent runtime</td><td style="text-align: center">No</td><td style="text-align: center">No (SQLite only)</td></tr>
+<tr><td>OpenDAL</td><td>Object storage layer</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (cloud-focused)</td></tr>
+<tr><td><strong>AnyFS</strong></td><td>VFS + middleware stack</td><td style="text-align: center"><strong>Yes</strong></td><td style="text-align: center"><strong>Yes</strong></td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="1-trait--api-design"><a class="header" href="#1-trait--api-design">1. Trait / API design</a></h2>
-<h3 id="vfs-crate-typical-shape"><a class="header" href="#vfs-crate-typical-shape"><code>vfs</code> crate (typical shape)</a></h3>
-<p><code>vfs</code> exposes a path-based trait taking raw strings and often returns streaming handles:</p>
+<h2 id="1-architecture-comparison"><a class="header" href="#1-architecture-comparison">1. Architecture Comparison</a></h2>
+<h3 id="vfs-crate"><a class="header" href="#vfs-crate"><code>vfs</code> Crate</a></h3>
+<p>Path-based trait, no middleware pattern:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub trait FileSystem: Send + Sync {
-    fn read_dir(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn Iterator&lt;Item = String&gt; + Send&gt;&gt;;
-    fn create_dir(&amp;self, path: &amp;str) -&gt; VfsResult&lt;()&gt;;
-    fn open_file(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn SeekAndRead + Send&gt;&gt;;
-    fn create_file(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn SeekAndWrite + Send&gt;&gt;;
-    fn metadata(&amp;self, path: &amp;str) -&gt; VfsResult&lt;VfsMetadata&gt;;
-    fn exists(&amp;self, path: &amp;str) -&gt; VfsResult&lt;bool&gt;;
-    fn remove_file(&amp;self, path: &amp;str) -&gt; VfsResult&lt;()&gt;;
-    fn remove_dir(&amp;self, path: &amp;str) -&gt; VfsResult&lt;()&gt;;
+    fn read_dir(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn Iterator&lt;Item = String&gt;&gt;&gt;;
+    fn open_file(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn SeekAndRead&gt;&gt;;
+    fn create_file(&amp;self, path: &amp;str) -&gt; VfsResult&lt;Box&lt;dyn SeekAndWrite&gt;&gt;;
+    // ...
 }
 <span class="boring">}</span></code></pre>
-<p><strong>Implications:</strong></p>
+<p><strong>Limitations:</strong></p>
 <ul>
-<li>Backends must validate/normalize paths themselves.</li>
-<li>The API surface is typically “filesystem flavored”, but not standardized on <code>std::fs</code> naming.</li>
+<li>No standard way to add quotas, logging, sandboxing</li>
+<li>Each concern must be built into backends or wrapped externally</li>
+<li>Path validation is backend-specific</li>
 </ul>
-<h3 id="anyfs-two-layer-path-handling--policy-layer"><a class="header" href="#anyfs-two-layer-path-handling--policy-layer">AnyFS: two-layer path handling + policy layer</a></h3>
-<p>AnyFS splits responsibilities across three crates:</p>
-<ul>
-<li><code>anyfs-traits</code>: minimal <code>VfsBackend</code> + core types (backend implementers depend only on this)</li>
-<li><code>anyfs</code>: re-exports <code>anyfs-traits</code> and provides built-in backends (feature-gated)</li>
-<li><code>anyfs-container</code>: <code>FilesContainer&lt;B: VfsBackend&gt;</code> plus limits and feature whitelist</li>
-</ul>
-<p><strong>Backend trait (<code>anyfs-traits</code>):</strong> validated paths only.</p>
+<h3 id="agentfs"><a class="header" href="#agentfs">AgentFS</a></h3>
+<p>SQLite-based agent runtime:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use strict_path::VirtualPath;
-
-pub trait VfsBackend: Send {
-    fn read(&amp;self, path: &amp;VirtualPath) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
-    fn write(&amp;mut self, path: &amp;VirtualPath, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
-    fn read_dir(&amp;self, path: &amp;VirtualPath) -&gt; Result&lt;Vec&lt;DirEntry&gt;, VfsError&gt;;
-    fn symlink(&amp;mut self, original: &amp;VirtualPath, link: &amp;VirtualPath) -&gt; Result&lt;(), VfsError&gt;;
-    fn hard_link(&amp;mut self, original: &amp;VirtualPath, link: &amp;VirtualPath) -&gt; Result&lt;(), VfsError&gt;;
-    fn set_permissions(&amp;mut self, path: &amp;VirtualPath, perm: Permissions) -&gt; Result&lt;(), VfsError&gt;;
-    // ... (20 std::fs-aligned methods total)
-}
+</span>// Fixed to SQLite, includes KV store and tool auditing
+let fs = AgentFS::open("agent.db")?;
+fs.write_file("/path", data)?;
+fs.kv_set("key", "value")?;  // KV store bundled
+fs.toolcall_start("tool")?;  // Auditing bundled
 <span class="boring">}</span></code></pre>
-<p><strong>User-facing API (<code>anyfs-container</code>):</strong> ergonomic paths, plus enforcement.</p>
+<p><strong>Limitations:</strong></p>
+<ul>
+<li>Locked to SQLite (no memory backend for testing, no real FS)</li>
+<li>Monolithic design (can’t use FS without KV/auditing)</li>
+<li>No composable middleware</li>
+</ul>
+<h3 id="anyfs"><a class="header" href="#anyfs">AnyFS</a></h3>
+<p>Tower-style middleware + pluggable backends:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use std::path::Path;
+</span>use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs_container::FilesContainer;
 
-impl&lt;B: VfsBackend&gt; FilesContainer&lt;B&gt; {
-    pub fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, ContainerError&gt;;
-    pub fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), ContainerError&gt;;
-    // ... names aligned with std::fs
-}
-<span class="boring">}</span></code></pre>
-<p><strong>Implications:</strong></p>
-<ul>
-<li>Path validation happens once, centrally, before any backend sees the path.</li>
-<li>Limits and default-deny features are consistent across all backends.</li>
-</ul>
-<hr>
-<h2 id="2-what-makes-anyfs-container-better"><a class="header" href="#2-what-makes-anyfs-container-better">2. What makes AnyFS Container better</a></h2>
-<h3 id="21-centralized-path-safety"><a class="header" href="#21-centralized-path-safety">2.1 Centralized path safety</a></h3>
-<ul>
-<li><code>VirtualPath</code> normalizes <code>.</code> / <code>..</code> lexically and prevents escaping the virtual root.</li>
-<li>Backends do not accept raw strings, reducing the attack surface.</li>
-</ul>
-<h3 id="22-least-privilege-feature-whitelist"><a class="header" href="#22-least-privilege-feature-whitelist">2.2 Least privilege (feature whitelist)</a></h3>
-<p>Advanced behavior is disabled by default and enabled explicitly per container instance:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs_container::ContainerBuilder;
+// Compose middleware stack
+let backend = Tracing::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(SqliteBackend::open("data.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+    )
+    .allow("/workspace/**")
+    .deny("**/.env")
+);
 
-let container = ContainerBuilder::new(backend)
-    .symlinks()
-    .max_symlink_resolution(40)
-    .hard_links()
-    .permissions()
-    .build()?;
+let mut fs = FilesContainer::new(backend);
 <span class="boring">}</span></code></pre>
-<p>This supports a default-deny posture for apps handling untrusted input.</p>
-<h3 id="23-built-in-quotas-and-limits"><a class="header" href="#23-built-in-quotas-and-limits">2.3 Built-in quotas and limits</a></h3>
-<p><code>FilesContainer</code> can enforce limits like:</p>
+<p><strong>Advantages:</strong></p>
 <ul>
-<li>max total bytes</li>
-<li>max file size</li>
-<li>max node count</li>
-<li>max directory entries</li>
-<li>max path depth</li>
-</ul>
-<p>Backends remain focused on storage, while enforcement stays consistent.</p>
-<h3 id="24-portable-single-file-storage-sqlite-backend"><a class="header" href="#24-portable-single-file-storage-sqlite-backend">2.4 Portable “single file” storage (SQLite backend)</a></h3>
-<p>With the <code>sqlite</code> backend, an entire tenant filesystem is a single <code>.db</code> file that can be copied/moved as a unit.</p>
-<h3 id="25-dependency-control"><a class="header" href="#25-dependency-control">2.5 Dependency control</a></h3>
-<ul>
-<li><code>anyfs</code> uses Cargo features (<code>memory</code> default, <code>sqlite</code>, <code>vrootfs</code>) so users only compile what they use.</li>
-<li>Custom backend authors depend only on <code>anyfs-traits</code>.</li>
+<li>Add/remove middleware without touching backends</li>
+<li>Swap backends without touching middleware</li>
+<li>Third-party extensions via <code>anyfs-backend</code> trait</li>
 </ul>
 <hr>
-<h2 id="3-tradeoffs--downsides"><a class="header" href="#3-tradeoffs--downsides">3. Tradeoffs / downsides</a></h2>
-<h3 id="31-fewer-backends-initially"><a class="header" href="#31-fewer-backends-initially">3.1 Fewer backends (initially)</a></h3>
-<p>AnyFS intentionally starts small: Memory, SQLite, and a contained host filesystem backend.</p>
-<h3 id="32-sync-only-whole-file-io"><a class="header" href="#32-sync-only-whole-file-io">3.2 Sync-only, whole-file I/O</a></h3>
-<p>The core API is sync-first and the common read/write APIs are whole-buffer (<code>Vec&lt;u8&gt;</code>).
-Streaming handles and async APIs are future work.</p>
-<h3 id="33-not-full-posix"><a class="header" href="#33-not-full-posix">3.3 Not full POSIX</a></h3>
-<p>AnyFS aims for <code>std::fs</code> alignment, but does not try to exactly emulate OS edge cases.</p>
-<h3 id="34-cross-platform-link-semantics"><a class="header" href="#34-cross-platform-link-semantics">3.4 Cross-platform link semantics</a></h3>
-<p>Symlink and hard-link behavior differs across OSes and filesystems. AnyFS exposes links as a virtual concept, but real host filesystem behavior (especially on Windows) may vary.</p>
-<hr>
-<h2 id="4-when-to-use-what"><a class="header" href="#4-when-to-use-what">4. When to use what</a></h2>
-<ul>
-<li>Use <strong>AnyFS Container</strong> when you need embedded app storage, multi-tenant isolation, quotas, and portability.</li>
-<li>Use <strong><code>vfs</code></strong> when you want a general-purpose VFS abstraction with streaming handles and you are comfortable with backend-specific path validation.</li>
-<li>Use <strong>OpenDAL</strong> when your “filesystem” is actually object storage (S3/GCS/Azure) and you want async + middleware.</li>
-</ul>
-<hr>
-<h2 id="5-feature-matrix-high-level"><a class="header" href="#5-feature-matrix-high-level">5. Feature matrix (high level)</a></h2>
+<h2 id="2-feature-comparison"><a class="header" href="#2-feature-comparison">2. Feature Comparison</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th>AnyFS Container</th><th><code>vfs</code></th><th>OpenDAL</th></tr>
+<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
 </thead>
 <tbody>
-<tr><td>Path validation centralized</td><td>Yes (<code>VirtualPath</code>)</td><td>No</td><td>No</td></tr>
-<tr><td>Quotas/limits</td><td>Yes</td><td>No</td><td>No</td></tr>
-<tr><td>Least-privilege defaults</td><td>Yes (whitelist)</td><td>No</td><td>N/A</td></tr>
-<tr><td>SQLite backend</td><td>Yes (feature <code>sqlite</code>)</td><td>No</td><td>No</td></tr>
-<tr><td>Host filesystem containment</td><td>Yes (<code>VRootFsBackend</code> + <code>VirtualRoot</code>)</td><td>Backend-dependent</td><td>N/A</td></tr>
-<tr><td>Streaming I/O</td><td>Not yet</td><td>Often yes</td><td>Yes</td></tr>
-<tr><td>Async API</td><td>Not yet</td><td>Backend-dependent</td><td>Yes</td></tr>
+<tr><td><strong>Middleware pattern</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td><strong>Multiple backends</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td><strong>SQLite backend</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Memory backend</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td><strong>Real FS backend</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Quota enforcement</strong></td><td style="text-align: center">Middleware</td><td style="text-align: center">Manual</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Path sandboxing</strong></td><td style="text-align: center">Middleware</td><td style="text-align: center">Manual</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Feature gating</strong></td><td style="text-align: center">Middleware</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Rate limiting</strong></td><td style="text-align: center">Middleware</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><strong>Tracing/logging</strong></td><td style="text-align: center">Middleware</td><td style="text-align: center">Manual</td><td style="text-align: center">Built-in</td><td style="text-align: center">Middleware</td></tr>
+<tr><td><strong>Streaming I/O</strong></td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
+<tr><td><strong>Async API</strong></td><td style="text-align: center">Future</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td><strong>KV store</strong></td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<p>If you spot an inconsistency between this document and <code>book/src/architecture/design-overview.md</code> or <code>AGENTS.md</code>, treat those as authoritative.</p>
+<h2 id="3-middleware-stack"><a class="header" href="#3-middleware-stack">3. Middleware Stack</a></h2>
+<p>AnyFS middleware can <strong>intercept, transform, and control</strong> operations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Middleware</th><th>Intercepts</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Quota</code></td><td>Writes</td><td>Reject if over limit</td></tr>
+<tr><td><code>PathFilter</code></td><td>All ops</td><td>Block denied paths</td></tr>
+<tr><td><code>FeatureGuard</code></td><td>Symlinks, etc.</td><td>Block disabled features</td></tr>
+<tr><td><code>RateLimit</code></td><td>All ops</td><td>Throttle per second</td></tr>
+<tr><td><code>ReadOnly</code></td><td>Writes</td><td>Block all writes</td></tr>
+<tr><td><code>Tracing</code></td><td>All ops</td><td>Log with tracing crate</td></tr>
+<tr><td><code>DryRun</code></td><td>Writes</td><td>Log without executing</td></tr>
+<tr><td><code>Cache</code></td><td>Reads</td><td>LRU caching</td></tr>
+<tr><td><code>Overlay</code></td><td>All ops</td><td>Union filesystem</td></tr>
+<tr><td>Custom</td><td>Any</td><td>Encryption, compression, …</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="4-backend-trait"><a class="header" href="#4-backend-trait">4. Backend Trait</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait VfsBackend: Send {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt;;
+    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, VfsError&gt;;
+    // ... 25 methods total, aligned with std::fs
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Design principles:</strong></p>
+<ul>
+<li><code>impl AsRef&lt;Path&gt;</code> for ergonomics (accepts <code>&amp;str</code>, <code>String</code>, <code>PathBuf</code>)</li>
+<li>Aligned with <code>std::fs</code> naming</li>
+<li>Streaming I/O via <code>open_read</code>/<code>open_write</code></li>
+<li><code>Send</code> bound for async compatibility</li>
+</ul>
+<hr>
+<h2 id="5-when-to-use-what"><a class="header" href="#5-when-to-use-what">5. When to Use What</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Use Case</th><th>Recommendation</th></tr>
+</thead>
+<tbody>
+<tr><td>Need composable middleware</td><td><strong>AnyFS</strong></td></tr>
+<tr><td>Need backend flexibility</td><td><strong>AnyFS</strong></td></tr>
+<tr><td>Need SQLite + Memory + RealFS</td><td><strong>AnyFS</strong></td></tr>
+<tr><td>Need just VFS abstraction (no policies)</td><td><code>vfs</code></td></tr>
+<tr><td>Need AI agent runtime with KV + auditing</td><td>AgentFS</td></tr>
+<tr><td>Need cloud object storage</td><td>OpenDAL</td></tr>
+<tr><td>Need async-first design</td><td>OpenDAL (or wait for AnyFS async)</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="6-tradeoffs"><a class="header" href="#6-tradeoffs">6. Tradeoffs</a></h2>
+<h3 id="anyfs-advantages"><a class="header" href="#anyfs-advantages">AnyFS Advantages</a></h3>
+<ul>
+<li>Composable middleware pattern</li>
+<li>Backend-agnostic</li>
+<li>Third-party extensibility</li>
+<li>Clean separation of concerns</li>
+</ul>
+<h3 id="anyfs-limitations"><a class="header" href="#anyfs-limitations">AnyFS Limitations</a></h3>
+<ul>
+<li>Sync-first (async planned)</li>
+<li>Smaller ecosystem (new project)</li>
+<li>Not full POSIX emulation</li>
+</ul>
+<hr>
+<p>If this document conflicts with <code>AGENTS.md</code> or <code>src/architecture/design-overview.md</code>, treat those as authoritative.</p>
 
                     </main>
 

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-5b340e51.js";
+            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a787d6ec.js"></script>
@@ -180,187 +180,178 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="anyfs-container---comparison-and-positioning"><a class="header" href="#anyfs-container---comparison-and-positioning">AnyFS Container - Comparison and Positioning</a></h1>
-<p><strong>How AnyFS Container compares to existing solutions</strong></p>
-<p>AnyFS Container (<code>anyfs-container</code>) is a policy layer (quotas + isolation) over a pluggable virtual filesystem backend (<code>VfsBackend</code> from <code>anyfs-traits</code>). With the SQLite backend (<code>anyfs</code> feature <code>sqlite</code>), a tenant’s filesystem becomes a single portable <code>.db</code> file. It defaults to a least-privilege feature set; advanced features (symlinks, hard links, permissions) are opt-in.</p>
+                        <h1 id="anyfs---comparison-and-positioning"><a class="header" href="#anyfs---comparison-and-positioning">AnyFS - Comparison and Positioning</a></h1>
+<p><strong>How AnyFS compares to existing solutions</strong></p>
+<p>AnyFS is a <strong>filesystem abstraction with composable middleware</strong>. It separates storage (backends) from policy (middleware) using a Tower-style pattern. With the SQLite backend, a tenant’s filesystem becomes a single portable <code>.db</code> file.</p>
 <hr>
 <h2 id="executive-comparison"><a class="header" href="#executive-comparison">Executive Comparison</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Solution</th><th>Type</th><th style="text-align: right">Isolation</th><th style="text-align: right">Portability</th><th style="text-align: right">Multi-tenant</th><th style="text-align: right">Backend choice</th></tr>
+<tr><th>Solution</th><th>Type</th><th style="text-align: center">Middleware</th><th style="text-align: center">Backend Choice</th><th style="text-align: center">Quotas</th><th style="text-align: center">Portable Storage</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>AnyFS Container</strong></td><td>Library</td><td style="text-align: right">Yes</td><td style="text-align: right">Backend-dependent (SQLite = single file)</td><td style="text-align: right">Yes (per-tenant containers + quotas)</td><td style="text-align: right">Yes (trait-based)</td></tr>
-<tr><td>SQLAR</td><td>Archive format</td><td style="text-align: right">No</td><td style="text-align: right">Yes (single file)</td><td style="text-align: right">No</td><td style="text-align: right">No (SQLite only)</td></tr>
-<tr><td>libsqlfs</td><td>FUSE filesystem</td><td style="text-align: right">Varies (via mount)</td><td style="text-align: right">Yes (single file)</td><td style="text-align: right">No</td><td style="text-align: right">No (SQLite only)</td></tr>
-<tr><td>AgentFS</td><td>Agent sandbox</td><td style="text-align: right">Yes (namespaces)</td><td style="text-align: right">Yes (SQLite)</td><td style="text-align: right">Partial</td><td style="text-align: right">No (SQLite only)</td></tr>
-<tr><td><code>vfs</code> crate</td><td>Abstraction</td><td style="text-align: right">Backend-dependent</td><td style="text-align: right">Backend-dependent</td><td style="text-align: right">No</td><td style="text-align: right">Yes (trait-based)</td></tr>
-<tr><td>Docker/containers</td><td>Runtime</td><td style="text-align: right">Yes</td><td style="text-align: right">Complex</td><td style="text-align: right">Yes</td><td style="text-align: right">N/A</td></tr>
+<tr><td><strong>AnyFS</strong></td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (SQLite)</td></tr>
+<tr><td><code>vfs</code> crate</td><td>Library</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>AgentFS</td><td>Runtime</td><td style="text-align: center">No</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>SQLAR</td><td>Format</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>libsqlfs</td><td>FUSE</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>OpenDAL</td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (cloud)</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h2 id="detailed-comparisons"><a class="header" href="#detailed-comparisons">Detailed Comparisons</a></h2>
-<h3 id="vs-sqlar-sqlite-archive"><a class="header" href="#vs-sqlar-sqlite-archive">vs. SQLAR (SQLite archive)</a></h3>
-<p><strong>What it is:</strong> SQLite’s official archive format. It’s great for import/export and backups, but it’s not a VFS API.</p>
-<p><strong>Schema (representative):</strong></p>
-<pre><code class="language-sql">CREATE TABLE sqlar(
-  name TEXT PRIMARY KEY,
-  mode INT,
-  mtime INT,
-  sz INT,
-  data BLOB
-);
-</code></pre>
+<h3 id="vs-vfs-crate-rust"><a class="header" href="#vs-vfs-crate-rust">vs. <code>vfs</code> crate (Rust)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>SQLAR</th><th>AnyFS Container</th></tr>
+<tr><th>Aspect</th><th><code>vfs</code> crate</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>API</td><td>SQL statements</td><td><code>FilesContainer</code> methods (<code>read</code>, <code>write</code>, <code>read_dir</code>, …)</td></tr>
-<tr><td>Quotas</td><td>No</td><td>Yes (container-enforced)</td></tr>
-<tr><td>Isolation</td><td>No</td><td>Yes (validated virtual paths, no host escape)</td></tr>
-<tr><td>Transactions (public API)</td><td>Manual</td><td>No (SQLite backend uses transactions internally)</td></tr>
-<tr><td>Link semantics</td><td>Not the focus</td><td>Supported (opt-in: symlink + hard link + permissions)</td></tr>
+<tr><td>Middleware pattern</td><td>No</td><td>Yes (Tower-style)</td></tr>
+<tr><td>Quotas/limits</td><td>No</td><td>Yes (Quota middleware)</td></tr>
+<tr><td>Path sandboxing</td><td>Backend-dependent</td><td>Yes (PathFilter middleware)</td></tr>
+<tr><td>Feature gating</td><td>No</td><td>Yes (FeatureGuard middleware)</td></tr>
+<tr><td>SQLite backend</td><td>No</td><td>Yes (built-in)</td></tr>
+<tr><td>Third-party extensibility</td><td>Implement trait</td><td>Implement trait + Layer</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use SQLAR when:</strong> you want a simple archive/restore format.</p>
-<p><strong>Use AnyFS Container when:</strong> your application needs filesystem-like operations + isolation + quotas.</p>
-<hr>
-<h3 id="vs-libsqlfs-guardian-project"><a class="header" href="#vs-libsqlfs-guardian-project">vs. libsqlfs (Guardian Project)</a></h3>
-<p><strong>What it is:</strong> A FUSE filesystem backed by SQLite, aimed at secure mobile storage.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Aspect</th><th>libsqlfs</th><th>AnyFS Container</th></tr>
-</thead>
-<tbody>
-<tr><td>Interface</td><td>Mounted filesystem</td><td>Library API</td></tr>
-<tr><td>Deployment</td><td>Requires FUSE + OS integration</td><td>No mount, no host path access</td></tr>
-<tr><td>Scope</td><td>POSIX filesystem</td><td><code>std::fs</code>-aligned trait (not full POSIX)</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Use libsqlfs when:</strong> you need a real mounted filesystem.</p>
-<p><strong>Use AnyFS Container when:</strong> you want embedded application storage without mounting.</p>
+<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies.</p>
+<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging).</p>
 <hr>
 <h3 id="vs-agentfs-turso"><a class="header" href="#vs-agentfs-turso">vs. AgentFS (Turso)</a></h3>
-<p><strong>What it is:</strong> A SQLite-backed virtual filesystem aimed at sandboxing AI agents.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>AgentFS</th><th>AnyFS Container</th></tr>
+<tr><th>Aspect</th><th>AgentFS</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>Focus</td><td>Agent sandboxing + audit</td><td>General-purpose embedded storage</td></tr>
-<tr><td>Isolation</td><td>OS namespaces</td><td>Structural (validated virtual paths)</td></tr>
-<tr><td>Backend</td><td>SQLite only</td><td>Pluggable (SQLite is one option)</td></tr>
+<tr><td>Scope</td><td>Agent runtime (FS + KV + auditing)</td><td>Filesystem abstraction</td></tr>
+<tr><td>Backend choice</td><td>SQLite only</td><td>Memory, SQLite, RealFS, custom</td></tr>
+<tr><td>Middleware</td><td>No</td><td>Yes (composable)</td></tr>
+<tr><td>KV store</td><td>Included</td><td>Not included (different abstraction)</td></tr>
+<tr><td>Tool auditing</td><td>Built-in</td><td>Use Tracing middleware</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use AgentFS when:</strong> you want OS-level sandboxing + auditing.</p>
-<p><strong>Use AnyFS Container when:</strong> you want a small, embeddable library with backend choice and quotas.</p>
+<p><strong>Use AgentFS when:</strong> You need a complete AI agent runtime with KV and auditing.</p>
+<p><strong>Use AnyFS when:</strong> You need just filesystem with backend flexibility and composable policies.</p>
 <hr>
-<h3 id="vs-vfs-crate-rust"><a class="header" href="#vs-vfs-crate-rust">vs. <code>vfs</code> crate (Rust)</a></h3>
-<p><strong>What it is:</strong> A general Rust VFS trait + backends.</p>
+<h3 id="vs-sqlar-sqlite-archive"><a class="header" href="#vs-sqlar-sqlite-archive">vs. SQLAR (SQLite archive)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th><code>vfs</code> crate</th><th>AnyFS Container</th></tr>
+<tr><th>Aspect</th><th>SQLAR</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>Trait design</td><td>Path-based operations</td><td>Path-based <code>VfsBackend</code> (<code>std::fs</code>-aligned)</td></tr>
-<tr><td>Path safety</td><td>Backend-dependent</td><td>Centralized validation into <code>VirtualPath</code></td></tr>
-<tr><td>SQLite backend</td><td>Not included</td><td>Built-in backend (feature-gated)</td></tr>
-<tr><td>Quotas</td><td>No</td><td>Yes (<code>anyfs-container</code>)</td></tr>
+<tr><td>API</td><td>SQL statements</td><td>Filesystem methods</td></tr>
+<tr><td>Quotas</td><td>No</td><td>Yes</td></tr>
+<tr><td>Middleware</td><td>No</td><td>Yes</td></tr>
+<tr><td>Streaming I/O</td><td>No</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use <code>vfs</code> when:</strong> you want a drop-in abstraction close to <code>std::fs</code>.</p>
-<p><strong>Use AnyFS Container when:</strong> you need portable storage + quotas + containment guarantees.</p>
+<p><strong>Use SQLAR when:</strong> You want a simple archive format.</p>
+<p><strong>Use AnyFS when:</strong> You need filesystem operations with policies.</p>
 <hr>
-<h3 id="vs-dockercontainers"><a class="header" href="#vs-dockercontainers">vs. Docker/containers</a></h3>
-<p><strong>What it is:</strong> OS-level virtualization with isolated filesystem namespaces.</p>
+<h3 id="vs-libsqlfs-guardian-project"><a class="header" href="#vs-libsqlfs-guardian-project">vs. libsqlfs (Guardian Project)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>Containers</th><th>AnyFS Container</th></tr>
+<tr><th>Aspect</th><th>libsqlfs</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>Isolation level</td><td>OS process</td><td>Library</td></tr>
-<tr><td>Overhead</td><td>High</td><td>Low</td></tr>
-<tr><td>Primary use</td><td>Execute code</td><td>Store data</td></tr>
+<tr><td>Interface</td><td>FUSE mount</td><td>Library API</td></tr>
+<tr><td>Deployment</td><td>Requires OS integration</td><td>No mount needed</td></tr>
+<tr><td>Backend choice</td><td>SQLite only</td><td>Multiple</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use containers when:</strong> you need to run untrusted code.</p>
-<p><strong>Use AnyFS Container when:</strong> you just need isolated application data storage.</p>
+<p><strong>Use libsqlfs when:</strong> You need a mounted filesystem.</p>
+<p><strong>Use AnyFS when:</strong> You want embedded storage without mounting.</p>
+<hr>
+<h3 id="vs-opendal"><a class="header" href="#vs-opendal">vs. OpenDAL</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>OpenDAL</th><th>AnyFS</th></tr>
+</thead>
+<tbody>
+<tr><td>Focus</td><td>Cloud object storage</td><td>Local/embedded filesystem</td></tr>
+<tr><td>Async</td><td>Yes (async-first)</td><td>Sync-first (async planned)</td></tr>
+<tr><td>Backends</td><td>Cloud services (S3, GCS, etc.)</td><td>Local (Memory, SQLite, RealFS)</td></tr>
+<tr><td>Middleware</td><td>Yes</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Use OpenDAL when:</strong> Your storage is cloud object storage.</p>
+<p><strong>Use AnyFS when:</strong> Your storage is local/embedded.</p>
 <hr>
 <h2 id="feature-matrix"><a class="header" href="#feature-matrix">Feature Matrix</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th>AnyFS Container</th><th>SQLAR</th><th>libsqlfs</th><th>AgentFS</th><th><code>vfs</code> crate</th></tr>
+<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
 </thead>
 <tbody>
-<tr><td>Directories</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Files</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Symlinks</td><td>Yes</td><td>Limited/unstandardized</td><td>Yes</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>Hard links</td><td>Yes</td><td>No</td><td>Yes</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>Permissions</td><td>Yes (simple)</td><td>Limited (mode only)</td><td>Yes</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>Extended attrs</td><td>No (future)</td><td>No</td><td>Varies</td><td>Varies</td><td>No</td></tr>
-<tr><td>Transactions (public API)</td><td>No</td><td>Manual</td><td>Yes</td><td>Varies</td><td>No</td></tr>
-<tr><td>Capacity limits</td><td>Yes (built-in)</td><td>No</td><td>No</td><td>Varies</td><td>No</td></tr>
-<tr><td>Streaming I/O</td><td>No (future)</td><td>No</td><td>Yes</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>Async API</td><td>No (future)</td><td>N/A</td><td>No</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>FUSE mount</td><td>No (by design)</td><td>No</td><td>Yes</td><td>Yes</td><td>Backend-dependent</td></tr>
-<tr><td>Compression</td><td>Backend</td><td>Yes (deflate)</td><td>Varies</td><td>Varies</td><td>Backend-dependent</td></tr>
-<tr><td>Encryption</td><td>Backend</td><td>No</td><td>Yes (SQLCipher)</td><td>Varies</td><td>Backend-dependent</td></tr>
+<tr><td>Composable middleware</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>Multiple backends</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>SQLite backend</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
+<tr><td>Memory backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>Real FS backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Quota enforcement</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Rate limiting</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Streaming I/O</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
+<tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
+<tr><td>FUSE mount</td><td style="text-align: center">Possible</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="when-to-use-anyfs-container"><a class="header" href="#when-to-use-anyfs-container">When to Use AnyFS Container</a></h2>
+<h2 id="when-to-use-anyfs"><a class="header" href="#when-to-use-anyfs">When to Use AnyFS</a></h2>
 <p><strong>Good fit:</strong></p>
 <ul>
-<li>Multi-tenant SaaS that needs per-tenant quotas</li>
-<li>Desktop apps that want portable user data</li>
-<li>Testing that needs deterministic isolated storage</li>
-<li>Plugin systems that need per-plugin isolation</li>
+<li>Multi-tenant SaaS with per-tenant quotas</li>
+<li>AI agent sandboxing with path restrictions</li>
+<li>Desktop apps with portable user data</li>
+<li>Plugin systems with isolated storage</li>
+<li>Testing with deterministic isolated storage</li>
+<li>Any case where you might swap backends later</li>
 </ul>
 <p><strong>Not a good fit:</strong></p>
 <ul>
-<li>You must mount a filesystem into the host OS (use a FUSE solution)</li>
-<li>You need full POSIX behavior (xattrs/ACLs/etc.)</li>
-<li>You need maximum throughput over safety/portability</li>
+<li>You must mount a filesystem (use FUSE solution)</li>
+<li>You need full POSIX behavior (xattrs, ACLs)</li>
+<li>Your storage is cloud object storage (use OpenDAL)</li>
+<li>You need async-first design today (wait for AnyFS async)</li>
 </ul>
 <hr>
-<h2 id="migration-paths"><a class="header" href="#migration-paths">Migration Paths</a></h2>
-<h3 id="from-raw-sqlitesqlar"><a class="header" href="#from-raw-sqlitesqlar">From raw SQLite/SQLAR</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Old: raw SQL
-conn.execute("INSERT INTO sqlar(name, data) VALUES (?, ?)", [path, data])?;
-
-// New: AnyFS Container
-container.write(path, data)?;
-<span class="boring">}</span></code></pre>
+<h2 id="migration-examples"><a class="header" href="#migration-examples">Migration Examples</a></h2>
 <h3 id="from-stdfs"><a class="header" href="#from-stdfs">From <code>std::fs</code></a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Old: host filesystem
+</span>// Before: host filesystem
 std::fs::write("/data/file.txt", content)?;
 
-// New: AnyFS Container
-container.write("/data/file.txt", content)?;
+// After: AnyFS (can swap backend later)
+fs.write("/data/file.txt", content)?;
+<span class="boring">}</span></code></pre>
+<h3 id="from-raw-sqlite"><a class="header" href="#from-raw-sqlite">From raw SQLite</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Before: raw SQL
+conn.execute("INSERT INTO files(path, data) VALUES (?, ?)", [path, data])?;
+
+// After: AnyFS with SQLite backend
+fs.write(path, data)?;
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
-<p>AnyFS Container occupies a niche between archives (SQLAR) and mounted filesystems (FUSE): it is an <strong>application-level</strong> filesystem API with <strong>quotas</strong> and <strong>containment guarantees</strong>, with <strong>backend choice</strong> (including a portable SQLite option).</p>
-<p><em>For technical details, see the <a href="../architecture/design-overview.html">Design Overview</a>.</em></p>
+<p>AnyFS is positioned as the <strong>Tower/Axum of filesystems</strong>: composable middleware over pluggable backends. It fills the gap between simple VFS abstractions (no policies) and complete runtimes (too much bundled together).</p>
+<p><em>For technical details, see <a href="../architecture/design-overview.html">Design Overview</a> and <a href="../../AGENTS.html">AGENTS.md</a>.</em></p>
 
                     </main>
 
