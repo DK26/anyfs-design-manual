@@ -25,9 +25,9 @@ anyfs/                      # Crate 2: backends + middleware
       sqlite.rs             # SqliteBackend [feature: sqlite]
       vrootfs.rs            # VRootFsBackend [feature: vrootfs]
     middleware/
-      limited.rs            # LimitedBackend<B>
-      logging.rs            # LoggingBackend<B>
-      feature_gated.rs      # FeatureGatedBackend<B>
+      quota.rs              # Quota<B>
+      tracing.rs            # Tracing<B>
+      feature_guard.rs      # FeatureGuard<B>
 
 anyfs-container/            # Crate 3: ergonomic wrapper
   Cargo.toml
@@ -60,9 +60,9 @@ anyfs-backend (trait + types)
 
 ```
 FilesContainer<B>
-    wraps -> LoggingBackend<B>
-        wraps -> FeatureGatedBackend<B>
-            wraps -> LimitedBackend<B>
+    wraps -> Tracing<B>
+        wraps -> FeatureGuard<B>
+            wraps -> Quota<B>
                 wraps -> SqliteBackend (or any VfsBackend)
 ```
 

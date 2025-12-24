@@ -102,9 +102,9 @@ pub trait VfsBackend: Send {
 
 | Concern | Where It Lives |
 |---------|----------------|
-| Quota enforcement | `LimitedBackend<B>` middleware |
-| Feature gating | `FeatureGatedBackend<B>` middleware |
-| Audit logging | `LoggingBackend<B>` middleware |
+| Quota enforcement | `Quota<B>` middleware |
+| Feature gating | `FeatureGuard<B>` middleware |
+| Audit logging | `Tracing<B>` middleware |
 | Ergonomic API | `FilesContainer<B>` wrapper |
 
 Backends focus on storage. Policy is middleware.

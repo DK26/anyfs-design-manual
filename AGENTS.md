@@ -21,9 +21,9 @@ AnyFS is an open standard for pluggable virtual filesystem backends in Rust. It 
 │  FilesContainer<B>                      │  ← Ergonomics only (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
-│    LimitedBackend<B>                    │  ← Quota enforcement
-│    TracingBackend<B>                    │  ← Instrumentation (tracing ecosystem)
-│    FeatureGatedBackend<B>               │  ← Symlink/hardlink whitelist
+│    Quota<B>                    │  ← Quota enforcement
+│    Tracing<B>                    │  ← Instrumentation (tracing ecosystem)
+│    FeatureGuard<B>               │  ← Symlink/hardlink whitelist
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Pure storage + fs semantics
 │  (Memory, SQLite, VRootFs, custom...)   │
@@ -35,9 +35,9 @@ Each layer has **exactly one responsibility**:
 | Layer | Responsibility |
 |-------|----------------|
 | `VfsBackend` | Storage + filesystem semantics |
-| `LimitedBackend<B>` | Quota enforcement |
-| `TracingBackend<B>` | Instrumentation / audit trail (tracing ecosystem) |
-| `FeatureGatedBackend<B>` | Feature whitelist (symlinks, hard links, permissions) |
+| `Quota<B>` | Quota enforcement |
+| `Tracing<B>` | Instrumentation / audit trail (tracing ecosystem) |
+| `FeatureGuard<B>` | Feature whitelist (symlinks, hard links, permissions) |
 | `FilesContainer<B>` | Ergonomic std::fs-aligned API (thin wrapper) |
 
 ---
@@ -64,9 +64,9 @@ anyfs/                      # Crate 2: backends + middleware
       sqlite.rs             # SqliteBackend [feature: sqlite]
       vrootfs.rs            # VRootFsBackend [feature: vrootfs]
     middleware/
-      limited.rs            # LimitedBackend<B> + LimitedLayer
-      tracing.rs            # TracingBackend<B> + TracingLayer
-      feature_gated.rs      # FeatureGatedBackend<B> + FeatureGateLayer
+      quota.rs              # Quota<B> + QuotaLayer
+      tracing.rs            # Tracing<B> + TracingLayer
+      feature_guard.rs      # FeatureGuard<B> + FeatureGuardLayer
 
 anyfs-container/            # Crate 3: ergonomic wrapper
   Cargo.toml
@@ -174,9 +174,9 @@ pub trait Layer<B: VfsBackend> {
 ```
 
 Each middleware provides a corresponding Layer:
-- `LimitedLayer` → `LimitedBackend<B>`
-- `TracingLayer` → `TracingBackend<B>`
-- `FeatureGateLayer` → `FeatureGatedBackend<B>`
+- `QuotaLayer` → `Quota<B>`
+- `TracingLayer` → `Tracing<B>`
+- `FeatureGuardLayer` → `FeatureGuard<B>`
 
 ---
 
@@ -201,18 +201,18 @@ impl<B: VfsBackend> VfsBackendExt for B {}
 
 Each middleware implements `VfsBackend` by wrapping another `VfsBackend`.
 
-### LimitedBackend<B>
+### Quota<B>
 
 Enforces quota limits. Tracks usage and rejects operations that would exceed limits.
 
 ```rust
-pub struct LimitedBackend<B: VfsBackend> {
+pub struct Quota<B: VfsBackend> {
     inner: B,
     limits: Limits,
     usage: Usage,
 }
 
-impl<B: VfsBackend> LimitedBackend<B> {
+impl<B: VfsBackend> Quota<B> {
     pub fn new(inner: B) -> Self;
     pub fn with_max_total_size(self, bytes: u64) -> Self;
     pub fn with_max_file_size(self, bytes: u64) -> Self;
@@ -225,29 +225,29 @@ impl<B: VfsBackend> LimitedBackend<B> {
     pub fn remaining(&self) -> Remaining;
 }
 
-impl<B: VfsBackend> VfsBackend for LimitedBackend<B> {
+impl<B: VfsBackend> VfsBackend for Quota<B> {
     // Delegates to inner, checking limits before writes
 }
 ```
 
-### TracingBackend<B>
+### Tracing<B>
 
 Integrates with the [tracing](https://docs.rs/tracing) ecosystem for structured logging.
 
 ```rust
-pub struct TracingBackend<B: VfsBackend> {
+pub struct Tracing<B: VfsBackend> {
     inner: B,
     target: &'static str,
     level: tracing::Level,
 }
 
-impl<B: VfsBackend> TracingBackend<B> {
+impl<B: VfsBackend> Tracing<B> {
     pub fn new(inner: B) -> Self;
     pub fn with_target(self, target: &'static str) -> Self;
     pub fn with_level(self, level: tracing::Level) -> Self;
 }
 
-impl<B: VfsBackend> VfsBackend for TracingBackend<B> {
+impl<B: VfsBackend> VfsBackend for Tracing<B> {
     // Delegates to inner, emitting tracing spans/events
 }
 ```
@@ -257,12 +257,12 @@ impl<B: VfsBackend> VfsBackend for TracingBackend<B> {
 - Structured logging with spans
 - Compatible with OpenTelemetry, Jaeger, etc.
 
-### FeatureGatedBackend<B>
+### FeatureGuard<B>
 
 Enforces least-privilege by disabling features by default.
 
 ```rust
-pub struct FeatureGatedBackend<B: VfsBackend> {
+pub struct FeatureGuard<B: VfsBackend> {
     inner: B,
     allow_symlinks: bool,
     allow_hard_links: bool,
@@ -270,7 +270,7 @@ pub struct FeatureGatedBackend<B: VfsBackend> {
     max_symlink_resolution: u32,
 }
 
-impl<B: VfsBackend> FeatureGatedBackend<B> {
+impl<B: VfsBackend> FeatureGuard<B> {
     pub fn new(inner: B) -> Self;  // All features disabled by default
     pub fn with_symlinks(self) -> Self;
     pub fn with_hard_links(self) -> Self;
@@ -278,7 +278,7 @@ impl<B: VfsBackend> FeatureGatedBackend<B> {
     pub fn with_max_symlink_resolution(self, max: u32) -> Self;
 }
 
-impl<B: VfsBackend> VfsBackend for FeatureGatedBackend<B> {
+impl<B: VfsBackend> VfsBackend for FeatureGuard<B> {
     // Delegates to inner, rejecting disabled operations
 }
 ```
@@ -324,10 +324,10 @@ fs.write("/hello.txt", b"Hello!")?;
 ### With limits
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend};
+use anyfs::{SqliteBackend, Quota};
 use anyfs_container::FilesContainer;
 
-let backend = LimitedBackend::new(SqliteBackend::open("data.db")?)
+let backend = Quota::new(SqliteBackend::open("data.db")?)
     .with_max_total_size(100 * 1024 * 1024)
     .with_max_file_size(10 * 1024 * 1024);
 
@@ -337,15 +337,15 @@ let mut fs = FilesContainer::new(backend);
 ### Full stack (limits + feature gates + tracing)
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard, Tracing};
 use anyfs_container::FilesContainer;
 
 let backend = SqliteBackend::open("data.db")?;
-let limited = LimitedBackend::new(backend)
+let limited = Quota::new(backend)
     .with_max_total_size(100 * 1024 * 1024);
-let gated = FeatureGatedBackend::new(limited)
+let gated = FeatureGuard::new(limited)
     .with_symlinks();
-let traced = TracingBackend::new(gated);
+let traced = Tracing::new(gated);
 
 let mut fs = FilesContainer::new(traced);
 ```
@@ -353,11 +353,11 @@ let mut fs = FilesContainer::new(traced);
 ### Layer-based composition
 
 ```rust
-use anyfs::{SqliteBackend, LimitedLayer, FeatureGateLayer, TracingLayer};
+use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
-    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGateLayer::new().allow_symlinks())
+    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGuardLayer::new().allow_symlinks())
     .layer(TracingLayer::new());
 ```
 
@@ -390,7 +390,7 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 | Crate | Used by | Purpose |
 |-------|---------|---------|
 | `thiserror` | `anyfs-backend` | Error types |
-| `tracing` | `anyfs` | Instrumentation (TracingBackend) |
+| `tracing` | `anyfs` | Instrumentation (Tracing) |
 | `strict-path` | `anyfs` [vrootfs] | VirtualRoot containment |
 | `rusqlite` | `anyfs` [sqlite] | SQLite database access |
 | `bytes` | `anyfs` [bytes] | Zero-copy byte handling (optional) |
@@ -411,9 +411,9 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 
 ## Common Mistakes to Avoid
 
-- Do NOT put quota/limit logic in FilesContainer - use LimitedBackend
-- Do NOT put feature gates in FilesContainer - use FeatureGatedBackend
-- Do NOT implement custom logging - use TracingBackend with tracing ecosystem
+- Do NOT put quota/limit logic in FilesContainer - use Quota
+- Do NOT put feature gates in FilesContainer - use FeatureGuard
+- Do NOT implement custom logging - use Tracing with tracing ecosystem
 - FilesContainer is a thin wrapper only - no policy logic
 - Middleware order matters: innermost applies first
 - Use `VfsBackendExt` for convenience methods, don't add them to VfsBackend
@@ -440,9 +440,9 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 
 ## When in Doubt
 
-1. **Where do limits go?** `LimitedBackend<B>` middleware
-2. **Where do feature gates go?** `FeatureGatedBackend<B>` middleware
-3. **Where does logging go?** `TracingBackend<B>` middleware (uses tracing crate)
+1. **Where do limits go?** `Quota<B>` middleware
+2. **Where do feature gates go?** `FeatureGuard<B>` middleware
+3. **Where does logging go?** `Tracing<B>` middleware (uses tracing crate)
 4. **What does FilesContainer do?** Thin std::fs-aligned wrapper only
 5. **Path type everywhere?** `impl AsRef<Path>` (std::fs aligned)
 6. **Is strict-path used?** Only internally by VRootFsBackend

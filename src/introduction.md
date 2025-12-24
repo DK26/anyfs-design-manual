@@ -22,9 +22,9 @@ You get:
 │  FilesContainer<B>                      │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
-│    LimitedBackend<B>                    │  ← Quotas
-│    FeatureGatedBackend<B>               │  ← Security
-│    LoggingBackend<B>                    │  ← Audit
+│    Quota<B>                    │  ← Quotas
+│    FeatureGuard<B>               │  ← Security
+│    Tracing<B>                    │  ← Audit
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Storage
 │  (Memory, SQLite, VRootFs, custom...)   │
@@ -48,12 +48,12 @@ You get:
 ## Quick Example
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard};
 use anyfs_container::FilesContainer;
 
 // Compose: storage -> limits -> security
-let backend = FeatureGatedBackend::new(
-    LimitedBackend::new(SqliteBackend::open("data.db")?)
+let backend = FeatureGuard::new(
+    Quota::new(SqliteBackend::open("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )
 .with_symlinks();

@@ -23,7 +23,7 @@ anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 ## Creating a Backend Stack
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
+use anyfs::{MemoryBackend, SqliteBackend, Quota, FeatureGuard, Tracing};
 use anyfs_container::FilesContainer;
 
 // Simple
@@ -31,16 +31,16 @@ let fs = FilesContainer::new(MemoryBackend::new());
 
 // With limits
 let fs = FilesContainer::new(
-    LimitedBackend::new(SqliteBackend::open("data.db")?)
+    Quota::new(SqliteBackend::open("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)
         .with_max_file_size(10 * 1024 * 1024)
 );
 
 // Full stack (manual composition)
 let fs = FilesContainer::new(
-    TracingBackend::new(
-        FeatureGatedBackend::new(
-            LimitedBackend::new(SqliteBackend::open("data.db")?)
+    Tracing::new(
+        FeatureGuard::new(
+            Quota::new(SqliteBackend::open("data.db")?)
                 .with_max_total_size(100 * 1024 * 1024)
         )
         .with_symlinks()
@@ -49,11 +49,11 @@ let fs = FilesContainer::new(
 );
 
 // Layer-based composition
-use anyfs::{LimitedLayer, FeatureGateLayer, TracingLayer};
+use anyfs::{QuotaLayer, FeatureGuardLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
-    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGateLayer::new().allow_symlinks())
+    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGuardLayer::new().allow_symlinks())
     .layer(TracingLayer::new());
 
 // BackendStack builder (fluent API)
@@ -68,10 +68,10 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 
 ---
 
-## LimitedBackend Methods
+## Quota Methods
 
 ```rust
-LimitedBackend::new(backend)
+Quota::new(backend)
     .with_max_total_size(bytes)      // Total storage limit
     .with_max_file_size(bytes)       // Per-file limit
     .with_max_node_count(count)      // Max files/dirs
@@ -86,10 +86,10 @@ backend.remaining()    // -> Remaining { bytes, can_write, ... }
 
 ---
 
-## FeatureGatedBackend Methods
+## FeatureGuard Methods
 
 ```rust
-FeatureGatedBackend::new(backend)    // All disabled by default
+FeatureGuard::new(backend)    // All disabled by default
     .with_symlinks()                  // Enable symlink ops
     .with_max_symlink_resolution(40)  // Max hops
     .with_hard_links()                // Enable hard links
@@ -98,10 +98,10 @@ FeatureGatedBackend::new(backend)    // All disabled by default
 
 ---
 
-## TracingBackend Methods
+## Tracing Methods
 
 ```rust
-TracingBackend::new(backend)
+Tracing::new(backend)
     .with_target("anyfs")             // tracing target
     .with_level(tracing::Level::DEBUG)
 ```
@@ -165,12 +165,12 @@ fs.remove_dir_all("/path")?;             // Recursive
 fs.rename("/from", "/to")?;
 fs.copy("/from", "/to")?;
 
-// Links (requires FeatureGatedBackend)
+// Links (requires FeatureGuard)
 fs.symlink("/target", "/link")?;
 fs.hard_link("/original", "/link")?;
 fs.read_link("/link")?;                  // -> PathBuf
 
-// Permissions (requires FeatureGatedBackend)
+// Permissions (requires FeatureGuard)
 fs.set_permissions("/path", perms)?;
 
 // File size
@@ -221,9 +221,9 @@ match result {
 
 | Type | Purpose |
 |------|---------|
-| `LimitedBackend<B>` | Quota enforcement |
-| `FeatureGatedBackend<B>` | Least privilege |
-| `TracingBackend<B>` | Instrumentation (tracing ecosystem) |
+| `Quota<B>` | Quota enforcement |
+| `FeatureGuard<B>` | Least privilege |
+| `Tracing<B>` | Instrumentation (tracing ecosystem) |
 
 ---
 
@@ -231,9 +231,9 @@ match result {
 
 | Layer | Creates |
 |-------|---------|
-| `LimitedLayer` | `LimitedBackend<B>` |
-| `FeatureGateLayer` | `FeatureGatedBackend<B>` |
-| `TracingLayer` | `TracingBackend<B>` |
+| `QuotaLayer` | `Quota<B>` |
+| `FeatureGuardLayer` | `FeatureGuard<B>` |
+| `TracingLayer` | `Tracing<B>` |
 
 ---
 
@@ -260,12 +260,12 @@ match result {
 | `MemoryBackend` | In-memory backend |
 | `SqliteBackend` | SQLite backend |
 | `VRootFsBackend` | Host FS backend |
-| `LimitedBackend<B>` | Quota middleware |
-| `FeatureGatedBackend<B>` | Feature gate middleware |
-| `TracingBackend<B>` | Tracing middleware |
-| `LimitedLayer` | Layer for LimitedBackend |
-| `FeatureGateLayer` | Layer for FeatureGatedBackend |
-| `TracingLayer` | Layer for TracingBackend |
+| `Quota<B>` | Quota middleware |
+| `FeatureGuard<B>` | Feature gate middleware |
+| `Tracing<B>` | Tracing middleware |
+| `QuotaLayer` | Layer for Quota |
+| `FeatureGuardLayer` | Layer for FeatureGuard |
+| `TracingLayer` | Layer for Tracing |
 
 ### From `anyfs-container`
 

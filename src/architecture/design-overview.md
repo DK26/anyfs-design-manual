@@ -23,9 +23,9 @@ Anyone can:
 │  FilesContainer<B>                      │  ← Ergonomics only (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
-│    LimitedBackend<B>                    │  ← Quota enforcement
-│    TracingBackend<B>                    │  ← Instrumentation (tracing ecosystem)
-│    FeatureGatedBackend<B>               │  ← Symlink/hardlink whitelist
+│    Quota<B>                    │  ← Quota enforcement
+│    Tracing<B>                    │  ← Instrumentation (tracing ecosystem)
+│    FeatureGuard<B>               │  ← Symlink/hardlink whitelist
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Pure storage + fs semantics
 │  (Memory, SQLite, VRootFs, custom...)   │
@@ -37,9 +37,9 @@ Anyone can:
 | Layer | Responsibility |
 |-------|----------------|
 | `VfsBackend` | Storage + filesystem semantics |
-| `LimitedBackend<B>` | Quota enforcement |
-| `TracingBackend<B>` | Instrumentation / audit trail |
-| `FeatureGatedBackend<B>` | Feature whitelist |
+| `Quota<B>` | Quota enforcement |
+| `Tracing<B>` | Instrumentation / audit trail |
+| `FeatureGuard<B>` | Feature whitelist |
 | `FilesContainer<B>` | Ergonomic std::fs-aligned API |
 
 ---
@@ -49,7 +49,7 @@ Anyone can:
 | Crate | Purpose | Contains |
 |-------|---------|----------|
 | `anyfs-backend` | Minimal contract | `VfsBackend` trait, `Layer` trait, types, `VfsBackendExt` |
-| `anyfs` | Backends + middleware | Built-in backends, `LimitedBackend`, `TracingBackend`, `FeatureGatedBackend` |
+| `anyfs` | Backends + middleware | Built-in backends, `Quota`, `Tracing`, `FeatureGuard` |
 | `anyfs-container` | Ergonomic wrapper | `FilesContainer<B>`, `BackendStack` builder |
 
 ### Dependency Graph
@@ -124,14 +124,14 @@ pub trait VfsBackend: Send {
 
 Each middleware is itself a `VfsBackend` that wraps another backend. This enables composition.
 
-### LimitedBackend<B>
+### Quota<B>
 
 Enforces quota limits. Tracks usage and rejects operations that would exceed limits.
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend};
+use anyfs::{SqliteBackend, Quota};
 
-let backend = LimitedBackend::new(SqliteBackend::open("data.db")?)
+let backend = Quota::new(SqliteBackend::open("data.db")?)
     .with_max_total_size(100 * 1024 * 1024)   // 100 MB
     .with_max_file_size(10 * 1024 * 1024)     // 10 MB per file
     .with_max_node_count(10_000)               // 10K files/dirs
@@ -143,14 +143,14 @@ let usage = backend.usage();
 let remaining = backend.remaining();
 ```
 
-### FeatureGatedBackend<B>
+### FeatureGuard<B>
 
 Enforces least-privilege by disabling features by default.
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGatedBackend};
+use anyfs::{MemoryBackend, FeatureGuard};
 
-let backend = FeatureGatedBackend::new(MemoryBackend::new())
+let backend = FeatureGuard::new(MemoryBackend::new())
     .with_symlinks()                          // Enable symlink operations
     .with_max_symlink_resolution(40)          // Max symlink hops
     .with_hard_links()                        // Enable hard links
@@ -159,14 +159,14 @@ let backend = FeatureGatedBackend::new(MemoryBackend::new())
 
 When a feature is disabled, operations return `VfsError::FeatureNotEnabled`.
 
-### TracingBackend<B>
+### Tracing<B>
 
 Integrates with the [tracing](https://docs.rs/tracing) ecosystem for structured logging and instrumentation.
 
 ```rust
-use anyfs::{SqliteBackend, TracingBackend};
+use anyfs::{SqliteBackend, Tracing};
 
-let backend = TracingBackend::new(SqliteBackend::open("data.db")?)
+let backend = Tracing::new(SqliteBackend::open("data.db")?)
     .with_target("anyfs")           // tracing target
     .with_level(tracing::Level::DEBUG);
 
@@ -214,13 +214,13 @@ pub trait Layer<B: VfsBackend> {
 Each middleware provides a corresponding `Layer` implementation:
 
 ```rust
-// LimitedLayer, TracingLayer, FeatureGateLayer, etc.
-pub struct LimitedLayer { /* config */ }
+// QuotaLayer, TracingLayer, FeatureGuardLayer, etc.
+pub struct QuotaLayer { /* config */ }
 
-impl<B: VfsBackend> Layer<B> for LimitedLayer {
-    type Backend = LimitedBackend<B>;
+impl<B: VfsBackend> Layer<B> for QuotaLayer {
+    type Backend = Quota<B>;
     fn layer(self, backend: B) -> Self::Backend {
-        LimitedBackend::new(backend).with_limits(self.limits)
+        Quota::new(backend).with_limits(self.limits)
     }
 }
 ```
@@ -234,19 +234,19 @@ Middleware composes by wrapping. Order matters - innermost applies first.
 ### Manual Composition
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard, Tracing};
 use anyfs_container::FilesContainer;
 
 // Build from inside out:
 let backend = SqliteBackend::open("data.db")?;
 
-let limited = LimitedBackend::new(backend)
+let limited = Quota::new(backend)
     .with_max_total_size(100 * 1024 * 1024);
 
-let gated = FeatureGatedBackend::new(limited)
+let gated = FeatureGuard::new(limited)
     .with_symlinks();
 
-let traced = TracingBackend::new(gated);
+let traced = Tracing::new(gated);
 
 let mut fs = FilesContainer::new(traced);
 ```
@@ -256,11 +256,11 @@ let mut fs = FilesContainer::new(traced);
 Use the `Layer` trait for Axum-style composition:
 
 ```rust
-use anyfs::{SqliteBackend, LimitedLayer, FeatureGateLayer, TracingLayer};
+use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
-    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGateLayer::new().allow_symlinks())
+    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGuardLayer::new().allow_symlinks())
     .layer(TracingLayer::new());
 ```
 
@@ -315,9 +315,9 @@ Security is achieved through composition:
 | Concern | Solution |
 |---------|----------|
 | Path containment | Backend-specific (VRootFsBackend uses strict-path) |
-| Resource exhaustion | `LimitedBackend` enforces quotas |
-| Feature restriction | `FeatureGatedBackend` disables dangerous features |
-| Audit trail | `TracingBackend` instruments operations |
+| Resource exhaustion | `Quota` enforces quotas |
+| Feature restriction | `FeatureGuard` disables dangerous features |
+| Audit trail | `Tracing` instruments operations |
 | Tenant isolation | Separate backend instances |
 
 **Defense in depth:** Compose multiple middleware layers for comprehensive security.
@@ -432,7 +432,7 @@ pub enum VfsError {
         limit: u64,
     },
 
-    /// Feature not enabled (from FeatureGatedBackend).
+    /// Feature not enabled (from FeatureGuard).
     FeatureNotEnabled {
         feature: &'static str,  // "symlinks", "hard_links", "permissions"
         operation: &'static str,

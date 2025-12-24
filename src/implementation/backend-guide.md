@@ -193,9 +193,9 @@ Return appropriate `VfsError` variants:
 
 | Concern | Where It Lives |
 |---------|----------------|
-| Quota enforcement | `LimitedBackend<B>` middleware |
-| Feature gating | `FeatureGatedBackend<B>` middleware |
-| Logging | `LoggingBackend<B>` middleware |
+| Quota enforcement | `Quota<B>` middleware |
+| Feature gating | `FeatureGuard<B>` middleware |
+| Logging | `Tracing<B>` middleware |
 | Ergonomic API | `FilesContainer<B>` wrapper |
 
 **Backends focus on storage.** Keep them simple.

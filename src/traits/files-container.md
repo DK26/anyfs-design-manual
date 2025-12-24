@@ -27,12 +27,12 @@ let mut fs = FilesContainer::new(MemoryBackend::new());
 With middleware:
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard};
 use anyfs_container::FilesContainer;
 
 // Compose middleware, then wrap in FilesContainer
-let backend = FeatureGatedBackend::new(
-    LimitedBackend::new(SqliteBackend::open("data.db")?)
+let backend = FeatureGuard::new(
+    Quota::new(SqliteBackend::open("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )
 .with_symlinks();
@@ -70,9 +70,9 @@ FilesContainer mirrors std::fs naming:
 
 | Concern | Use Instead |
 |---------|-------------|
-| Quota enforcement | `LimitedBackend<B>` |
-| Feature gating | `FeatureGatedBackend<B>` |
-| Audit logging | `LoggingBackend<B>` |
+| Quota enforcement | `Quota<B>` |
+| Feature gating | `FeatureGuard<B>` |
+| Audit logging | `Tracing<B>` |
 | Path containment | Backend-specific (VRootFsBackend) |
 
 FilesContainer is **purely ergonomic**. If you need policy, compose middleware.
@@ -85,8 +85,8 @@ For Axum-style composition:
 
 ```rust
 let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
-    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGateLayer::new().allow_symlinks());
+    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGuardLayer::new().allow_symlinks());
 ```
 
 ---
@@ -96,10 +96,10 @@ let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
 If you don't need ergonomics, use backends directly:
 
 ```rust
-use anyfs::{MemoryBackend, LimitedBackend};
+use anyfs::{MemoryBackend, Quota};
 use anyfs_backend::VfsBackend;
 
-let mut backend = LimitedBackend::new(MemoryBackend::new())
+let mut backend = Quota::new(MemoryBackend::new())
     .with_max_total_size(100 * 1024 * 1024);
 
 // Use VfsBackend methods directly

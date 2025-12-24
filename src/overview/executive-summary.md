@@ -22,9 +22,9 @@ You get:
 │  FilesContainer<B>                      │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
-│    LimitedBackend<B>                    │  ← Quotas
-│    FeatureGatedBackend<B>               │  ← Security
-│    LoggingBackend<B>                    │  ← Audit
+│    Quota<B>                    │  ← Quotas
+│    FeatureGuard<B>               │  ← Security
+│    Tracing<B>                    │  ← Audit
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Storage
 └─────────────────────────────────────────┘
@@ -38,9 +38,9 @@ You get:
 |---------|-----------------|
 | Multi-tenant isolation | Separate backend instances per tenant |
 | Portability | SQLite backend: tenant data = single `.db` file |
-| Security | FeatureGatedBackend disables dangerous features by default |
-| Resource control | LimitedBackend enforces quotas |
-| Audit compliance | LoggingBackend records all operations |
+| Security | FeatureGuard disables dangerous features by default |
+| Resource control | Quota enforces quotas |
+| Audit compliance | Tracing records all operations |
 | Custom storage | Implement VfsBackend for any medium |
 
 ---
@@ -66,12 +66,12 @@ You get:
 ## Quick example
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard};
 use anyfs_container::FilesContainer;
 
 // Compose: storage + limits + security
-let backend = FeatureGatedBackend::new(
-    LimitedBackend::new(SqliteBackend::open("tenant.db")?)
+let backend = FeatureGuard::new(
+    Quota::new(SqliteBackend::open("tenant.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )
 .with_symlinks();

@@ -13,13 +13,13 @@ This file captures the decisions for the current AnyFS design.
 | ADR-003 | `impl AsRef<Path>` for all path parameters | Accepted |
 | ADR-004 | Tower-style middleware pattern | Accepted |
 | ADR-005 | `std::fs`-aligned method names | Accepted |
-| ADR-006 | LimitedBackend for quota enforcement | Accepted |
-| ADR-007 | FeatureGatedBackend for least-privilege | Accepted |
+| ADR-006 | Quota for quota enforcement | Accepted |
+| ADR-007 | FeatureGuard for least-privilege | Accepted |
 | ADR-008 | FilesContainer as thin ergonomic wrapper | Accepted |
 | ADR-009 | Built-in backends are feature-gated | Accepted |
 | ADR-010 | Sync-first, async-ready design | Accepted |
 | ADR-011 | Layer trait for standardized composition | Accepted |
-| ADR-012 | TracingBackend for instrumentation | Accepted |
+| ADR-012 | Tracing for instrumentation | Accepted |
 | ADR-013 | VfsBackendExt for extension methods | Accepted |
 | ADR-014 | Optional Bytes support | Accepted |
 | ADR-015 | Contextual VfsError | Accepted |
@@ -41,7 +41,7 @@ This file captures the decisions for the current AnyFS design.
 | Crate | Purpose |
 |-------|---------|
 | `anyfs-backend` | Minimal contract: `VfsBackend` trait, `Layer` trait, `VfsBackendExt`, types |
-| `anyfs` | Backends + middleware (LimitedBackend, FeatureGatedBackend, TracingBackend) |
+| `anyfs` | Backends + middleware (Quota, FeatureGuard, Tracing) |
 | `anyfs-container` | Ergonomic wrapper: `FilesContainer<B>`, `BackendStack` builder |
 
 **Why:**
@@ -75,9 +75,9 @@ This file captures the decisions for the current AnyFS design.
 
 **Example:**
 ```rust
-let backend = TracingBackend::new(
-    FeatureGatedBackend::new(
-        LimitedBackend::new(SqliteBackend::open("data.db")?)
+let backend = Tracing::new(
+    FeatureGuard::new(
+        Quota::new(SqliteBackend::open("data.db")?)
     )
 );
 ```
@@ -92,9 +92,9 @@ let backend = TracingBackend::new(
 
 ---
 
-## ADR-006: LimitedBackend for quota enforcement
+## ADR-006: Quota for quota enforcement
 
-**Decision:** Quota/limit enforcement is handled by `LimitedBackend<B>` middleware, not by backends or FilesContainer.
+**Decision:** Quota/limit enforcement is handled by `Quota<B>` middleware, not by backends or FilesContainer.
 
 **Configuration:**
 - `with_max_total_size(bytes)` - total storage limit
@@ -110,9 +110,9 @@ let backend = TracingBackend::new(
 
 ---
 
-## ADR-007: FeatureGatedBackend for least-privilege
+## ADR-007: FeatureGuard for least-privilege
 
-**Decision:** Dangerous features (symlinks, hard links, permission mutation) are disabled by default via `FeatureGatedBackend<B>` middleware.
+**Decision:** Dangerous features (symlinks, hard links, permission mutation) are disabled by default via `FeatureGuard<B>` middleware.
 
 **Configuration:**
 - `.with_symlinks()` - enable symlink creation/following
@@ -139,9 +139,9 @@ When disabled, operations return `VfsError::FeatureNotEnabled`.
 - Delegates all operations to the wrapped backend
 
 **What it does NOT do:**
-- Quota enforcement (use LimitedBackend)
-- Feature gating (use FeatureGatedBackend)
-- Instrumentation (use TracingBackend)
+- Quota enforcement (use Quota)
+- Feature gating (use FeatureGuard)
+- Instrumentation (use Tracing)
 - Any other policy
 
 **Why:**
@@ -200,7 +200,7 @@ pub trait AsyncVfsBackend: Send + Sync {
 **Migration notes:**
 - `AsyncVfsBackend` would be a separate trait, not replacing `VfsBackend`
 - Blanket impl possible: `impl<T: VfsBackend> AsyncVfsBackend for T` using `spawn_blocking`
-- Middleware would need async variants: `AsyncLimitedBackend<B>`, etc.
+- Middleware would need async variants: `AsyncQuota<B>`, etc.
 - No breaking changes to existing sync API
 
 **Why not async now:**
@@ -230,15 +230,15 @@ pub trait Layer<B: VfsBackend> {
 **Example:**
 ```rust
 let backend = SqliteBackend::open("data.db")?
-    .layer(LimitedLayer::new().max_total_size(100_000))
+    .layer(QuotaLayer::new().max_total_size(100_000))
     .layer(TracingLayer::new());
 ```
 
 ---
 
-## ADR-012: TracingBackend for instrumentation
+## ADR-012: Tracing for instrumentation
 
-**Decision:** Use `TracingBackend<B>` integrated with the `tracing` ecosystem instead of a custom logging solution.
+**Decision:** Use `Tracing<B>` integrated with the `tracing` ecosystem instead of a custom logging solution.
 
 **Why:**
 - Works with existing tracing infrastructure (tracing-subscriber, OpenTelemetry, Jaeger).
@@ -248,7 +248,7 @@ let backend = SqliteBackend::open("data.db")?
 
 **Configuration:**
 ```rust
-TracingBackend::new(backend)
+Tracing::new(backend)
     .with_target("anyfs")
     .with_level(tracing::Level::DEBUG)
 ```

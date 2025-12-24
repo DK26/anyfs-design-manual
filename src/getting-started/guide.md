@@ -47,14 +47,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### With Limits (LimitedBackend)
+### With Quotas
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend};
+use anyfs::{SqliteBackend, Quota};
 use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let backend = LimitedBackend::new(SqliteBackend::open_or_create("data.db")?)
+    let backend = Quota::new(SqliteBackend::open_or_create("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)  // 100 MB
         .with_max_file_size(10 * 1024 * 1024);   // 10 MB per file
 
@@ -67,14 +67,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### With Feature Gates (FeatureGatedBackend)
+### With Feature Guards
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGatedBackend};
+use anyfs::{MemoryBackend, FeatureGuard};
 use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let backend = FeatureGatedBackend::new(MemoryBackend::new())
+    let backend = FeatureGuard::new(MemoryBackend::new())
         .with_symlinks()      // Enable symlinks
         .with_hard_links();   // Enable hard links
 
@@ -90,13 +90,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Full Stack (Limits + Feature Gates)
 
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs::{SqliteBackend, Quota, FeatureGuard};
 use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compose: storage -> limits -> feature gates
-    let backend = FeatureGatedBackend::new(
-        LimitedBackend::new(SqliteBackend::open_or_create("data.db")?)
+    let backend = FeatureGuard::new(
+        Quota::new(SqliteBackend::open_or_create("data.db")?)
             .with_max_total_size(100 * 1024 * 1024)
     )
     .with_symlinks();
@@ -168,12 +168,12 @@ fs.remove_dir_all("/old-folder")?;
 
 ## Middleware
 
-### LimitedBackend — Quota Enforcement
+### Quota — Resource Limits
 
 ```rust
-use anyfs::{MemoryBackend, LimitedBackend};
+use anyfs::{MemoryBackend, Quota};
 
-let backend = LimitedBackend::new(MemoryBackend::new())
+let backend = Quota::new(MemoryBackend::new())
     .with_max_total_size(500 * 1024 * 1024)  // 500 MB total
     .with_max_file_size(50 * 1024 * 1024)    // 50 MB per file
     .with_max_node_count(100_000)             // 100K files/dirs
@@ -191,13 +191,13 @@ if !remaining.can_write {
 }
 ```
 
-### FeatureGatedBackend — Least Privilege
+### FeatureGuard — Security
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGatedBackend};
+use anyfs::{MemoryBackend, FeatureGuard};
 
 // All features disabled by default
-let backend = FeatureGatedBackend::new(MemoryBackend::new())
+let backend = FeatureGuard::new(MemoryBackend::new())
     .with_symlinks()                  // Enable symlink operations
     .with_max_symlink_resolution(40)  // Max hops (default: 40)
     .with_hard_links()                // Enable hard links
@@ -206,12 +206,12 @@ let backend = FeatureGatedBackend::new(MemoryBackend::new())
 // Disabled operations return VfsError::FeatureNotEnabled
 ```
 
-### LoggingBackend — Audit Trail
+### Tracing — Instrumentation
 
 ```rust
-use anyfs::{MemoryBackend, LoggingBackend};
+use anyfs::{MemoryBackend, Tracing};
 
-let backend = LoggingBackend::new(MemoryBackend::new())
+let backend = Tracing::new(MemoryBackend::new())
     .with_logger(MyLogger::new());
 ```
 
@@ -256,12 +256,12 @@ fn test_write_and_read() {
 With limits:
 
 ```rust
-use anyfs::{MemoryBackend, LimitedBackend};
+use anyfs::{MemoryBackend, Quota};
 use anyfs_container::FilesContainer;
 
 #[test]
 fn test_quota_exceeded() {
-    let backend = LimitedBackend::new(MemoryBackend::new())
+    let backend = Quota::new(MemoryBackend::new())
         .with_max_total_size(1024);  // 1 KB
     let mut fs = FilesContainer::new(backend);
 
@@ -292,14 +292,14 @@ let fs = FilesContainer::new(MemoryBackend::new());
 
 // With limits
 let fs = FilesContainer::new(
-    LimitedBackend::new(MemoryBackend::new())
+    Quota::new(MemoryBackend::new())
         .with_max_total_size(100 * 1024 * 1024)
 );
 
 // Full security
 let fs = FilesContainer::new(
-    FeatureGatedBackend::new(
-        LimitedBackend::new(SqliteBackend::open("data.db")?)
+    FeatureGuard::new(
+        Quota::new(SqliteBackend::open("data.db")?)
     )
     .with_symlinks()
 );

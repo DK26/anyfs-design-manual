@@ -224,7 +224,7 @@ These questions inform future development but don't block v1:
 | `sync` / `fsync` | ✅ Added to VfsBackend |
 | Async support | ✅ Sync-first, async-ready (ADR-010) |
 | Layer trait | ✅ Tower-style composition (ADR-011) |
-| Logging | ✅ TracingBackend with tracing ecosystem (ADR-012) |
+| Logging | ✅ Tracing with tracing ecosystem (ADR-012) |
 | Extension methods | ✅ VfsBackendExt (ADR-013) |
 | Zero-copy bytes | ✅ Optional `bytes` feature (ADR-014) |
 | Error context | ✅ Contextual VfsError (ADR-015) |
