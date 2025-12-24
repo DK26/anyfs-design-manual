@@ -22,9 +22,9 @@ You get:
 │  FilesContainer<B>                      │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
-│    Quota<B>                    │  ← Quotas
-│    FeatureGuard<B>               │  ← Security
-│    Tracing<B>                    │  ← Audit
+│    Quota<B>                             │  ← Quotas
+│    FeatureGuard<B>                      │  ← Security
+│    Tracing<B>                           │  ← Audit
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Storage
 │  (Memory, SQLite, VRootFs, custom...)   │
@@ -37,11 +37,11 @@ You get:
 
 ## Three-Crate Structure
 
-| Crate | Purpose |
-|-------|---------|
-| `anyfs-backend` | Minimal contract: `VfsBackend` trait + types |
-| `anyfs` | Backends + middleware |
-| `anyfs-container` | Ergonomic `FilesContainer<B>` wrapper |
+| Crate             | Purpose                                      |
+| ----------------- | -------------------------------------------- |
+| `anyfs-backend`   | Minimal contract: `VfsBackend` trait + types |
+| `anyfs`           | Backends + middleware                        |
+| `anyfs-container` | Ergonomic `FilesContainer<B>` wrapper        |
 
 ---
 
@@ -68,21 +68,21 @@ fs.write("/data/file.txt", b"hello")?;
 
 ## How to Use This Manual
 
-| Section | Audience | Purpose |
-|---------|----------|---------|
-| Overview | Stakeholders | One-page understanding |
-| Getting Started | Developers | Practical examples |
-| Design & Architecture | Contributors | Detailed design |
-| Traits & APIs | Backend authors | Contract and types |
-| Implementation | Implementers | Plan + backend guide |
+| Section               | Audience        | Purpose                |
+| --------------------- | --------------- | ---------------------- |
+| Overview              | Stakeholders    | One-page understanding |
+| Getting Started       | Developers      | Practical examples     |
+| Design & Architecture | Contributors    | Detailed design        |
+| Traits & APIs         | Backend authors | Contract and types     |
+| Implementation        | Implementers    | Plan + backend guide   |
 
 ---
 
 ## Status
 
-| Component | Status |
-|-----------|--------|
-| Design | Complete |
+| Component      | Status      |
+| -------------- | ----------- |
+| Design         | Complete    |
 | Implementation | Not started |
 
 ---
