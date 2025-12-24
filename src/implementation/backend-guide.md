@@ -446,3 +446,279 @@ let fs = MemoryBackend::new()
 - [ ] Implements `truncate` (shrink/extend files)
 - [ ] Implements `sync`/`fsync` (durability)
 - [ ] Passes conformance tests
+- [ ] No panics (see below)
+- [ ] Thread-safe (see below)
+- [ ] Documents performance characteristics
+
+---
+
+## Critical Implementation Guidelines
+
+These guidelines are derived from issues found in similar projects (`vfs`, `agentfs`). **All implementations MUST follow these.**
+
+### 1. No Panic Policy
+
+**NEVER use `.unwrap()` or `.expect()` in library code.**
+
+```rust
+// BAD - will panic on missing file
+fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+    let entry = self.entries.get(path.as_ref()).unwrap();  // PANIC!
+    Ok(entry.content.clone())
+}
+
+// GOOD - returns error
+fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+    let path = path.as_ref();
+    let entry = self.entries.get(path)
+        .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    Ok(entry.content.clone())
+}
+```
+
+**Edge cases that must NOT panic:**
+- File doesn't exist
+- Directory doesn't exist
+- Path is empty string
+- Path is invalid UTF-8 (if using OsStr)
+- Parent directory missing
+- Trying to read a directory as a file
+- Trying to list a file as a directory
+- Concurrent access conflicts
+
+### 2. Thread Safety
+
+Backends must be safe for concurrent access. Use appropriate synchronization:
+
+```rust
+use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub struct MemoryBackend {
+    entries: Arc<RwLock<HashMap<PathBuf, Entry>>>,
+}
+
+impl VfsBackend for MemoryBackend {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+        let entries = self.entries.read()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+        let mut entries = self.entries.write()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+}
+```
+
+**Common race conditions to avoid:**
+- `create_dir_all` called concurrently for same path
+- `read` during `write` to same file
+- `read_dir` while directory is being modified
+- `rename` with concurrent access to source or destination
+
+### 3. Path Normalization
+
+Normalize paths consistently. Recommended approach:
+
+```rust
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = Vec::new();
+
+    for component in path.components() {
+        match component {
+            Component::RootDir => {
+                components.clear();
+                components.push(Component::RootDir);
+            }
+            Component::CurDir => {
+                // Skip "."
+            }
+            Component::ParentDir => {
+                // Go up, but don't go past root
+                if components.len() > 1 {
+                    components.pop();
+                }
+            }
+            Component::Normal(name) => {
+                components.push(Component::Normal(name));
+            }
+            Component::Prefix(_) => {
+                // Windows prefix - handle appropriately
+            }
+        }
+    }
+
+    components.iter().collect()
+}
+```
+
+**Path edge cases to test:**
+| Input | Expected Output |
+|-------|-----------------|
+| `/foo/../bar` | `/bar` |
+| `/foo/./bar` | `/foo/bar` |
+| `//double//slash` | `/double/slash` |
+| `/` | `/` |
+| `` (empty) | Error |
+| `/foo/bar/` | `/foo/bar` (or keep trailing, be consistent) |
+
+### 4. Error Messages
+
+Include context in errors for debugging:
+
+```rust
+// BAD - no context
+Err(VfsError::NotFound)
+
+// GOOD - includes path
+Err(VfsError::NotFound { path: path.to_path_buf() })
+
+// BETTER - includes operation context
+Err(VfsError::Io {
+    path: path.to_path_buf(),
+    operation: "read",
+    source: io_error,
+})
+```
+
+### 5. Drop Implementation
+
+Ensure cleanup happens correctly:
+
+```rust
+impl Drop for SqliteBackend {
+    fn drop(&mut self) {
+        // Flush any pending writes
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync on drop: {}", e);
+        }
+    }
+}
+```
+
+### 6. Performance Documentation
+
+Document the complexity of operations:
+
+```rust
+/// Memory-based virtual filesystem backend.
+///
+/// # Performance Characteristics
+///
+/// | Operation | Complexity | Notes |
+/// |-----------|------------|-------|
+/// | `read` | O(1) | HashMap lookup |
+/// | `write` | O(n) | n = data size |
+/// | `read_dir` | O(k) | k = entries in directory |
+/// | `create_dir_all` | O(d) | d = path depth |
+/// | `remove_dir_all` | O(n) | n = total descendants |
+///
+/// # Thread Safety
+///
+/// All operations are thread-safe. Uses `RwLock` internally.
+/// Multiple concurrent reads are allowed.
+/// Writes are exclusive.
+pub struct MemoryBackend { ... }
+```
+
+---
+
+## Testing Requirements
+
+Your backend MUST pass these test categories:
+
+### Basic Functionality
+```rust
+#[test]
+fn test_read_write_roundtrip() { ... }
+
+#[test]
+fn test_create_dir_and_list() { ... }
+
+#[test]
+fn test_remove_file() { ... }
+```
+
+### Edge Cases (No Panics)
+```rust
+#[test]
+fn test_read_nonexistent_returns_error() {
+    let backend = create_backend();
+    assert!(matches!(
+        backend.read("/nonexistent"),
+        Err(VfsError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn test_read_dir_on_file_returns_error() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+    assert!(matches!(
+        backend.read_dir("/file.txt"),
+        Err(VfsError::NotADirectory { .. })
+    ));
+}
+
+#[test]
+fn test_empty_path_returns_error() {
+    let backend = create_backend();
+    assert!(backend.read("").is_err());
+}
+```
+
+### Thread Safety
+```rust
+#[test]
+fn test_concurrent_reads() {
+    let backend = Arc::new(create_backend_with_data());
+    let handles: Vec<_> = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            for _ in 0..100 {
+                backend.read("/test.txt").unwrap();
+            }
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+
+#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(RwLock::new(create_backend()));
+    let handles: Vec<_> = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let mut backend = backend.write().unwrap();
+            // Should not panic or corrupt state
+            let _ = backend.create_dir_all("/a/b/c/d");
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+```
+
+### Path Normalization
+```rust
+#[test]
+fn test_path_with_dotdot() {
+    let mut backend = create_backend();
+    backend.create_dir_all("/foo/bar").unwrap();
+    backend.write("/foo/bar/test.txt", b"data").unwrap();
+
+    // These should all access the same file
+    assert_eq!(backend.read("/foo/bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/bar/../bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/./bar/test.txt").unwrap(), b"data");
+}
+```

@@ -779,3 +779,51 @@ Middleware passes `FileContent` through unchanged - no special handling needed.
 | How to compose middleware? | Use `Layer` trait or `BackendStack` builder |
 | Where do convenience methods go? | `VfsBackendExt` (extension trait) |
 | Zero-copy bytes? | Enable `bytes` feature for `Bytes` instead of `Vec<u8>` |
+
+---
+
+## Implementation Requirements
+
+**These are non-negotiable.** Derived from issues in `vfs` and `agentfs` projects.
+
+### 1. No Panic Policy
+
+```rust
+// NEVER do this:
+self.entries.get(&path).unwrap()
+
+// ALWAYS do this:
+self.entries.get(&path).ok_or_else(|| VfsError::NotFound { path })?
+```
+
+### 2. Thread Safety
+
+- `MemoryBackend`: Use `Arc<RwLock<...>>`
+- `SqliteBackend`: Use WAL mode, handle `SQLITE_BUSY`
+- Test with concurrent stress tests (100 threads, 1000 ops each)
+
+### 3. Error Context
+
+```rust
+// Include path and operation in errors:
+VfsError::NotFound { path: path.to_path_buf() }
+VfsError::PermissionDenied { path, operation: "write" }
+```
+
+### 4. Path Edge Cases
+
+Test these:
+- `/foo/../bar` → `/bar`
+- `//double//slash` → `/double/slash`
+- Empty path → Error (not panic)
+- Unicode paths
+- Very long paths
+
+### 5. Documentation
+
+Every backend/middleware documents:
+- Thread safety guarantees
+- Performance characteristics (O(1) vs O(n))
+- Platform-specific behavior
+
+See `src/implementation/plan.md` for full guidelines and `src/implementation/lessons-learned.md` for background.

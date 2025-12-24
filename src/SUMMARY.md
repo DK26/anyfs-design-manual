@@ -52,6 +52,7 @@
 
 - [Implementation Plan](./implementation/plan.md)
 - [Backend Implementer's Guide](./implementation/backend-guide.md)
+- [Lessons from Similar Projects](./implementation/lessons-learned.md)
 
 ---
 
