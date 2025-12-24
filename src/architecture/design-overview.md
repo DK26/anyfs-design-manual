@@ -24,7 +24,7 @@ Anyone can:
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │    LimitedBackend<B>                    │  ← Quota enforcement
-│    LoggingBackend<B>                    │  ← Audit logging
+│    TracingBackend<B>                    │  ← Instrumentation (tracing ecosystem)
 │    FeatureGatedBackend<B>               │  ← Symlink/hardlink whitelist
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Pure storage + fs semantics
@@ -38,7 +38,7 @@ Anyone can:
 |-------|----------------|
 | `VfsBackend` | Storage + filesystem semantics |
 | `LimitedBackend<B>` | Quota enforcement |
-| `LoggingBackend<B>` | Audit trail |
+| `TracingBackend<B>` | Instrumentation / audit trail |
 | `FeatureGatedBackend<B>` | Feature whitelist |
 | `FilesContainer<B>` | Ergonomic std::fs-aligned API |
 
@@ -48,9 +48,9 @@ Anyone can:
 
 | Crate | Purpose | Contains |
 |-------|---------|----------|
-| `anyfs-backend` | Minimal contract | `VfsBackend` trait + types |
-| `anyfs` | Backends + middleware | Built-in backends, `LimitedBackend`, `LoggingBackend`, `FeatureGatedBackend` |
-| `anyfs-container` | Ergonomic wrapper | `FilesContainer<B>` (thin std::fs wrapper) |
+| `anyfs-backend` | Minimal contract | `VfsBackend` trait, `Layer` trait, types, `VfsBackendExt` |
+| `anyfs` | Backends + middleware | Built-in backends, `LimitedBackend`, `TracingBackend`, `FeatureGatedBackend` |
+| `anyfs-container` | Ergonomic wrapper | `FilesContainer<B>`, `BackendStack` builder |
 
 ### Dependency Graph
 
@@ -159,16 +159,26 @@ let backend = FeatureGatedBackend::new(MemoryBackend::new())
 
 When a feature is disabled, operations return `VfsError::FeatureNotEnabled`.
 
-### LoggingBackend<B>
+### TracingBackend<B>
 
-Records all operations for audit trails.
+Integrates with the [tracing](https://docs.rs/tracing) ecosystem for structured logging and instrumentation.
 
 ```rust
-use anyfs::{SqliteBackend, LoggingBackend};
+use anyfs::{SqliteBackend, TracingBackend};
 
-let backend = LoggingBackend::new(SqliteBackend::open("data.db")?)
-    .with_logger(MyLogger::new());
+let backend = TracingBackend::new(SqliteBackend::open("data.db")?)
+    .with_target("anyfs")           // tracing target
+    .with_level(tracing::Level::DEBUG);
+
+// Users configure tracing subscribers as they prefer
+tracing_subscriber::fmt::init();
 ```
+
+**Why tracing instead of custom logging?**
+- Works with existing tracing infrastructure
+- Structured logging with spans
+- Compatible with OpenTelemetry, Jaeger, etc.
+- Users choose their subscriber (console, file, distributed tracing)
 
 ---
 
@@ -189,12 +199,42 @@ let content = fs.read("/documents/hello.txt")?;
 
 ---
 
+## Layer Trait (in `anyfs-backend`)
+
+The `Layer` trait (inspired by Tower) standardizes middleware composition:
+
+```rust
+/// A layer that wraps a backend to add functionality.
+pub trait Layer<B: VfsBackend> {
+    type Backend: VfsBackend;
+    fn layer(self, backend: B) -> Self::Backend;
+}
+```
+
+Each middleware provides a corresponding `Layer` implementation:
+
+```rust
+// LimitedLayer, TracingLayer, FeatureGateLayer, etc.
+pub struct LimitedLayer { /* config */ }
+
+impl<B: VfsBackend> Layer<B> for LimitedLayer {
+    type Backend = LimitedBackend<B>;
+    fn layer(self, backend: B) -> Self::Backend {
+        LimitedBackend::new(backend).with_limits(self.limits)
+    }
+}
+```
+
+---
+
 ## Composing Middleware
 
 Middleware composes by wrapping. Order matters - innermost applies first.
 
+### Manual Composition
+
 ```rust
-use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend, LoggingBackend};
+use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
 use anyfs_container::FilesContainer;
 
 // Build from inside out:
@@ -206,18 +246,40 @@ let limited = LimitedBackend::new(backend)
 let gated = FeatureGatedBackend::new(limited)
     .with_symlinks();
 
-let logged = LoggingBackend::new(gated);
+let traced = TracingBackend::new(gated);
 
-let mut fs = FilesContainer::new(logged);
+let mut fs = FilesContainer::new(traced);
 ```
 
-Or use the layer helper for Axum-style composition:
+### Layer-based Composition
+
+Use the `Layer` trait for Axum-style composition:
 
 ```rust
-let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
+use anyfs::{SqliteBackend, LimitedLayer, FeatureGateLayer, TracingLayer};
+
+let backend = SqliteBackend::open("data.db")?
     .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
     .layer(FeatureGateLayer::new().allow_symlinks())
-    .layer(LoggingLayer::new());
+    .layer(TracingLayer::new());
+```
+
+### BackendStack Builder
+
+For complex stacks, use `BackendStack` for a fluent API:
+
+```rust
+use anyfs_container::BackendStack;
+
+let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+    .limited(|l| l
+        .max_total_size(100 * 1024 * 1024)
+        .max_file_size(10 * 1024 * 1024))
+    .feature_gated(|g| g
+        .allow_symlinks()
+        .allow_hard_links())
+    .traced()
+    .into_container();
 ```
 
 ---
@@ -255,7 +317,139 @@ Security is achieved through composition:
 | Path containment | Backend-specific (VRootFsBackend uses strict-path) |
 | Resource exhaustion | `LimitedBackend` enforces quotas |
 | Feature restriction | `FeatureGatedBackend` disables dangerous features |
-| Audit trail | `LoggingBackend` records operations |
+| Audit trail | `TracingBackend` instruments operations |
 | Tenant isolation | Separate backend instances |
 
 **Defense in depth:** Compose multiple middleware layers for comprehensive security.
+
+---
+
+## Extension Traits (in `anyfs-backend`)
+
+The `VfsBackendExt` trait provides convenience methods without modifying `VfsBackend`:
+
+```rust
+use serde::{Serialize, de::DeserializeOwned};
+
+/// Extension methods for VfsBackend (auto-implemented for all backends).
+pub trait VfsBackendExt: VfsBackend {
+    /// Read and deserialize JSON.
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, VfsError> {
+        let bytes = self.read(path)?;
+        serde_json::from_slice(&bytes).map_err(|e| VfsError::Deserialization(e.to_string()))
+    }
+
+    /// Serialize and write JSON.
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), VfsError> {
+        let bytes = serde_json::to_vec(value).map_err(|e| VfsError::Serialization(e.to_string()))?;
+        self.write(path, &bytes)
+    }
+
+    /// Check if path is a file.
+    fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+        self.metadata(path).map(|m| m.file_type == FileType::File)
+    }
+
+    /// Check if path is a directory.
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+        self.metadata(path).map(|m| m.file_type == FileType::Directory)
+    }
+}
+
+// Blanket implementation for all backends
+impl<B: VfsBackend> VfsBackendExt for B {}
+```
+
+Users can define their own extension traits for domain-specific operations.
+
+---
+
+## Optional Features
+
+### Bytes Support (feature: `bytes`)
+
+For zero-copy efficiency, enable the `bytes` feature to use `Bytes` instead of `Vec<u8>`:
+
+```toml
+anyfs = { version = "0.1", features = ["bytes"] }
+```
+
+```rust
+use bytes::Bytes;
+
+// With bytes feature, read returns Bytes (O(1) slicing)
+let data: Bytes = backend.read("/large-file.bin")?;
+let slice = data.slice(1000..2000);  // Zero-copy!
+```
+
+**When to use:**
+- Large file handling with frequent slicing
+- Network-backed storage
+- Streaming scenarios
+
+**Default:** `Vec<u8>` (no extra dependency)
+
+---
+
+## Error Types
+
+`VfsError` includes context for better debugging:
+
+```rust
+pub enum VfsError {
+    /// Path not found.
+    NotFound {
+        path: PathBuf,
+        operation: &'static str,  // "read", "metadata", etc.
+    },
+
+    /// Path already exists.
+    AlreadyExists {
+        path: PathBuf,
+        operation: &'static str,
+    },
+
+    /// Expected a file, found directory.
+    NotAFile { path: PathBuf },
+
+    /// Expected a directory, found file.
+    NotADirectory { path: PathBuf },
+
+    /// Directory not empty (for remove_dir).
+    DirectoryNotEmpty { path: PathBuf },
+
+    /// Quota exceeded.
+    QuotaExceeded {
+        limit: u64,
+        requested: u64,
+        usage: u64,
+    },
+
+    /// File size limit exceeded.
+    FileSizeExceeded {
+        path: PathBuf,
+        size: u64,
+        limit: u64,
+    },
+
+    /// Feature not enabled (from FeatureGatedBackend).
+    FeatureNotEnabled {
+        feature: &'static str,  // "symlinks", "hard_links", "permissions"
+        operation: &'static str,
+    },
+
+    /// Serialization error (from VfsBackendExt).
+    Serialization(String),
+
+    /// Deserialization error (from VfsBackendExt).
+    Deserialization(String),
+
+    /// Backend-specific error.
+    Backend(String),
+
+    /// I/O error.
+    Io(std::io::Error),
+}
+```
+
+All error variants include enough context for meaningful error messages.

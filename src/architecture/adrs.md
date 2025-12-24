@@ -18,6 +18,11 @@ This file captures the decisions for the current AnyFS design.
 | ADR-008 | FilesContainer as thin ergonomic wrapper | Accepted |
 | ADR-009 | Built-in backends are feature-gated | Accepted |
 | ADR-010 | Sync-first, async-ready design | Accepted |
+| ADR-011 | Layer trait for standardized composition | Accepted |
+| ADR-012 | TracingBackend for instrumentation | Accepted |
+| ADR-013 | VfsBackendExt for extension methods | Accepted |
+| ADR-014 | Optional Bytes support | Accepted |
+| ADR-015 | Contextual VfsError | Accepted |
 
 ---
 
@@ -35,9 +40,9 @@ This file captures the decisions for the current AnyFS design.
 
 | Crate | Purpose |
 |-------|---------|
-| `anyfs-backend` | Minimal contract: `VfsBackend` trait + types |
-| `anyfs` | Backends + middleware (LimitedBackend, FeatureGatedBackend, LoggingBackend) |
-| `anyfs-container` | Thin ergonomic wrapper: `FilesContainer<B>` |
+| `anyfs-backend` | Minimal contract: `VfsBackend` trait, `Layer` trait, `VfsBackendExt`, types |
+| `anyfs` | Backends + middleware (LimitedBackend, FeatureGatedBackend, TracingBackend) |
+| `anyfs-container` | Ergonomic wrapper: `FilesContainer<B>`, `BackendStack` builder |
 
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
@@ -70,7 +75,7 @@ This file captures the decisions for the current AnyFS design.
 
 **Example:**
 ```rust
-let backend = LoggingBackend::new(
+let backend = TracingBackend::new(
     FeatureGatedBackend::new(
         LimitedBackend::new(SqliteBackend::open("data.db")?)
     )
@@ -136,7 +141,7 @@ When disabled, operations return `VfsError::FeatureNotEnabled`.
 **What it does NOT do:**
 - Quota enforcement (use LimitedBackend)
 - Feature gating (use FeatureGatedBackend)
-- Logging (use LoggingBackend)
+- Instrumentation (use TracingBackend)
 - Any other policy
 
 **Why:**
@@ -202,3 +207,114 @@ pub trait AsyncVfsBackend: Send + Sync {
 - Complexity without benefit - all current backends are sync
 - Rust 1.75 makes async traits easy, so adding later is low-cost
 - Better to wait for real async backend requirements
+
+---
+
+## ADR-011: Layer trait for standardized composition
+
+**Decision:** Provide a `Layer` trait (inspired by Tower) that standardizes middleware composition.
+
+```rust
+pub trait Layer<B: VfsBackend> {
+    type Backend: VfsBackend;
+    fn layer(self, backend: B) -> Self::Backend;
+}
+```
+
+**Why:**
+- Standardized composition pattern familiar to Tower/Axum users.
+- IDE autocomplete for available layers.
+- Enables `BackendStack` fluent builder in anyfs-container.
+- Each middleware provides a corresponding `*Layer` type.
+
+**Example:**
+```rust
+let backend = SqliteBackend::open("data.db")?
+    .layer(LimitedLayer::new().max_total_size(100_000))
+    .layer(TracingLayer::new());
+```
+
+---
+
+## ADR-012: TracingBackend for instrumentation
+
+**Decision:** Use `TracingBackend<B>` integrated with the `tracing` ecosystem instead of a custom logging solution.
+
+**Why:**
+- Works with existing tracing infrastructure (tracing-subscriber, OpenTelemetry, Jaeger).
+- Structured logging with spans for each operation.
+- Users choose their subscriber - no logging framework lock-in.
+- Consistent with modern Rust ecosystem practices.
+
+**Configuration:**
+```rust
+TracingBackend::new(backend)
+    .with_target("anyfs")
+    .with_level(tracing::Level::DEBUG)
+```
+
+---
+
+## ADR-013: VfsBackendExt for extension methods
+
+**Decision:** Provide `VfsBackendExt` trait with convenience methods, auto-implemented for all backends.
+
+```rust
+pub trait VfsBackendExt: VfsBackend {
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, VfsError>;
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), VfsError>;
+    fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, VfsError>;
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, VfsError>;
+}
+
+impl<B: VfsBackend> VfsBackendExt for B {}
+```
+
+**Why:**
+- Adds convenience without bloating `VfsBackend` trait.
+- Blanket impl means all backends get these methods for free.
+- Users can define their own extension traits for domain-specific operations.
+- Follows Rust convention (e.g., `IteratorExt`, `StreamExt`).
+
+---
+
+## ADR-014: Optional Bytes support
+
+**Decision:** Support the `bytes` crate via an optional feature for zero-copy efficiency.
+
+```toml
+anyfs = { version = "0.1", features = ["bytes"] }
+```
+
+**Why:**
+- `Bytes` provides O(1) slicing via reference counting.
+- Beneficial for large file handling, network backends, streaming.
+- Optional - users who don't need it avoid the dependency.
+- Default remains `Vec<u8>` for simplicity.
+
+**Trade-off:** With `bytes` feature, `read` returns `Bytes` instead of `Vec<u8>`. This is a compile-time choice.
+
+---
+
+## ADR-015: Contextual VfsError
+
+**Decision:** `VfsError` variants include context for better debugging.
+
+```rust
+VfsError::NotFound {
+    path: PathBuf,
+    operation: &'static str,  // "read", "metadata", etc.
+}
+
+VfsError::QuotaExceeded {
+    limit: u64,
+    requested: u64,
+    usage: u64,
+}
+```
+
+**Why:**
+- Error messages include enough context to understand what failed.
+- No need for separate error context crate (like anyhow) for basic usage.
+- Operation field helps distinguish "file not found during read" vs "during metadata".
+- Quota errors include all relevant numbers for debugging.

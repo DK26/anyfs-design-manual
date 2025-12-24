@@ -12,10 +12,10 @@ anyfs = "0.1"
 anyfs-container = "0.1"  # Optional
 ```
 
-With backends:
+With backends and optional features:
 
 ```toml
-anyfs = { version = "0.1", features = ["sqlite", "vrootfs"] }
+anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 ```
 
 ---
@@ -23,7 +23,7 @@ anyfs = { version = "0.1", features = ["sqlite", "vrootfs"] }
 ## Creating a Backend Stack
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs::{MemoryBackend, SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
 use anyfs_container::FilesContainer;
 
 // Simple
@@ -36,15 +36,34 @@ let fs = FilesContainer::new(
         .with_max_file_size(10 * 1024 * 1024)
 );
 
-// Full stack
+// Full stack (manual composition)
 let fs = FilesContainer::new(
-    FeatureGatedBackend::new(
-        LimitedBackend::new(SqliteBackend::open("data.db")?)
-            .with_max_total_size(100 * 1024 * 1024)
+    TracingBackend::new(
+        FeatureGatedBackend::new(
+            LimitedBackend::new(SqliteBackend::open("data.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+        .with_symlinks()
+        .with_hard_links()
     )
-    .with_symlinks()
-    .with_hard_links()
 );
+
+// Layer-based composition
+use anyfs::{LimitedLayer, FeatureGateLayer, TracingLayer};
+
+let backend = SqliteBackend::open("data.db")?
+    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGateLayer::new().allow_symlinks())
+    .layer(TracingLayer::new());
+
+// BackendStack builder (fluent API)
+use anyfs_container::BackendStack;
+
+let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+    .limited(|l| l.max_total_size(100 * 1024 * 1024))
+    .feature_gated(|g| g.allow_symlinks())
+    .traced()
+    .into_container();
 ```
 
 ---
@@ -75,6 +94,34 @@ FeatureGatedBackend::new(backend)    // All disabled by default
     .with_max_symlink_resolution(40)  // Max hops
     .with_hard_links()                // Enable hard links
     .with_permissions()               // Enable set_permissions
+```
+
+---
+
+## TracingBackend Methods
+
+```rust
+TracingBackend::new(backend)
+    .with_target("anyfs")             // tracing target
+    .with_level(tracing::Level::DEBUG)
+```
+
+---
+
+## VfsBackendExt Methods
+
+Extension methods available on all backends:
+
+```rust
+use anyfs_backend::VfsBackendExt;
+
+// JSON support
+let config: Config = fs.read_json("/config.json")?;
+fs.write_json("/config.json", &config)?;
+
+// Type checks
+if fs.is_file("/path")? { ... }
+if fs.is_dir("/path")? { ... }
 ```
 
 ---
@@ -142,14 +189,18 @@ fs.fsync("/path")?;                      // Flush writes for one file
 use anyfs_backend::VfsError;
 
 match result {
-    Err(VfsError::NotFound(p)) => ...
-    Err(VfsError::AlreadyExists(p)) => ...
-    Err(VfsError::NotADirectory(p)) => ...
-    Err(VfsError::NotAFile(p)) => ...
-    Err(VfsError::DirectoryNotEmpty(p)) => ...
-    Err(VfsError::QuotaExceeded) => ...
-    Err(VfsError::FileSizeExceeded { size, limit }) => ...
-    Err(VfsError::FeatureNotEnabled(name)) => ...
+    Err(VfsError::NotFound { path, operation }) => {
+        // e.g., path="/file.txt", operation="read"
+    }
+    Err(VfsError::AlreadyExists { path, operation }) => ...
+    Err(VfsError::NotADirectory { path }) => ...
+    Err(VfsError::NotAFile { path }) => ...
+    Err(VfsError::DirectoryNotEmpty { path }) => ...
+    Err(VfsError::QuotaExceeded { limit, requested, usage }) => ...
+    Err(VfsError::FileSizeExceeded { path, size, limit }) => ...
+    Err(VfsError::FeatureNotEnabled { feature, operation }) => ...
+    Err(VfsError::Serialization(msg)) => ...   // from VfsBackendExt
+    Err(VfsError::Deserialization(msg)) => ... // from VfsBackendExt
     Err(e) => ...
 }
 ```
@@ -172,7 +223,17 @@ match result {
 |------|---------|
 | `LimitedBackend<B>` | Quota enforcement |
 | `FeatureGatedBackend<B>` | Least privilege |
-| `LoggingBackend<B>` | Audit trail |
+| `TracingBackend<B>` | Instrumentation (tracing ecosystem) |
+
+---
+
+## Layers
+
+| Layer | Creates |
+|-------|---------|
+| `LimitedLayer` | `LimitedBackend<B>` |
+| `FeatureGateLayer` | `FeatureGatedBackend<B>` |
+| `TracingLayer` | `TracingBackend<B>` |
 
 ---
 
@@ -183,7 +244,9 @@ match result {
 | Type | Description |
 |------|-------------|
 | `VfsBackend` | Core trait |
-| `VfsError` | Error type |
+| `Layer` | Middleware composition trait |
+| `VfsBackendExt` | Extension methods trait |
+| `VfsError` | Error type (with context) |
 | `FileType` | `File`, `Directory`, `Symlink` |
 | `Metadata` | File/dir metadata |
 | `DirEntry` | Directory entry |
@@ -199,10 +262,14 @@ match result {
 | `VRootFsBackend` | Host FS backend |
 | `LimitedBackend<B>` | Quota middleware |
 | `FeatureGatedBackend<B>` | Feature gate middleware |
-| `LoggingBackend<B>` | Logging middleware |
+| `TracingBackend<B>` | Tracing middleware |
+| `LimitedLayer` | Layer for LimitedBackend |
+| `FeatureGateLayer` | Layer for FeatureGatedBackend |
+| `TracingLayer` | Layer for TracingBackend |
 
 ### From `anyfs-container`
 
 | Type | Description |
 |------|-------------|
 | `FilesContainer<B>` | Ergonomic wrapper |
+| `BackendStack` | Fluent builder for middleware stacks |
