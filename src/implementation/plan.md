@@ -1,93 +1,106 @@
-﻿# Implementation Plan
+# Implementation Plan
 
 This plan describes a phased rollout of the AnyFS ecosystem:
 
-- `anyfs-traits`: minimal contract (`VfsBackend` + core types, re-export `VirtualPath`)
-- `anyfs`: built-in backends (feature-gated) + re-exports
-- `anyfs-container`: `FilesContainer<B: VfsBackend>` policy layer (limits + feature whitelist)
+- `anyfs-backend`: Core trait (`VfsBackend`, `Layer`) + types
+- `anyfs`: Built-in backends + middleware (feature-gated)
+- `anyfs-container`: `FilesContainer<B>` ergonomic wrapper
 
 ---
 
-## Phase 1: `anyfs-traits` (core contract)
+## Phase 1: `anyfs-backend` (core contract)
 
-**Goal:** Define the stable backend interface and shared types.
+**Goal:** Define the stable backend interface and composition traits.
 
-- Re-export `strict_path::VirtualPath`
-- Define core types (`Metadata`, `Permissions`, `FileType`, `DirEntry`)
-- Define `VfsError` (errors carry `VirtualPath` where relevant)
-- Define `VfsBackend` trait (20 `std::fs`-aligned, path-based methods)
+- Define `VfsBackend` trait (25 `std::fs`-aligned methods)
+- Define `Layer` trait (Tower-style middleware composition)
+- Define `VfsBackendExt` trait (extension methods)
+- Define core types (`Metadata`, `Permissions`, `FileType`, `DirEntry`, `StatFs`)
+- Define `VfsError` with contextual variants
 
-**Exit criteria:** `anyfs-traits` stands alone with minimal dependencies (`strict-path`, `thiserror`).
+**Exit criteria:** `anyfs-backend` stands alone with minimal dependencies (`thiserror`).
 
 ---
 
-## Phase 2: `anyfs` (built-in backends)
+## Phase 2: `anyfs` (backends + middleware)
 
-**Goal:** Provide a small set of reference/production backends behind Cargo features.
+**Goal:** Provide reference backends and core middleware.
+
+### Backends (feature-gated)
 
 - `memory` (default): `MemoryBackend`
-- `vrootfs` (optional): `VRootFsBackend` using `strict_path::VirtualRoot` for containment
-- `sqlite` (optional): `SqliteBackend` storing an entire filesystem in a single `.db`
+- `sqlite` (optional): `SqliteBackend`
+- `vrootfs` (optional): `VRootFsBackend` using `strict-path` for containment
 
-**Exit criteria:** Each backend implements `VfsBackend` and passes the shared conformance suite.
+### Middleware
+
+- `Quota<B>` + `QuotaLayer` - Resource limits
+- `FeatureGuard<B>` + `FeatureGuardLayer` - Feature whitelist
+- `PathFilter<B>` + `PathFilterLayer` - Path-based access control
+- `ReadOnly<B>` + `ReadOnlyLayer` - Block writes
+- `RateLimit<B>` + `RateLimitLayer` - Operation throttling
+- `Tracing<B>` + `TracingLayer` - Instrumentation
+- `DryRun<B>` + `DryRunLayer` - Log without executing
+- `Cache<B>` + `CacheLayer` - LRU read cache
+- `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
+
+**Exit criteria:** Each backend implements `VfsBackend` and passes conformance suite. Each middleware wraps any `VfsBackend`.
 
 ---
 
-## Phase 3: `anyfs-container` (policy + ergonomics)
+## Phase 3: `anyfs-container` (ergonomics)
 
-**Goal:** Provide the user-facing `std::fs`-aligned API with consistent policy enforcement.
+**Goal:** Provide user-facing ergonomic wrapper.
 
-- `FilesContainer<B>` accepts `impl AsRef<Path>` for ergonomics
-- Centralizes path validation: convert once to `VirtualPath`, then call backend
-- Enforces limits (quota and structural constraints):
-  - `max_total_size`
-  - `max_file_size`
-  - `max_node_count`
-  - `max_dir_entries`
-  - `max_path_depth`
-- Implements a least-privilege feature whitelist (default deny):
-  - `symlinks()` (+ `max_symlink_resolution`, default 40)
-  - `hard_links()`
-  - `permissions()`
+- `FilesContainer<B>` - Thin wrapper with `std::fs`-aligned API
+- Accepts `impl AsRef<Path>` for convenience
+- Delegates all operations to wrapped backend
 
-**Exit criteria:** An application can use `FilesContainer` as a drop-in for common `std::fs` patterns while gaining quotas + default-deny policy.
+**Note:** `FilesContainer` contains NO policy logic. Policy is handled by middleware.
+
+**Exit criteria:** Applications can use `FilesContainer` as drop-in for `std::fs` patterns.
 
 ---
 
 ## Phase 4: Conformance test suite
 
-**Goal:** Prevent backend divergence and make semantics explicit.
+**Goal:** Prevent backend divergence and validate middleware behavior.
 
-Recommended structure:
+### Backend conformance tests
 
-- Backend conformance tests (run against every `VfsBackend` implementation)
-  - `read`/`write`/`append` semantics
-  - directory operations (`create_dir*`, `read_dir`, `remove_dir*`)
-  - `rename` and `copy` semantics
-  - link behavior (`symlink`, `read_link`, `hard_link`, `nlink`)
-  - permissions (`set_permissions`) where meaningful
-- Container policy tests
-  - limit enforcement and usage accounting
-  - whitelist behavior (`FeatureNotEnabled`)
-  - symlink resolution depth limit (when enabled)
+- `read`/`write`/`append` semantics
+- Directory operations (`create_dir*`, `read_dir`, `remove_dir*`)
+- `rename` and `copy` semantics
+- Link behavior (`symlink`, `read_link`, `hard_link`)
+- Streaming I/O (`open_read`, `open_write`)
+- `truncate`, `sync`, `fsync`, `statfs`
 
-**Exit criteria:** All built-in backends pass the same suite; container policy tests are backend-agnostic.
+### Middleware tests
+
+- `Quota`: Limit enforcement, usage tracking
+- `FeatureGuard`: Feature blocking
+- `PathFilter`: Glob pattern matching
+- `RateLimit`: Throttling behavior
+- Middleware composition order
+
+**Exit criteria:** All backends pass same suite; middleware tests are backend-agnostic.
 
 ---
 
 ## Phase 5: Documentation + examples
 
-- Keep `book/src/architecture/design-overview.md` + `book/src/architecture/adrs.md` authoritative
-- Provide at least one complete example per backend
-- Provide a backend implementer guide for `anyfs-traits`
+- Keep `AGENTS.md` and `src/architecture/design-overview.md` authoritative
+- Provide example per backend
+- Provide backend implementer guide
+- Provide middleware implementer guide
 
 ---
 
-## Future work (out of scope for MVP)
+## Future work (post-MVP)
 
-- Streaming I/O (file handles)
-- Async API
-- Import/export helpers (host path <-> container path)
+- Async API (`AsyncVfsBackend` trait)
+- Import/export helpers (host path <-> container)
 - Extended attributes
-- Encryption-at-rest helpers (backend-specific)
-- Capability negotiation (optional): detect when a backend cannot support certain operations
+- Encryption middleware
+- Compression middleware
+- `vfs` crate compatibility adapter

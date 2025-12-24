@@ -6,174 +6,194 @@
 
 ## Overview
 
-The AnyFS ecosystem is designed with security as a primary concern. This document outlines the security model, potential threats, and the guarantees provided by the architecture.
+AnyFS is designed with security as a primary concern. Security policies are enforced via **composable middleware**, not hardcoded in backends or the container wrapper.
 
 ---
 
 ## Threat Model
 
-### In Scope
+### In Scope (Mitigated by Middleware)
 
-| Threat | Description | Mitigation |
+| Threat | Description | Middleware |
 |--------|-------------|------------|
-| **Path traversal** | Attacker attempts to access files outside the container via `../` | Lexical path resolution in `VirtualPath` |
-| **Symlink attacks** | Attacker uses symlinks to bypass controls | Symlinks are disabled by default; when enabled, targets validated and resolution is bounded |
-| **Resource exhaustion** | Attacker fills storage or creates excessive files | Capacity limits enforced by `FilesContainer` |
-| **Tenant data leakage** | One tenant accesses another's data | Complete isolation via separate containers |
+| **Path traversal** | Access files outside allowed paths | `PathFilter` |
+| **Symlink attacks** | Use symlinks to bypass controls | `FeatureGuard` (disabled by default) |
+| **Resource exhaustion** | Fill storage or create excessive files | `Quota` |
+| **Runaway processes** | Excessive operations consuming resources | `RateLimit` |
+| **Unauthorized writes** | Modifications to read-only data | `ReadOnly` |
+| **Sensitive file access** | Access to `.env`, secrets, etc. | `PathFilter` |
 
 ### Out of Scope
 
 | Threat | Reason |
 |--------|--------|
-| **Side-channel attacks** | Timing attacks, cache analysis — requires OS-level mitigations |
+| **Side-channel attacks** | Requires OS-level mitigations |
 | **Physical access** | Disk encryption is application's responsibility |
 | **SQLite vulnerabilities** | Upstream dependency; update regularly |
-| **Denial of service** | Rate limiting is application's responsibility |
+| **Network attacks** | AnyFS is local storage, not network-facing |
 
 ---
 
 ## Security Architecture
 
-### 1. Path Normalization
+### 1. Middleware-Based Policy
 
-All user paths are normalized by `FilesContainer` before reaching the backend:
-
-```rust
-// User input is normalized immediately
-// These attacks are structurally prevented:
-"/../../../etc/passwd"  // → "/etc/passwd" (clamped to root)
-"/data/../../../../tmp" // → "/tmp" (clamped to root)
-```
-
-**Guarantee**: No path can escape the virtual root, regardless of `..` sequences.
-
-### 2. Lexical Path Resolution
-
-Unlike POSIX filesystems, paths are resolved **lexically** without consulting the filesystem:
+Security policies are composable middleware layers:
 
 ```rust
-// POSIX behavior (dangerous):
-// /foo/bar/.. where bar → /etc would resolve to /etc/../ → /
+use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
 
-// AnyFS behavior (safe):
-// /foo/bar/.. always resolves to /foo (pure string manipulation)
+let secure_backend = Tracing::new(           // Audit trail
+    RateLimit::new(                          // Throttle operations
+        PathFilter::new(                     // Sandbox paths
+            FeatureGuard::new(               // Block dangerous features
+                Quota::new(MemoryBackend::new())  // Limit resources
+                    .with_max_total_size(100 * 1024 * 1024)
+            )
+        )
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .deny("**/secrets/**")
+    )
+    .max_ops(1000)
+    .per_second()
+);
 ```
 
-**Guarantee**: Lexical normalization is deterministic. If symlinks are disabled (default), resolution cannot be influenced by filesystem state; if enabled, symlink traversal is contained and bounded.
+### 2. Path Sandboxing (PathFilter)
 
-### Path Containment by Backend Type
+`PathFilter` middleware restricts path access using glob patterns:
+
+```rust
+PathFilter::new(backend)
+    .allow("/workspace/**")    // Allow workspace access
+    .deny("**/.env")           // Block .env files
+    .deny("**/secrets/**")     // Block secrets directories
+    .deny("**/*.key")          // Block key files
+```
+
+**Guarantees:**
+- First matching rule wins
+- No rule = denied (deny by default)
+- `read_dir` filters denied entries from results
+
+### 3. Feature Gating (FeatureGuard)
+
+Dangerous features are disabled by default:
+
+```rust
+FeatureGuard::new(backend)
+    // Symlinks disabled by default
+    // Hard links disabled by default
+    // Permissions disabled by default
+    .with_symlinks()           // Opt-in if needed
+    .with_max_symlink_resolution(40)
+```
+
+**Guarantees:**
+- Symlinks, hard links, permission changes blocked unless enabled
+- Symlink resolution depth is bounded
+
+### 4. Resource Limits (Quota)
+
+`Quota` middleware enforces capacity limits:
+
+```rust
+Quota::new(backend)
+    .with_max_total_size(100 * 1024 * 1024)  // 100 MB total
+    .with_max_file_size(10 * 1024 * 1024)    // 10 MB per file
+    .with_max_node_count(10_000)             // Max files/dirs
+    .with_max_dir_entries(1_000)             // Max per directory
+    .with_max_path_depth(64)                 // Max nesting
+```
+
+**Guarantees:**
+- Writes rejected when limits exceeded
+- Streaming writes tracked via `CountingWriter`
+
+### 5. Rate Limiting (RateLimit)
+
+`RateLimit` middleware throttles operations:
+
+```rust
+RateLimit::new(backend)
+    .max_ops(1000)
+    .per_second()
+```
+
+**Guarantees:**
+- Operations rejected when limit exceeded
+- Protects against runaway processes
+
+### 6. Backend-Level Containment
 
 Different backends achieve containment differently:
 
 | Backend | Containment Mechanism |
 |---------|----------------------|
-| `MemoryBackend` | Isolated by OS process memory—no host filesystem access |
-| `SqliteBackend` | Each container is a separate `.db` file—no path traversal possible |
-| `VRootFsBackend` | Uses `strict-path::VirtualRoot` to clamp all paths to a root directory |
-
-### 3. Symlink Safety (Opt-In)
-
-Symlink safety:
-
-- Symlinks are **disabled by default** (least privilege / whitelist)
-- If enabled, symlink targets are validated
-- Resolution is bounded by a configurable hop limit (default: 40)
-- Symlinks cannot point outside the container
-
-```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FilesContainer;
-
-let mut container = FilesContainer::new(MemoryBackend::new())
-    .with_symlinks()
-    .with_max_symlink_resolution(40);
-
-// Symlink creation validates the target (when enabled)
-container.symlink("/deeply/nested/path", "/shortcut")?;
-
-// Following symlinks respects the depth limit
-container.read("/shortcut")?;  // Max 40 hops
-```
-
-**Guarantee**: Symlink loops are detected; symlinks cannot escape containment (when enabled).
-
-### 4. Capacity Limits
-
-`FilesContainer` enforces configurable limits:
-
-```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FilesContainer;
-
-let container = FilesContainer::new(MemoryBackend::new())
-    .with_max_total_size(100 * 1024 * 1024)  // 100 MB total
-    .with_max_file_size(10 * 1024 * 1024)    // 10 MB per file
-    .with_max_node_count(10_000)              // 10K files/directories
-    .with_max_dir_entries(1_000)              // 1K entries per directory
-    .with_max_path_depth(64);                 // Max directory depth
-```
-
-**Guarantee**: Resource exhaustion attacks are mitigated.
+| `MemoryBackend` | Isolated in process memory |
+| `SqliteBackend` | Each container is a separate `.db` file |
+| `VRootFsBackend` | Uses `strict-path::VirtualRoot` to contain paths |
 
 ---
 
 ## Secure Usage Patterns
 
+### AI Agent Sandbox
+
+```rust
+use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
+use anyfs_container::FilesContainer;
+
+let sandbox = Tracing::new(
+    RateLimit::new(
+        PathFilter::new(
+            FeatureGuard::new(
+                Quota::new(MemoryBackend::new())
+                    .with_max_total_size(50 * 1024 * 1024)
+                    .with_max_file_size(5 * 1024 * 1024)
+            )
+        )
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .deny("**/secrets/**")
+    )
+    .max_ops(1000)
+    .per_second()
+);
+
+let mut fs = FilesContainer::new(sandbox);
+// Agent code can only access /workspace, limited resources, audited
+```
+
 ### Multi-Tenant Isolation
 
 ```rust
-use anyfs::SqliteBackend;
+use anyfs::{SqliteBackend, Quota};
 use anyfs_container::FilesContainer;
 
-// Each tenant gets a completely separate container
-fn create_tenant_storage(tenant_id: &str) -> FilesContainer<SqliteBackend> {
+fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FilesContainer<...> {
     let db_path = format!("tenants/{}.db", tenant_id);
-    let backend = SqliteBackend::create(&db_path).unwrap();
+    let backend = Quota::new(SqliteBackend::open(&db_path).unwrap())
+        .with_max_total_size(quota_bytes);
 
     FilesContainer::new(backend)
-        .with_max_total_size(tenant_quota(tenant_id))
 }
 
-// No path can cross tenant boundaries — they're different files entirely
+// Complete isolation: separate database files
 ```
 
-### Untrusted Input Handling
+### Read-Only Browsing
 
 ```rust
-use anyfs_backend::VfsBackend;
-use anyfs_container::{FilesContainer, ContainerError};
-
-fn handle_user_upload(
-    container: &mut FilesContainer<impl VfsBackend>,
-    user_filename: &str,  // Untrusted input
-    data: &[u8],
-) -> Result<(), ContainerError> {
-    // FilesContainer normalizes the path internally:
-    // - Rejects invalid UTF-8
-    // - Normalizes path (removes .., .)
-    // - Ensures absolute path
-    let path = format!("/uploads/{}", user_filename);
-
-    // Safe to use - container validates before reaching backend
-    container.write(&path, data)?;
-    Ok(())
-}
-```
-
-### Sandboxed Execution
-
-```rust
-use anyfs::MemoryBackend;
+use anyfs::{SqliteBackend, ReadOnly};
 use anyfs_container::FilesContainer;
 
-// Create an isolated sandbox for untrusted code
-let sandbox = FilesContainer::new(MemoryBackend::new())
-    .with_max_total_size(10 * 1024 * 1024)  // 10 MB limit
-    .with_max_file_size(1024 * 1024)         // 1 MB per file
-    .with_max_node_count(100);               // Max 100 files
+let readonly_fs = FilesContainer::new(
+    ReadOnly::new(SqliteBackend::open("archive.db")?)
+);
 
-// Untrusted code can only access this sandbox
-// Cannot escape, cannot exhaust resources
+// All write operations return VfsError::ReadOnly
 ```
 
 ---
@@ -182,37 +202,34 @@ let sandbox = FilesContainer::new(MemoryBackend::new())
 
 ### For Application Developers
 
-- [ ] Set appropriate capacity limits for your use case
-- [ ] Use separate containers for separate tenants/users
-- [ ] Let `FilesContainer` handle path normalization—don't bypass it
-- [ ] Consider restricting link operations if not needed (they're off by default)
-- [ ] Keep dependencies updated (especially `rusqlite` for SQLite backend)
+- [ ] Use `PathFilter` to sandbox untrusted code
+- [ ] Use `Quota` to prevent resource exhaustion
+- [ ] Use `FeatureGuard` (default) to disable dangerous features
+- [ ] Use `RateLimit` for untrusted/shared environments
+- [ ] Use `Tracing` for audit trails
+- [ ] Use separate backends for separate tenants
+- [ ] Keep dependencies updated
 
 ### For Backend Implementers
 
-- [ ] Ensure paths cannot escape the backend's intended scope
-- [ ] For filesystem backends: use `strict-path` for path containment
-- [ ] Handle concurrent access safely (if supporting `Sync`)
-- [ ] Report errors without leaking internal/host paths
+- [ ] Ensure paths cannot escape intended scope
+- [ ] For filesystem backends: use `strict-path` for containment
+- [ ] Handle concurrent access safely
+- [ ] Don't leak internal paths in errors
+
+### For Middleware Implementers
+
+- [ ] Handle streaming I/O appropriately (wrap or block)
+- [ ] Document which operations are intercepted
+- [ ] Fail closed (deny on error)
 
 ---
 
 ## Known Limitations
 
-1. **No encryption at rest**: Use OS-level encryption (LUKS, FileVault) or encrypted SQLite extensions
-2. **No access control lists**: Permissions are opt-in and simple (Unix mode bits only)
-3. **No audit logging**: Application must implement its own logging
-4. **Time-of-check-time-of-use (TOCTOU)**: Like all filesystems, check-then-act patterns may race
-
----
-
-## Reporting Security Issues
-
-If you discover a security vulnerability, please report it responsibly:
-
-1. Do not open a public issue
-2. Email security concerns to the maintainers
-3. Allow time for a fix before public disclosure
+1. **No encryption at rest**: Use OS-level encryption or implement `Encrypted` middleware
+2. **No ACLs**: Simple permissions only (Unix mode bits)
+3. **TOCTOU**: Check-then-act patterns may race (like all filesystems)
 
 ---
 

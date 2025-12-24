@@ -1,183 +1,185 @@
-﻿# AnyFS Container - Technical Comparison with Alternatives
+# AnyFS - Technical Comparison with Alternatives
 
-This document compares AnyFS (especially `anyfs-container`) with existing Rust filesystem abstractions.
-
----
-
-## Executive summary
-
-AnyFS is opinionated around three goals:
-
-- **Safety by construction**: container APIs accept `impl AsRef<Path>`, but backends only see validated `&VirtualPath` (from `strict-path`).
-- **Least privilege by default**: advanced behaviors (symlinks, hard links, permission mutation) are denied unless explicitly enabled per container.
-- **Portable storage**: the SQLite backend turns a tenant filesystem into a single portable `.db` file.
+This document compares AnyFS with existing Rust filesystem abstractions.
 
 ---
 
-## Compared solutions
+## Executive Summary
 
-| Solution | What it is | Where it fits |
-|----------|------------|---------------|
-| `vfs` | General-purpose VFS trait + backends | Simple path-based abstraction, streaming handles |
-| `virtual-filesystem` | std::fs-like interface with sandbox option | Small abstraction for in-process sandboxing |
-| OpenDAL | Object storage access layer | Cloud/object storage (async-first) |
-| AgentFS | SQLite-backed agent sandbox | OS-level sandboxing + auditing (product-focused) |
-| AnyFS | VFS backends + policy layer | Embedded storage, multi-tenant quotas, portability |
+AnyFS is **to filesystems what Axum/Tower is to HTTP**: a composable middleware stack with pluggable backends.
+
+**Key differentiators:**
+- **Composable middleware** - Stack quota, sandboxing, tracing, caching as independent layers
+- **Backend agnostic** - Swap Memory/SQLite/RealFS without code changes
+- **Policy separation** - Storage logic separate from policy enforcement
+- **Third-party extensibility** - Custom backends and middleware depend only on `anyfs-backend`
 
 ---
 
-## 1. Trait / API design
+## Compared Solutions
 
-### `vfs` crate (typical shape)
+| Solution | What it is | Middleware | Multiple Backends |
+|----------|------------|:----------:|:-----------------:|
+| `vfs` | VFS trait + backends | No | Yes |
+| AgentFS | SQLite agent runtime | No | No (SQLite only) |
+| OpenDAL | Object storage layer | Yes | Yes (cloud-focused) |
+| **AnyFS** | VFS + middleware stack | **Yes** | **Yes** |
 
-`vfs` exposes a path-based trait taking raw strings and often returns streaming handles:
+---
+
+## 1. Architecture Comparison
+
+### `vfs` Crate
+
+Path-based trait, no middleware pattern:
 
 ```rust
 pub trait FileSystem: Send + Sync {
-    fn read_dir(&self, path: &str) -> VfsResult<Box<dyn Iterator<Item = String> + Send>>;
-    fn create_dir(&self, path: &str) -> VfsResult<()>;
-    fn open_file(&self, path: &str) -> VfsResult<Box<dyn SeekAndRead + Send>>;
-    fn create_file(&self, path: &str) -> VfsResult<Box<dyn SeekAndWrite + Send>>;
-    fn metadata(&self, path: &str) -> VfsResult<VfsMetadata>;
-    fn exists(&self, path: &str) -> VfsResult<bool>;
-    fn remove_file(&self, path: &str) -> VfsResult<()>;
-    fn remove_dir(&self, path: &str) -> VfsResult<()>;
+    fn read_dir(&self, path: &str) -> VfsResult<Box<dyn Iterator<Item = String>>>;
+    fn open_file(&self, path: &str) -> VfsResult<Box<dyn SeekAndRead>>;
+    fn create_file(&self, path: &str) -> VfsResult<Box<dyn SeekAndWrite>>;
+    // ...
 }
 ```
 
-**Implications:**
-- Backends must validate/normalize paths themselves.
-- The API surface is typically "filesystem flavored", but not standardized on `std::fs` naming.
+**Limitations:**
+- No standard way to add quotas, logging, sandboxing
+- Each concern must be built into backends or wrapped externally
+- Path validation is backend-specific
 
-### AnyFS: two-layer path handling + policy layer
+### AgentFS
 
-AnyFS splits responsibilities across three crates:
-
-- `anyfs-traits`: minimal `VfsBackend` + core types (backend implementers depend only on this)
-- `anyfs`: re-exports `anyfs-traits` and provides built-in backends (feature-gated)
-- `anyfs-container`: `FilesContainer<B: VfsBackend>` plus limits and feature whitelist
-
-**Backend trait (`anyfs-traits`):** validated paths only.
+SQLite-based agent runtime:
 
 ```rust
-use strict_path::VirtualPath;
+// Fixed to SQLite, includes KV store and tool auditing
+let fs = AgentFS::open("agent.db")?;
+fs.write_file("/path", data)?;
+fs.kv_set("key", "value")?;  // KV store bundled
+fs.toolcall_start("tool")?;  // Auditing bundled
+```
 
+**Limitations:**
+- Locked to SQLite (no memory backend for testing, no real FS)
+- Monolithic design (can't use FS without KV/auditing)
+- No composable middleware
+
+### AnyFS
+
+Tower-style middleware + pluggable backends:
+
+```rust
+use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs_container::FilesContainer;
+
+// Compose middleware stack
+let backend = Tracing::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(SqliteBackend::open("data.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+    )
+    .allow("/workspace/**")
+    .deny("**/.env")
+);
+
+let mut fs = FilesContainer::new(backend);
+```
+
+**Advantages:**
+- Add/remove middleware without touching backends
+- Swap backends without touching middleware
+- Third-party extensions via `anyfs-backend` trait
+
+---
+
+## 2. Feature Comparison
+
+| Feature | AnyFS | `vfs` | AgentFS | OpenDAL |
+|---------|:-----:|:-----:|:-------:|:-------:|
+| **Middleware pattern** | Yes | No | No | Yes |
+| **Multiple backends** | Yes | Yes | No | Yes |
+| **SQLite backend** | Yes | No | Yes | No |
+| **Memory backend** | Yes | Yes | No | Yes |
+| **Real FS backend** | Yes | Yes | No | No |
+| **Quota enforcement** | Middleware | Manual | No | No |
+| **Path sandboxing** | Middleware | Manual | No | No |
+| **Feature gating** | Middleware | No | No | No |
+| **Rate limiting** | Middleware | No | No | No |
+| **Tracing/logging** | Middleware | Manual | Built-in | Middleware |
+| **Streaming I/O** | Yes | Yes | Yes | Yes |
+| **Async API** | Future | Partial | No | Yes |
+| **KV store** | No | No | Yes | No |
+
+---
+
+## 3. Middleware Stack
+
+AnyFS middleware can **intercept, transform, and control** operations:
+
+| Middleware | Intercepts | Action |
+|------------|------------|--------|
+| `Quota` | Writes | Reject if over limit |
+| `PathFilter` | All ops | Block denied paths |
+| `FeatureGuard` | Symlinks, etc. | Block disabled features |
+| `RateLimit` | All ops | Throttle per second |
+| `ReadOnly` | Writes | Block all writes |
+| `Tracing` | All ops | Log with tracing crate |
+| `DryRun` | Writes | Log without executing |
+| `Cache` | Reads | LRU caching |
+| `Overlay` | All ops | Union filesystem |
+| Custom | Any | Encryption, compression, ... |
+
+---
+
+## 4. Backend Trait
+
+```rust
 pub trait VfsBackend: Send {
-    fn read(&self, path: &VirtualPath) -> Result<Vec<u8>, VfsError>;
-    fn write(&mut self, path: &VirtualPath, data: &[u8]) -> Result<(), VfsError>;
-    fn read_dir(&self, path: &VirtualPath) -> Result<Vec<DirEntry>, VfsError>;
-    fn symlink(&mut self, original: &VirtualPath, link: &VirtualPath) -> Result<(), VfsError>;
-    fn hard_link(&mut self, original: &VirtualPath, link: &VirtualPath) -> Result<(), VfsError>;
-    fn set_permissions(&mut self, path: &VirtualPath, perm: Permissions) -> Result<(), VfsError>;
-    // ... (20 std::fs-aligned methods total)
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError>;
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError>;
+    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, VfsError>;
+    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, VfsError>;
+    // ... 25 methods total, aligned with std::fs
 }
 ```
 
-**User-facing API (`anyfs-container`):** ergonomic paths, plus enforcement.
-
-```rust
-use std::path::Path;
-
-impl<B: VfsBackend> FilesContainer<B> {
-    pub fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, ContainerError>;
-    pub fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), ContainerError>;
-    // ... names aligned with std::fs
-}
-```
-
-**Implications:**
-- Path validation happens once, centrally, before any backend sees the path.
-- Limits and default-deny features are consistent across all backends.
+**Design principles:**
+- `impl AsRef<Path>` for ergonomics (accepts `&str`, `String`, `PathBuf`)
+- Aligned with `std::fs` naming
+- Streaming I/O via `open_read`/`open_write`
+- `Send` bound for async compatibility
 
 ---
 
-## 2. What makes AnyFS Container better
+## 5. When to Use What
 
-### 2.1 Centralized path safety
-
-- `VirtualPath` normalizes `.` / `..` lexically and prevents escaping the virtual root.
-- Backends do not accept raw strings, reducing the attack surface.
-
-### 2.2 Least privilege (feature whitelist)
-
-Advanced behavior is disabled by default and enabled explicitly per container instance:
-
-```rust
-use anyfs_container::ContainerBuilder;
-
-let container = ContainerBuilder::new(backend)
-    .symlinks()
-    .max_symlink_resolution(40)
-    .hard_links()
-    .permissions()
-    .build()?;
-```
-
-This supports a default-deny posture for apps handling untrusted input.
-
-### 2.3 Built-in quotas and limits
-
-`FilesContainer` can enforce limits like:
-- max total bytes
-- max file size
-- max node count
-- max directory entries
-- max path depth
-
-Backends remain focused on storage, while enforcement stays consistent.
-
-### 2.4 Portable "single file" storage (SQLite backend)
-
-With the `sqlite` backend, an entire tenant filesystem is a single `.db` file that can be copied/moved as a unit.
-
-### 2.5 Dependency control
-
-- `anyfs` uses Cargo features (`memory` default, `sqlite`, `vrootfs`) so users only compile what they use.
-- Custom backend authors depend only on `anyfs-traits`.
+| Use Case | Recommendation |
+|----------|----------------|
+| Need composable middleware | **AnyFS** |
+| Need backend flexibility | **AnyFS** |
+| Need SQLite + Memory + RealFS | **AnyFS** |
+| Need just VFS abstraction (no policies) | `vfs` |
+| Need AI agent runtime with KV + auditing | AgentFS |
+| Need cloud object storage | OpenDAL |
+| Need async-first design | OpenDAL (or wait for AnyFS async) |
 
 ---
 
-## 3. Tradeoffs / downsides
+## 6. Tradeoffs
 
-### 3.1 Fewer backends (initially)
+### AnyFS Advantages
+- Composable middleware pattern
+- Backend-agnostic
+- Third-party extensibility
+- Clean separation of concerns
 
-AnyFS intentionally starts small: Memory, SQLite, and a contained host filesystem backend.
-
-### 3.2 Sync-only, whole-file I/O
-
-The core API is sync-first and the common read/write APIs are whole-buffer (`Vec<u8>`).
-Streaming handles and async APIs are future work.
-
-### 3.3 Not full POSIX
-
-AnyFS aims for `std::fs` alignment, but does not try to exactly emulate OS edge cases.
-
-### 3.4 Cross-platform link semantics
-
-Symlink and hard-link behavior differs across OSes and filesystems. AnyFS exposes links as a virtual concept, but real host filesystem behavior (especially on Windows) may vary.
+### AnyFS Limitations
+- Sync-first (async planned)
+- Smaller ecosystem (new project)
+- Not full POSIX emulation
 
 ---
 
-## 4. When to use what
-
-- Use **AnyFS Container** when you need embedded app storage, multi-tenant isolation, quotas, and portability.
-- Use **`vfs`** when you want a general-purpose VFS abstraction with streaming handles and you are comfortable with backend-specific path validation.
-- Use **OpenDAL** when your "filesystem" is actually object storage (S3/GCS/Azure) and you want async + middleware.
-
----
-
-## 5. Feature matrix (high level)
-
-| Feature | AnyFS Container | `vfs` | OpenDAL |
-|--------|------------------|-------|---------|
-| Path validation centralized | Yes (`VirtualPath`) | No | No |
-| Quotas/limits | Yes | No | No |
-| Least-privilege defaults | Yes (whitelist) | No | N/A |
-| SQLite backend | Yes (feature `sqlite`) | No | No |
-| Host filesystem containment | Yes (`VRootFsBackend` + `VirtualRoot`) | Backend-dependent | N/A |
-| Streaming I/O | Not yet | Often yes | Yes |
-| Async API | Not yet | Backend-dependent | Yes |
-
----
-
-If you spot an inconsistency between this document and `book/src/architecture/design-overview.md` or `AGENTS.md`, treat those as authoritative.
+If this document conflicts with `AGENTS.md` or `src/architecture/design-overview.md`, treat those as authoritative.

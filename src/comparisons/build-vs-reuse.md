@@ -1,4 +1,4 @@
-# AnyFS Container - Build vs. Reuse Analysis
+# AnyFS - Build vs. Reuse Analysis
 
 **Can your goals be achieved with existing crates, or does this project need to exist?**
 
@@ -6,11 +6,12 @@
 
 ## Core Requirements
 
-1. **Tenant isolation** - each tenant gets an isolated namespace
-2. **Capacity limits** - per-tenant quotas and safe failure modes
-3. **Portable storage option** - a single-file backend (SQLite) for easy move/copy/backup
-4. **Filesystem semantics** - `std::fs`-aligned operations including opt-in symlinks and hard links
-5. **Containment by construction** - prevent path traversal and symlink escapes
+1. **Backend flexibility** - swap storage without changing application code
+2. **Composable middleware** - add/remove capabilities (quotas, sandboxing, logging)
+3. **Tenant isolation** - each tenant gets an isolated namespace
+4. **Portable storage** - single-file backend (SQLite) for easy move/copy/backup
+5. **Filesystem semantics** - `std::fs`-aligned operations including symlinks and hard links
+6. **Path containment** - prevent traversal attacks
 
 ---
 
@@ -18,116 +19,127 @@
 
 ### `vfs` crate (Rust)
 
-**What it is:** A general virtual filesystem abstraction with multiple backends.
+**What it provides:**
+- Filesystem abstraction with multiple backends
+- MemoryFS, PhysicalFS, AltrootFS, OverlayFS, EmbeddedFS
 
-**What it does well:**
-- Provides an abstraction layer similar to `std::fs`
-- Has multiple existing backends
+**What it lacks:**
+- SQLite backend
+- Composable middleware pattern
+- Quota/limit enforcement
+- Policy layers (feature gating, path filtering)
 
-**What it does not provide (out of the box):**
-- SQLite-backed portable storage
-- Capacity limits / quota enforcement
-- Built-in tenant isolation patterns
-- Two-layer path handling (ergonomic user paths + validated internal paths)
+### AgentFS (Turso)
 
-You *can* implement a SQLite backend for `vfs`, but you still need to design quotas + isolation yourself.
+**What it provides:**
+- SQLite-based filesystem for AI agents
+- Key-value store
+- Tool call auditing
+- FUSE mounting
+
+**What it lacks:**
+- Multiple backend types (SQLite only)
+- Composable middleware
+- Backend-agnostic abstraction
 
 ### `rusqlite`
 
-**What it is:** SQLite bindings.
+**What it provides:** SQLite bindings, transactions, blobs.
 
-**What it provides:** DB access, transactions, blobs (with features), migrations.
-
-**What it does not provide:** Filesystem semantics or path safety.
+**What it lacks:** Filesystem semantics, quota enforcement.
 
 ### `strict-path`
 
-**What it is:** Path validation + containment primitives (`VirtualRoot`, `VirtualPath`).
+**What it provides:** Path validation and containment (`VirtualRoot`).
 
-**What it provides:** The "can't escape the root" guarantee that the whole design depends on.
-
-**What it does not provide:** Storage backends (SQLite, memory, etc.) or a filesystem API.
-
-### SQLAR (SQLite archive format)
-
-**What it is:** A standardized "files in a SQLite table" archive format.
-
-**Why it's not enough:** It's an archive format, not a filesystem API with quotas, isolation, and link semantics.
+**What it lacks:** Storage backends, filesystem API.
 
 ---
 
 ## Gap Analysis
 
-| Requirement | `vfs` crate | SQLAR | `rusqlite` | `strict-path` |
-|-------------|------------:|------:|-----------:|--------------:|
-| Filesystem API | Yes | No | No | No |
-| SQLite-backed portable storage | No | Yes (format) | Yes (raw) | No |
-| Tenant isolation model | No | No | Manual | No |
-| Capacity limits / quotas | No | No | Manual | No |
-| Path traversal safety | Backend-dependent | Manual | Manual | Yes |
-| Link semantics (symlink + hard link) | Backend-dependent | Not the focus | Manual | N/A |
+| Requirement | `vfs` | AgentFS | `rusqlite` | `strict-path` |
+|-------------|:-----:|:-------:|:----------:|:-------------:|
+| Filesystem API | Yes | Yes | No | No |
+| Multiple backends | Yes | No | N/A | No |
+| SQLite backend | No | Yes | Yes (raw) | No |
+| Composable middleware | No | No | No | No |
+| Quota enforcement | No | No | Manual | No |
+| Path sandboxing | Partial | No | Manual | Yes |
+| Symlink/hard link control | Backend-dep | Yes | Manual | N/A |
 
-**Conclusion:** You can reuse key building blocks, but no existing crate composes into:
-> "A tenant-isolated filesystem API with quotas, backed by SQLite, with containment guarantees."
-
----
-
-## Options
-
-### Option A: Implement a SQLite backend for the `vfs` crate
-
-**Pros**
-- Immediate ecosystem compatibility
-- Familiar trait surface area
-
-**Cons**
-- Still need to build tenant isolation + quotas outside the trait
-- Path containment becomes backend/adapter responsibility
-- Streaming handle APIs can increase SQLite complexity
-
-### Option B: Current AnyFS architecture (recommended)
-
-**Approach:** Keep responsibilities separated into three crates:
-- `anyfs-traits`: `VfsBackend` + types, uses `&VirtualPath`
-- `anyfs`: feature-gated built-in backends (`MemoryBackend`, `VRootFsBackend`, `SqliteBackend`)
-- `anyfs-container`: `FilesContainer` wrapper (ergonomic `impl AsRef<Path>` + quotas)
-
-**Why this exists:** It makes containment a property of the type system and concentrates validation in one place:
-`FilesContainer` validates user paths once, then calls the backend with `&VirtualPath`.
-
-### Option C: Stay on raw `rusqlite` (+ your own helpers)
-
-Fastest to prototype, but it becomes an ad-hoc filesystem without a stable contract, and quotas/isolation are easy to get wrong.
-
-### Option D: Add a compatibility adapter later (optional)
-
-Implement AnyFS as designed, then (optionally) provide an adapter that implements `vfs` traits on top of `FilesContainer`.
+**Conclusion:** No existing crate provides:
+> "Backend-agnostic filesystem abstraction with composable middleware for quotas, sandboxing, and policy enforcement."
 
 ---
 
-## Minimal Example (per-tenant SQLite file)
+## Why AnyFS Exists
+
+AnyFS fills the gap by separating concerns:
+
+| Crate | Responsibility |
+|-------|----------------|
+| `anyfs-backend` | Trait (`VfsBackend`, `Layer`) + types |
+| `anyfs` | Backends + middleware implementations |
+| `anyfs-container` | Ergonomic wrapper (`FilesContainer`) |
+
+The middleware pattern (like Tower/Axum) enables composition:
 
 ```rust
-use anyfs::SqliteBackend;
-use anyfs_container::ContainerBuilder;
+use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs_container::FilesContainer;
 
-let tenant_db = "tenant_123.db";
+let backend = Tracing::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(SqliteBackend::open("tenant.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+    )
+    .allow("/workspace/**")
+);
 
-let mut container = ContainerBuilder::new(SqliteBackend::open_or_create(tenant_db)?)
-    .max_total_size(100 * 1024 * 1024) // 100 MiB per tenant
-    .build()?;
-
-container.create_dir_all("/documents")?;
-container.write("/documents/report.pdf", b"...")?;
-
-// Portability: moving/copying the tenant is just moving/copying the DB file.
-std::fs::copy(tenant_db, "tenant_123.backup.db")?;
+let mut fs = FilesContainer::new(backend);
+fs.write("/workspace/doc.txt", b"hello")?;
 ```
+
+---
+
+## Alternatives Considered
+
+### Option A: Implement SQLite backend for `vfs` crate
+
+**Pros:** Ecosystem compatibility.
+
+**Cons:**
+- No middleware pattern for quotas/policies
+- Would still need to build quota/sandboxing outside the trait
+- Doesn't solve the composability problem
+
+### Option B: Use AgentFS
+
+**Pros:** Already exists, SQLite-based, FUSE support.
+
+**Cons:**
+- Locked to SQLite (can't swap to memory/real FS)
+- No composable middleware
+- Includes KV store and auditing we may not need
+
+### Option C: AnyFS (recommended)
+
+**Pros:**
+- Backend-agnostic (swap storage without code changes)
+- Composable middleware (add/remove capabilities)
+- Clean separation of concerns
+- Third-party extensibility
+
+**Cons:**
+- New project, not yet widely adopted
 
 ---
 
 ## Recommendation
 
-Build on existing primitives (`strict-path`, `rusqlite`, `thiserror`), but keep the AnyFS split (traits / backends / container). That combination is what makes the design both ergonomic and hard to misuse.
+Build AnyFS with reusable primitives (`rusqlite`, `strict-path`, `thiserror`, `tracing`) but maintain the three-crate split. The middleware pattern is what makes the design both flexible and safe.
 
-For a concrete phased rollout, see `book/src/implementation/plan.md`.
+**Compatibility option:** Later, provide an adapter that implements `vfs` traits on top of `VfsBackend` for projects that need `vfs` compatibility.
