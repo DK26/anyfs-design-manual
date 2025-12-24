@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -353,6 +353,29 @@
 <li>No device files, FIFOs, or sockets</li>
 </ul>
 <hr>
+<h2 id="async-support"><a class="header" href="#async-support">Async Support</a></h2>
+<p><strong>Question:</strong> Should VfsBackend be async?</p>
+<p><strong>Decision:</strong> Sync-first, async-ready (see ADR-010).</p>
+<p><strong>Rationale:</strong></p>
+<ul>
+<li>All built-in backends are naturally synchronous (rusqlite, std::fs, memory)</li>
+<li>No runtime dependency (tokio/async-std) required</li>
+<li>Rust 1.75+ has native async traits, so adding later is low-cost</li>
+</ul>
+<p><strong>Async-ready design:</strong></p>
+<ul>
+<li>Trait requires <code>Send</code> - compatible with async executors</li>
+<li>Return types are <code>Result&lt;T, VfsError&gt;</code> - works with async</li>
+<li>No hidden blocking state</li>
+<li>Methods are stateless per-call</li>
+</ul>
+<p><strong>Future path:</strong> When needed (e.g., S3/network backends), add parallel <code>AsyncVfsBackend</code> trait:</p>
+<ul>
+<li>Separate trait, not replacing <code>VfsBackend</code></li>
+<li>Blanket impl possible via <code>spawn_blocking</code></li>
+<li>No breaking changes to existing sync API</li>
+</ul>
+<hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <p>These questions inform future development but don’t block v1:</p>
 <div class="table-wrapper">
@@ -365,9 +388,18 @@
 <tr><td>Path resolution</td><td>Virtual = lexical; VRootFs = OS</td></tr>
 <tr><td>Compression/encryption</td><td>Backend responsibility</td></tr>
 <tr><td>Hooks/callbacks</td><td>Defer to v2</td></tr>
-<tr><td>FUSE mount</td><td>Not in v1, consider v2</td></tr>
+<tr><td>FUSE mount</td><td>Possible with current trait (has truncate, fsync, statfs)</td></tr>
 <tr><td>Type-system protection</td><td>Defer</td></tr>
 <tr><td>POSIX compatibility</td><td>Not a goal</td></tr>
+<tr><td><code>truncate</code></td><td>✅ Added to VfsBackend</td></tr>
+<tr><td><code>sync</code> / <code>fsync</code></td><td>✅ Added to VfsBackend</td></tr>
+<tr><td>Async support</td><td>✅ Sync-first, async-ready (ADR-010)</td></tr>
+<tr><td>Layer trait</td><td>✅ Tower-style composition (ADR-011)</td></tr>
+<tr><td>Logging</td><td>✅ TracingBackend with tracing ecosystem (ADR-012)</td></tr>
+<tr><td>Extension methods</td><td>✅ VfsBackendExt (ADR-013)</td></tr>
+<tr><td>Zero-copy bytes</td><td>✅ Optional <code>bytes</code> feature (ADR-014)</td></tr>
+<tr><td>Error context</td><td>✅ Contextual VfsError (ADR-015)</td></tr>
+<tr><td>BackendStack builder</td><td>✅ Fluent API in anyfs-container</td></tr>
 </tbody>
 </table>
 </div>
@@ -376,13 +408,10 @@
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../review/decisions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../implementation/backend-guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../appendix/pre-container-design.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -390,13 +419,10 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../review/decisions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../implementation/backend-guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../appendix/pre-container-design.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                    </a>
             </nav>
 
         </div>

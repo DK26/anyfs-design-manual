@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,20 +186,22 @@
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p><code>VfsBackend</code> is the minimal interface a storage backend implements.</p>
 <ul>
-<li>It is <strong>path-based</strong> and aligned with <code>std::fs</code> naming and signatures.</li>
+<li>It is <strong>path-based</strong> and aligned with <code>std::fs</code> naming.</li>
 <li>It uses <code>impl AsRef&lt;Path&gt;</code> for paths (same as <code>std::fs</code>).</li>
-<li>It does not include quotas or application policy; that lives in <code>anyfs-container</code>.</li>
+<li>It handles <strong>storage + filesystem semantics only</strong> - no policy, no limits.</li>
 </ul>
-<p>If you are implementing a custom backend, depend only on <code>anyfs-backend</code>.</p>
+<p>Policy (limits, feature gates, logging) is handled by middleware.</p>
 <hr>
-<h2 id="trait-surface"><a class="header" href="#trait-surface">Trait Surface</a></h2>
+<h2 id="trait-definition"><a class="header" href="#trait-definition">Trait Definition</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 pub trait VfsBackend: Send {
-    // Read
+    // ═══════════════════════════════════════════════════════════════════════
+    // READ OPERATIONS
+    // ═══════════════════════════════════════════════════════════════════════
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
     fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, VfsError&gt;;
     fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
@@ -209,7 +211,9 @@ pub trait VfsBackend: Send {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, VfsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, VfsError&gt;;
 
-    // Write
+    // ═══════════════════════════════════════════════════════════════════════
+    // WRITE OPERATIONS
+    // ═══════════════════════════════════════════════════════════════════════
     fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
     fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
     fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
@@ -220,38 +224,76 @@ pub trait VfsBackend: Send {
     fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
     fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
 
-    // Links
+    // ═══════════════════════════════════════════════════════════════════════
+    // LINKS
+    // ═══════════════════════════════════════════════════════════════════════
     fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
     fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
 
-    // Permissions
+    // ═══════════════════════════════════════════════════════════════════════
+    // PERMISSIONS
+    // ═══════════════════════════════════════════════════════════════════════
     fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), VfsError&gt;;
 
-    // Streaming I/O (for large files)
+    // ═══════════════════════════════════════════════════════════════════════
+    // STREAMING I/O
+    // ═══════════════════════════════════════════════════════════════════════
     fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt;;
     fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, VfsError&gt;;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FILE SIZE
+    // ═══════════════════════════════════════════════════════════════════════
+    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), VfsError&gt;;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DURABILITY
+    // ═══════════════════════════════════════════════════════════════════════
+    fn sync(&amp;mut self) -&gt; Result&lt;(), VfsError&gt;;
+    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FILESYSTEM INFO
+    // ═══════════════════════════════════════════════════════════════════════
+    fn statfs(&amp;self) -&gt; Result&lt;StatFs, VfsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="notes-on-semantics"><a class="header" href="#notes-on-semantics">Notes on Semantics</a></h2>
+<h2 id="semantics"><a class="header" href="#semantics">Semantics</a></h2>
 <ul>
 <li><code>read</code>/<code>write</code>/<code>metadata</code>/<code>exists</code>/<code>copy</code> follow symlinks.</li>
 <li><code>symlink_metadata</code> and <code>read_link</code> do not follow.</li>
 <li><code>remove_file</code> removes the symlink itself, not the target.</li>
-<li>Streaming methods (<code>open_read</code>, <code>open_write</code>) enable efficient handling of large files.</li>
+<li>Streaming methods (<code>open_read</code>, <code>open_write</code>) enable large file handling.</li>
+<li><code>truncate</code> resizes a file: shrinks by discarding bytes, extends with zeros.</li>
+<li><code>sync</code> flushes all pending writes to durable storage.</li>
+<li><code>fsync</code> flushes pending writes for a specific file.</li>
+<li><code>statfs</code> returns filesystem capacity information.</li>
 </ul>
-<p>The container layer may still deny certain operations via feature whitelisting.</p>
+<hr>
+<h2 id="what-vfsbackend-does-not-do"><a class="header" href="#what-vfsbackend-does-not-do">What VfsBackend Does NOT Do</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concern</th><th>Where It Lives</th></tr>
+</thead>
+<tbody>
+<tr><td>Quota enforcement</td><td><code>LimitedBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Feature gating</td><td><code>FeatureGatedBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Audit logging</td><td><code>LoggingBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Ergonomic API</td><td><code>FilesContainer&lt;B&gt;</code> wrapper</td></tr>
+</tbody>
+</table>
+</div>
+<p>Backends focus on storage. Policy is middleware.</p>
 <hr>
 <h2 id="implementing-a-backend"><a class="header" href="#implementing-a-backend">Implementing a Backend</a></h2>
 <ul>
 <li>Depend on <code>anyfs-backend</code> only.</li>
-<li>Accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters (aligned with std::fs).</li>
-<li>Implement the semantics consistently across backends (a shared conformance suite is recommended).</li>
+<li>Accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters.</li>
+<li>Return <code>std::fs</code>-like errors.</li>
 </ul>
 <p>See <code>book/src/implementation/backend-guide.md</code> for a step-by-step guide.</p>
-<hr>
-<h2 id="note-on-vrootfsbackend"><a class="header" href="#note-on-vrootfsbackend">Note on VRootFsBackend</a></h2>
-<p>The <code>VRootFsBackend</code> (which wraps a real host filesystem directory) internally uses <code>strict-path::VirtualPath</code> for path containment. This is an <strong>implementation detail</strong> of that specific backend—not part of the core trait contract.</p>
 
                     </main>
 

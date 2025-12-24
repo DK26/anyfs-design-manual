@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-788b0482.js";
+            window.path_to_searchindex_js = "searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-076f33df.js"></script>
+        <script src="toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,44 +184,63 @@
 <p><strong>An open standard for pluggable virtual filesystem backends in Rust.</strong></p>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>AnyFS is an <strong>open standard</strong> that allows anyone to create custom storage backends. Whether you need to store files in a database, object store, network filesystem, or any other medium—AnyFS provides the contract and tools to make it happen.</p>
-<p>The ecosystem is a three-crate design:</p>
+<p>AnyFS is an <strong>open standard</strong> for virtual filesystem backends using a <strong>Tower-style middleware pattern</strong> for composable functionality.</p>
+<p>You get:</p>
+<ul>
+<li>A familiar <code>std::fs</code>-aligned API</li>
+<li>Composable middleware (limits, logging, security)</li>
+<li>Choice of storage: memory, SQLite, host filesystem, or custom</li>
+</ul>
+<hr>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────┐
+│  FilesContainer&lt;B&gt;                      │  ← Ergonomics (std::fs API)
+├─────────────────────────────────────────┤
+│  Middleware (composable):               │
+│    LimitedBackend&lt;B&gt;                    │  ← Quotas
+│    FeatureGatedBackend&lt;B&gt;               │  ← Security
+│    LoggingBackend&lt;B&gt;                    │  ← Audit
+├─────────────────────────────────────────┤
+│  VfsBackend                             │  ← Storage
+│  (Memory, SQLite, VRootFs, custom...)   │
+└─────────────────────────────────────────┘
+</code></pre>
+<p><strong>Each layer has one job.</strong> Compose only what you need.</p>
+<hr>
+<h2 id="three-crate-structure"><a class="header" href="#three-crate-structure">Three-Crate Structure</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Crate</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>anyfs-backend</code></td><td>Minimal contract: <code>VfsBackend</code> trait + core types. Backend implementers depend on this.</td></tr>
-<tr><td><code>anyfs</code></td><td>Low-level execution layer for calling any <code>VfsBackend</code>. Also provides built-in backends (MemoryBackend, SqliteBackend, VRootFsBackend).</td></tr>
-<tr><td><code>anyfs-container</code></td><td><code>FilesContainer&lt;B: VfsBackend&gt;</code> policy layer (limits + least-privilege feature whitelist)</td></tr>
+<tr><td><code>anyfs-backend</code></td><td>Minimal contract: <code>VfsBackend</code> trait + types</td></tr>
+<tr><td><code>anyfs</code></td><td>Backends + middleware</td></tr>
+<tr><td><code>anyfs-container</code></td><td>Ergonomic <code>FilesContainer&lt;B&gt;</code> wrapper</td></tr>
 </tbody>
 </table>
 </div>
-<p>High-level data flow:</p>
-<pre><code class="language-text">Your application
-  -&gt; anyfs-container (FilesContainer: ergonomic paths + policy)
-      -&gt; anyfs (executes operations on any VfsBackend)
-          -&gt; any backend (built-in or custom)
-</code></pre>
-<blockquote>
-<p><strong>Note:</strong> The <code>strict-path</code> crate is <strong>only</strong> used by <code>VRootFsBackend</code>—a backend that wraps a real host filesystem directory. It is not part of the core AnyFS API.</p>
-</blockquote>
 <hr>
-<h2 id="quick-example"><a class="header" href="#quick-example">Quick example</a></h2>
-<pre class="playground"><code class="language-rust">use anyfs::MemoryBackend;
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
 use anyfs_container::FilesContainer;
 
-fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let mut container = FilesContainer::new(MemoryBackend::new());
+// Compose: storage -&gt; limits -&gt; security
+let backend = FeatureGatedBackend::new(
+    LimitedBackend::new(SqliteBackend::open("data.db")?)
+        .with_max_total_size(100 * 1024 * 1024)
+)
+.with_symlinks();
 
-    container.create_dir_all("/data")?;
-    container.write("/data/file.txt", b"hello")?;
+let mut fs = FilesContainer::new(backend);
 
-    Ok(())
-}</code></pre>
+fs.create_dir_all("/data")?;
+fs.write("/data/file.txt", b"hello")?;
+<span class="boring">}</span></code></pre>
 <hr>
-<h2 id="how-to-use-this-manual"><a class="header" href="#how-to-use-this-manual">How to use this manual</a></h2>
+<h2 id="how-to-use-this-manual"><a class="header" href="#how-to-use-this-manual">How to Use This Manual</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -233,7 +252,6 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 <tr><td>Design &amp; Architecture</td><td>Contributors</td><td>Detailed design</td></tr>
 <tr><td>Traits &amp; APIs</td><td>Backend authors</td><td>Contract and types</td></tr>
 <tr><td>Implementation</td><td>Implementers</td><td>Plan + backend guide</td></tr>
-<tr><td>Review</td><td>Contributors</td><td>Historical review record</td></tr>
 </tbody>
 </table>
 </div>
@@ -251,12 +269,12 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </table>
 </div>
 <hr>
-<h2 id="authoritative-documents"><a class="header" href="#authoritative-documents">Authoritative documents</a></h2>
+<h2 id="authoritative-documents"><a class="header" href="#authoritative-documents">Authoritative Documents</a></h2>
 <ol>
+<li><code>AGENTS.md</code> (for AI assistants)</li>
 <li><code>book/src/architecture/design-overview.md</code></li>
 <li><code>book/src/architecture/adrs.md</code></li>
 </ol>
-<p>If something conflicts with <code>AGENTS.md</code>, treat <code>AGENTS.md</code> as authoritative.</p>
 
                     </main>
 

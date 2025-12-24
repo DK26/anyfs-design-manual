@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,23 +182,31 @@
                     <main>
                         <h1 id="backend-implementers-guide"><a class="header" href="#backend-implementers-guide">Backend Implementer’s Guide</a></h1>
 <p>This guide walks you through implementing a custom AnyFS backend.</p>
-<p>If you are writing a backend for other people to consume, depend only on <code>anyfs-backend</code>.</p>
 <hr>
-<h2 id="what-you-are-implementing"><a class="header" href="#what-you-are-implementing">What you are implementing</a></h2>
-<p>A backend implements <code>VfsBackend</code>: a path-based trait aligned with <code>std::fs</code> naming and signatures.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>A backend implements <code>VfsBackend</code>: a path-based trait aligned with <code>std::fs</code>.</p>
 <p>Key properties:</p>
 <ul>
-<li>Backends accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters (same as std::fs).</li>
-<li>The policy layer (<code>anyfs-container</code>) handles quotas/limits and feature whitelisting.</li>
+<li>Backends accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters</li>
+<li>Backends handle <strong>storage + filesystem semantics only</strong></li>
+<li>Policy (limits, feature gates) is handled by middleware, not backends</li>
 </ul>
+<hr>
+<h2 id="dependency"><a class="header" href="#dependency">Dependency</a></h2>
+<p>Depend only on <code>anyfs-backend</code>:</p>
+<pre><code class="language-toml">[dependencies]
+anyfs-backend = "0.1"
+</code></pre>
+<hr>
+<h2 id="trait-to-implement"><a class="header" href="#trait-to-implement">Trait to Implement</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_backend::{DirEntry, Metadata, Permissions, VfsBackend, VfsError};
+</span>use anyfs_backend::{VfsBackend, VfsError, Metadata, DirEntry, Permissions, StatFs};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct MyBackend {
-    // storage fields...
+    // Your storage fields
 }
 
 impl VfsBackend for MyBackend {
@@ -226,107 +234,190 @@ impl VfsBackend for MyBackend {
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="step-1-pick-a-data-model"><a class="header" href="#step-1-pick-a-data-model">Step 1: Pick a data model</a></h2>
-<p>A practical internal model is a small “virtual inode” representation:</p>
+<h2 id="implementation-steps"><a class="header" href="#implementation-steps">Implementation Steps</a></h2>
+<h3 id="step-1-pick-a-data-model"><a class="header" href="#step-1-pick-a-data-model">Step 1: Pick a Data Model</a></h3>
+<p>Your backend needs internal storage. Options:</p>
 <ul>
-<li><strong>Directory</strong>: owns a mapping <code>name -&gt; child</code> (or can be derived from a global path index).</li>
-<li><strong>File</strong>: points to bytes (inline, blob table, object store key, etc.).</li>
-<li><strong>Symlink</strong>: stores a <em>target</em> path (as a string).</li>
-<li><strong>Hard links</strong>: multiple paths refer to the same underlying file content.</li>
+<li><strong>HashMap-based</strong>: <code>HashMap&lt;PathBuf, Entry&gt;</code> for simple cases</li>
+<li><strong>Tree-based</strong>: Explicit directory tree structure</li>
+<li><strong>Database-backed</strong>: SQLite, key-value store, etc.</li>
 </ul>
-<p>You do not need to expose any of this publicly; it is an implementation detail.</p>
-<h3 id="recommended-minimum-metadata"><a class="header" href="#recommended-minimum-metadata">Recommended minimum metadata</a></h3>
-<p>Your backend needs enough metadata to populate <code>Metadata</code> and return correct errors:</p>
+<p>Minimum metadata per entry:</p>
 <ul>
-<li>file type (file/dir/symlink)</li>
-<li>size</li>
-<li>link count (<code>nlink</code>) for hard links</li>
-<li>timestamps (optional)</li>
-<li>permissions (even if simplified)</li>
+<li>File type (file/directory/symlink)</li>
+<li>Size (for files)</li>
+<li>Content (for files)</li>
+<li>Timestamps (optional)</li>
+<li>Permissions (optional)</li>
 </ul>
+<h3 id="step-2-implement-read-operations"><a class="header" href="#step-2-implement-read-operations">Step 2: Implement Read Operations</a></h3>
+<p>Start with these (easiest):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn exists(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, VfsError&gt;;
+fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
+fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, VfsError&gt;;
+fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
+fn metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, VfsError&gt;;
+fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, VfsError&gt;;
+fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, VfsError&gt;;
+fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<h3 id="step-3-implement-write-operations"><a class="header" href="#step-3-implement-write-operations">Step 3: Implement Write Operations</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
+fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
+fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<h3 id="step-4-implement-links"><a class="header" href="#step-4-implement-links">Step 4: Implement Links</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<ul>
+<li>Symlinks store a target path as a string</li>
+<li>Hard links share content with the original (update link count)</li>
+</ul>
+<h3 id="step-5-implement-permissions-and-streaming"><a class="header" href="#step-5-implement-permissions-and-streaming">Step 5: Implement Permissions and Streaming</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), VfsError&gt;;
+fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, VfsError&gt;;
+fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<h3 id="step-6-implement-truncate"><a class="header" href="#step-6-implement-truncate">Step 6: Implement truncate</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<ul>
+<li>If <code>size &lt; current</code>: discard trailing bytes</li>
+<li>If <code>size &gt; current</code>: extend with zero bytes</li>
+<li>Required for FUSE support and editor save operations</li>
+</ul>
+<h3 id="step-7-implement-syncfsync"><a class="header" href="#step-7-implement-syncfsync">Step 7: Implement sync/fsync</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn sync(&amp;mut self) -&gt; Result&lt;(), VfsError&gt;;
+fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<ul>
+<li><code>sync()</code>: Flush all pending writes to durable storage</li>
+<li><code>fsync(path)</code>: Flush pending writes for a specific file</li>
+<li><code>MemoryBackend</code> can no-op these (volatile by design)</li>
+<li><code>SqliteBackend</code>: <code>PRAGMA wal_checkpoint</code> or connection flush</li>
+<li><code>VRootFsBackend</code>: <code>std::fs::File::sync_all()</code></li>
+</ul>
+<h3 id="step-8-implement-statfs"><a class="header" href="#step-8-implement-statfs">Step 8: Implement statfs</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn statfs(&amp;self) -&gt; Result&lt;StatFs, VfsError&gt;;
+<span class="boring">}</span></code></pre>
+<p>Return filesystem capacity information:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>StatFs {
+    total_bytes: 0,      // 0 = unlimited
+    used_bytes: ...,
+    available_bytes: ...,
+    total_inodes: 0,
+    used_inodes: ...,
+    available_inodes: ...,
+    block_size: 4096,
+    max_name_len: 255,
+}
+<span class="boring">}</span></code></pre>
 <hr>
-<h2 id="step-2-implement-the-easy-surface-first"><a class="header" href="#step-2-implement-the-easy-surface-first">Step 2: Implement the “easy” surface first</a></h2>
-<p>Start with these operations:</p>
-<ul>
-<li><code>exists</code></li>
-<li><code>create_dir</code> / <code>create_dir_all</code></li>
-<li><code>read_dir</code></li>
-<li><code>write</code> / <code>read</code> / <code>append</code> / <code>read_range</code></li>
-<li><code>open_read</code> / <code>open_write</code> (streaming I/O)</li>
-<li><code>remove_file</code> / <code>remove_dir</code> / <code>remove_dir_all</code></li>
-<li><code>rename</code> / <code>copy</code></li>
-</ul>
-<p>Guidelines:</p>
-<ul>
-<li>You receive <code>impl AsRef&lt;Path&gt;</code> - call <code>.as_ref()</code> to get <code>&amp;Path</code>.</li>
-<li>Match <code>std::fs</code>-like error expectations:
-<ul>
-<li>creating an existing directory should return <code>AlreadyExists</code></li>
-<li><code>remove_dir</code> should fail on non-empty directories</li>
-<li><code>remove_file</code> should fail on directories</li>
-</ul>
-</li>
-</ul>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Return appropriate <code>VfsError</code> variants:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Situation</th><th>Error</th></tr>
+</thead>
+<tbody>
+<tr><td>Path doesn’t exist</td><td><code>VfsError::NotFound(path)</code></td></tr>
+<tr><td>Path already exists</td><td><code>VfsError::AlreadyExists(path)</code></td></tr>
+<tr><td>Expected file, got dir</td><td><code>VfsError::NotAFile(path)</code></td></tr>
+<tr><td>Expected dir, got file</td><td><code>VfsError::NotADirectory(path)</code></td></tr>
+<tr><td>Remove non-empty dir</td><td><code>VfsError::DirectoryNotEmpty(path)</code></td></tr>
+<tr><td>Internal error</td><td><code>VfsError::Backend(message)</code></td></tr>
+</tbody>
+</table>
+</div>
 <hr>
-<h2 id="step-3-links-symlinks--hard-links"><a class="header" href="#step-3-links-symlinks--hard-links">Step 3: Links (symlinks + hard links)</a></h2>
-<p>AnyFS includes link methods in the core trait.</p>
-<h3 id="symlinks"><a class="header" href="#symlinks">Symlinks</a></h3>
-<ul>
-<li><code>symlink(original, link)</code> creates a symlink at <code>link</code> whose target is <code>original</code>.</li>
-<li><code>read_link(path)</code> returns the stored target.</li>
-<li><code>symlink_metadata(path)</code> returns metadata about the symlink itself (not the target).</li>
-</ul>
-<p>Note: <code>anyfs-container</code> may deny symlink operations unless explicitly enabled (least privilege).</p>
-<h3 id="hard-links"><a class="header" href="#hard-links">Hard links</a></h3>
-<ul>
-<li><code>hard_link(original, link)</code> creates a second directory entry pointing at the same underlying file.</li>
-<li>Update <code>nlink</code> and any reference-counting you maintain.</li>
-<li><code>remove_file</code> decrements link count and only deletes the underlying content when it reaches zero.</li>
-</ul>
+<h2 id="what-backends-do-not-do"><a class="header" href="#what-backends-do-not-do">What Backends Do NOT Do</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concern</th><th>Where It Lives</th></tr>
+</thead>
+<tbody>
+<tr><td>Quota enforcement</td><td><code>LimitedBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Feature gating</td><td><code>FeatureGatedBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Logging</td><td><code>LoggingBackend&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Ergonomic API</td><td><code>FilesContainer&lt;B&gt;</code> wrapper</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Backends focus on storage.</strong> Keep them simple.</p>
 <hr>
-<h2 id="step-4-permissions"><a class="header" href="#step-4-permissions">Step 4: Permissions</a></h2>
-<p>AnyFS models permissions as a minimal type (<code>Permissions</code>) to keep the cross-platform story simple.</p>
-<ul>
-<li><code>set_permissions</code> should mutate the stored permissions.</li>
-<li>Backends may implement stricter semantics internally, but the API stays small.</li>
-</ul>
-<p>As with links, <code>anyfs-container</code> may deny permission mutation unless enabled.</p>
+<h2 id="testing-your-backend"><a class="header" href="#testing-your-backend">Testing Your Backend</a></h2>
+<p>Use the conformance test suite:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+mod tests {
+    use super::MyBackend;
+    use anyfs_backend::VfsBackend;
+
+    fn create_backend() -&gt; MyBackend {
+        MyBackend::new()
+    }
+
+    #[test]
+    fn test_write_read() {
+        let mut backend = create_backend();
+        backend.write("/test.txt", b"hello").unwrap();
+        let content = backend.read("/test.txt").unwrap();
+        assert_eq!(content, b"hello");
+    }
+
+    #[test]
+    fn test_create_dir() {
+        let mut backend = create_backend();
+        backend.create_dir("/foo").unwrap();
+        assert!(backend.exists("/foo").unwrap());
+    }
+
+    // ... more tests
+}
+<span class="boring">}</span></code></pre>
 <hr>
-<h2 id="step-5-error-mapping"><a class="header" href="#step-5-error-mapping">Step 5: Error mapping</a></h2>
-<p>Backends should return <code>VfsError</code> variants that are meaningful to callers.</p>
-<p>Recommended principles:</p>
-<ul>
-<li>Prefer structured variants like <code>NotFound(String)</code> over generic errors.</li>
-<li>Keep backend-specific errors available (e.g., <code>VfsError::Backend(String)</code>) but do not leak host paths when possible.</li>
-</ul>
-<hr>
-<h2 id="step-6-validate-with-a-conformance-suite"><a class="header" href="#step-6-validate-with-a-conformance-suite">Step 6: Validate with a conformance suite</a></h2>
-<p>Backends drift without tests.</p>
-<p>A useful conformance suite includes:</p>
-<ul>
-<li>directory creation/removal edge cases</li>
-<li><code>rename</code> semantics for files vs directories</li>
-<li>symlink metadata vs metadata-following behavior</li>
-<li>hard link link-count accounting</li>
-<li>copy semantics (copy follows symlinks)</li>
-</ul>
-<p>See <code>book/src/implementation/plan.md</code> for the recommended test breakdown.</p>
+<h2 id="note-on-vrootfsbackend"><a class="header" href="#note-on-vrootfsbackend">Note on VRootFsBackend</a></h2>
+<p>If you are implementing a backend that wraps a <strong>real host filesystem directory</strong>, consider using <code>strict-path::VirtualPath</code> and <code>strict-path::VirtualRoot</code> internally for path containment. This ensures paths cannot escape the designated root directory.</p>
+<p>This is an implementation choice for filesystem-based backends, not a requirement of the <code>VfsBackend</code> trait.</p>
 <hr>
 <h2 id="checklist"><a class="header" href="#checklist">Checklist</a></h2>
 <ul>
 <li><input disabled="" type="checkbox"> Depends only on <code>anyfs-backend</code></li>
-<li><input disabled="" type="checkbox"> Implements all <code>VfsBackend</code> methods (including streaming I/O)</li>
-<li><input disabled="" type="checkbox"> Returns correct <code>std::fs</code>-like errors</li>
-<li><input disabled="" type="checkbox"> Symlinks store target paths as strings</li>
-<li><input disabled="" type="checkbox"> Hard links update <code>nlink</code> and share content</li>
-<li><input disabled="" type="checkbox"> Conformance suite passes</li>
+<li><input disabled="" type="checkbox"> Implements all <code>VfsBackend</code> methods (25 methods)</li>
+<li><input disabled="" type="checkbox"> Accepts <code>impl AsRef&lt;Path&gt;</code> for all paths</li>
+<li><input disabled="" type="checkbox"> Returns correct <code>VfsError</code> variants</li>
+<li><input disabled="" type="checkbox"> Handles symlinks correctly (stores target path)</li>
+<li><input disabled="" type="checkbox"> Handles hard links correctly (shares content)</li>
+<li><input disabled="" type="checkbox"> Implements <code>truncate</code> (shrink/extend files)</li>
+<li><input disabled="" type="checkbox"> Implements <code>sync</code>/<code>fsync</code> (durability)</li>
+<li><input disabled="" type="checkbox"> Passes conformance tests</li>
 </ul>
-<hr>
-<p>For the trait definition, see <code>book/src/traits/vfs-trait.md</code>.</p>
-<hr>
-<h2 id="note-on-vrootfsbackend"><a class="header" href="#note-on-vrootfsbackend">Note on VRootFsBackend</a></h2>
-<p>If you are implementing a backend that wraps a <strong>real host filesystem directory</strong>, consider using <code>strict-path::VirtualPath</code> and <code>strict-path::VirtualRoot</code> internally for path containment. This is what <code>VRootFsBackend</code> does—it ensures paths cannot escape the designated root directory.</p>
-<p>This is an implementation choice for filesystem-based backends, not a requirement of the <code>VfsBackend</code> trait.</p>
 
                     </main>
 
@@ -336,7 +427,7 @@ impl VfsBackend for MyBackend {
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../review/full-review.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../review/open-questions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -350,7 +441,7 @@ impl VfsBackend for MyBackend {
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../review/full-review.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../review/open-questions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,35 +181,40 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="filescontainer-anyfs-container"><a class="header" href="#filescontainer-anyfs-container">FilesContainer (anyfs-container)</a></h1>
-<p><strong>The user-facing API: ergonomic paths + policy (limits + feature whitelist)</strong></p>
+<p><strong>Thin ergonomic wrapper for std::fs-aligned API</strong></p>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p><code>FilesContainer&lt;B: VfsBackend&gt;</code> wraps a backend and provides:</p>
-<ul>
-<li>ergonomic path inputs (<code>impl AsRef&lt;Path&gt;</code>)</li>
-<li>centralized path normalization</li>
-<li>quota enforcement (limits)</li>
-<li>deny-by-default feature whitelisting for advanced behavior</li>
-</ul>
+<p><code>FilesContainer&lt;B: VfsBackend&gt;</code> is a <strong>thin wrapper</strong> that provides a familiar std::fs-aligned API.</p>
+<p><strong>It does ONE thing:</strong> Ergonomics. Nothing else.</p>
+<p>All policy (limits, feature gates, logging) is handled by middleware, not FilesContainer.</p>
 <hr>
 <h2 id="creating-a-container"><a class="header" href="#creating-a-container">Creating a Container</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
+</span>use anyfs::MemoryBackend;
 use anyfs_container::FilesContainer;
 
-let mut container = FilesContainer::new(SqliteBackend::open_or_create("data.db")?)
-    .with_max_total_size(100 * 1024 * 1024)
-    .with_max_file_size(10 * 1024 * 1024)
-    // advanced features are opt-in
-    .with_symlinks()
-    .with_max_symlink_resolution(40)
-    .with_hard_links()
-    .with_permissions();
+// Simple: just ergonomics
+let mut fs = FilesContainer::new(MemoryBackend::new());
+<span class="boring">}</span></code></pre>
+<p>With middleware:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs_container::FilesContainer;
+
+// Compose middleware, then wrap in FilesContainer
+let backend = FeatureGatedBackend::new(
+    LimitedBackend::new(SqliteBackend::open("data.db")?)
+        .with_max_total_size(100 * 1024 * 1024)
+)
+.with_symlinks();
+
+let mut fs = FilesContainer::new(backend);
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="stdfs-aligned-methods"><a class="header" href="#stdfs-aligned-methods">std::fs-aligned Methods</a></h2>
-<p>Most methods map directly to <code>std::fs</code> naming:</p>
+<p>FilesContainer mirrors std::fs naming:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -219,7 +224,6 @@ let mut container = FilesContainer::new(SqliteBackend::open_or_create("data.db")
 <tr><td><code>read()</code></td><td><code>std::fs::read</code></td></tr>
 <tr><td><code>read_to_string()</code></td><td><code>std::fs::read_to_string</code></td></tr>
 <tr><td><code>write()</code></td><td><code>std::fs::write</code></td></tr>
-<tr><td><code>append()</code></td><td><code>OpenOptions::append</code></td></tr>
 <tr><td><code>read_dir()</code></td><td><code>std::fs::read_dir</code></td></tr>
 <tr><td><code>create_dir()</code></td><td><code>std::fs::create_dir</code></td></tr>
 <tr><td><code>create_dir_all()</code></td><td><code>std::fs::create_dir_all</code></td></tr>
@@ -236,25 +240,44 @@ let mut container = FilesContainer::new(SqliteBackend::open_or_create("data.db")
 </table>
 </div>
 <hr>
-<h2 id="feature-whitelist-least-privilege"><a class="header" href="#feature-whitelist-least-privilege">Feature Whitelist (Least Privilege)</a></h2>
-<p>Advanced capabilities are disabled by default and must be explicitly enabled:</p>
-<ul>
-<li><code>symlinks()</code> enables symlink operations and symlink following</li>
-<li><code>hard_links()</code> enables hard-link creation</li>
-<li><code>permissions()</code> enables <code>set_permissions</code></li>
-</ul>
-<p>If disabled, the operation returns <code>ContainerError::FeatureNotEnabled("...")</code>.</p>
+<h2 id="what-filescontainer-does-not-do"><a class="header" href="#what-filescontainer-does-not-do">What FilesContainer Does NOT Do</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concern</th><th>Use Instead</th></tr>
+</thead>
+<tbody>
+<tr><td>Quota enforcement</td><td><code>LimitedBackend&lt;B&gt;</code></td></tr>
+<tr><td>Feature gating</td><td><code>FeatureGatedBackend&lt;B&gt;</code></td></tr>
+<tr><td>Audit logging</td><td><code>LoggingBackend&lt;B&gt;</code></td></tr>
+<tr><td>Path containment</td><td>Backend-specific (VRootFsBackend)</td></tr>
+</tbody>
+</table>
+</div>
+<p>FilesContainer is <strong>purely ergonomic</strong>. If you need policy, compose middleware.</p>
 <hr>
-<h2 id="limits-quotas"><a class="header" href="#limits-quotas">Limits (Quotas)</a></h2>
-<p>Limits are enforced by the container, consistently across backends:</p>
-<ul>
-<li>total bytes</li>
-<li>max file size</li>
-<li>max nodes</li>
-<li>max directory entries</li>
-<li>max path depth</li>
-</ul>
-<p>See <code>book/src/getting-started/guide.md</code> for usage examples.</p>
+<h2 id="layer-helper"><a class="header" href="#layer-helper">Layer Helper</a></h2>
+<p>For Axum-style composition:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
+    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGateLayer::new().allow_symlinks());
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="direct-backend-access"><a class="header" href="#direct-backend-access">Direct Backend Access</a></h2>
+<p>If you don’t need ergonomics, use backends directly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{MemoryBackend, LimitedBackend};
+use anyfs_backend::VfsBackend;
+
+let mut backend = LimitedBackend::new(MemoryBackend::new())
+    .with_max_total_size(100 * 1024 * 1024);
+
+// Use VfsBackend methods directly
+backend.write("/file.txt", b"data")?;
+<span class="boring">}</span></code></pre>
 
                     </main>
 

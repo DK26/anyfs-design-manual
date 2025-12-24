@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,233 +186,225 @@
 <h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
 <pre><code class="language-toml">[dependencies]
 anyfs = "0.1"
-anyfs-container = "0.1"
+anyfs-container = "0.1"  # Optional
 </code></pre>
-<p>With specific backends:</p>
-<pre><code class="language-toml">[dependencies]
-anyfs = { version = "0.1", features = ["sqlite", "vrootfs"] }
-anyfs-container = "0.1"
+<p>With backends and optional features:</p>
+<pre><code class="language-toml">anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 </code></pre>
 <hr>
-<h2 id="creating-a-container"><a class="header" href="#creating-a-container">Creating a Container</a></h2>
+<h2 id="creating-a-backend-stack"><a class="header" href="#creating-a-backend-stack">Creating a Backend Stack</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend};
+</span>use anyfs::{MemoryBackend, SqliteBackend, LimitedBackend, FeatureGatedBackend, TracingBackend};
 use anyfs_container::FilesContainer;
 
-// In-memory (testing, caching, speed-critical applications)
-let container = FilesContainer::new(MemoryBackend::new());
+// Simple
+let fs = FilesContainer::new(MemoryBackend::new());
 
-// SQLite (production)
-let container = FilesContainer::new(
-    SqliteBackend::open_or_create("data.db")?
+// With limits
+let fs = FilesContainer::new(
+    LimitedBackend::new(SqliteBackend::open("data.db")?)
+        .with_max_total_size(100 * 1024 * 1024)
+        .with_max_file_size(10 * 1024 * 1024)
 );
 
-// Full configuration with capacity limits
-let container = FilesContainer::new(SqliteBackend::open_or_create("data.db")?)
-    // Security posture: advanced features are opt-in (whitelist)
-    .with_symlinks()
-    .with_max_symlink_resolution(40)
-    .with_hard_links()
-    .with_permissions()
-    .with_max_total_size(100 * 1024 * 1024)  // 100 MB
-    .with_max_file_size(10 * 1024 * 1024)    // 10 MB
-    .with_max_node_count(10_000)
-    .with_max_dir_entries(1_000)
-    .with_max_path_depth(64);
+// Full stack (manual composition)
+let fs = FilesContainer::new(
+    TracingBackend::new(
+        FeatureGatedBackend::new(
+            LimitedBackend::new(SqliteBackend::open("data.db")?)
+                .with_max_total_size(100 * 1024 * 1024)
+        )
+        .with_symlinks()
+        .with_hard_links()
+    )
+);
 
-// Note: advanced features (symlinks/hard links/permissions) are disabled by default and must be explicitly enabled
-// When symlinks are disabled, operations reject paths that traverse symlinks (nofollow).
+// Layer-based composition
+use anyfs::{LimitedLayer, FeatureGateLayer, TracingLayer};
+
+let backend = SqliteBackend::open("data.db")?
+    .layer(LimitedLayer::new().max_total_size(100 * 1024 * 1024))
+    .layer(FeatureGateLayer::new().allow_symlinks())
+    .layer(TracingLayer::new());
+
+// BackendStack builder (fluent API)
+use anyfs_container::BackendStack;
+
+let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+    .limited(|l| l.max_total_size(100 * 1024 * 1024))
+    .feature_gated(|g| g.allow_symlinks())
+    .traced()
+    .into_container();
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="path-handling"><a class="header" href="#path-handling">Path Handling</a></h2>
-<p>FilesContainer accepts any path-like type (<code>&amp;str</code>, <code>String</code>, <code>&amp;Path</code>, <code>PathBuf</code>):</p>
+<h2 id="limitedbackend-methods"><a class="header" href="#limitedbackend-methods">LimitedBackend Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// All of these work
-container.write("/documents/report.pdf", data)?;
-container.write(String::from("/file.txt"), data)?;
-container.write(Path::new("/data.bin"), data)?;
+</span>LimitedBackend::new(backend)
+    .with_max_total_size(bytes)      // Total storage limit
+    .with_max_file_size(bytes)       // Per-file limit
+    .with_max_node_count(count)      // Max files/dirs
+    .with_max_dir_entries(count)     // Max entries per dir
+    .with_max_path_depth(depth)      // Max nesting
 
-// Normalization (automatic)
-// "//a/../b/./c"  → "/b/c"
-// "/../../../a"   → "/a" (can't escape root)
+// Query
+backend.usage()        // -&gt; Usage { total_size, file_count, ... }
+backend.limits()       // -&gt; Limits { max_total_size, ... }
+backend.remaining()    // -&gt; Remaining { bytes, can_write, ... }
 <span class="boring">}</span></code></pre>
-<p>Backends receive normalized path strings (<code>&amp;str</code>). Path normalization is handled by FilesContainer before reaching the backend.</p>
+<hr>
+<h2 id="featuregatedbackend-methods"><a class="header" href="#featuregatedbackend-methods">FeatureGatedBackend Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>FeatureGatedBackend::new(backend)    // All disabled by default
+    .with_symlinks()                  // Enable symlink ops
+    .with_max_symlink_resolution(40)  // Max hops
+    .with_hard_links()                // Enable hard links
+    .with_permissions()               // Enable set_permissions
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="tracingbackend-methods"><a class="header" href="#tracingbackend-methods">TracingBackend Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>TracingBackend::new(backend)
+    .with_target("anyfs")             // tracing target
+    .with_level(tracing::Level::DEBUG)
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="vfsbackendext-methods"><a class="header" href="#vfsbackendext-methods">VfsBackendExt Methods</a></h2>
+<p>Extension methods available on all backends:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::VfsBackendExt;
+
+// JSON support
+let config: Config = fs.read_json("/config.json")?;
+fs.write_json("/config.json", &amp;config)?;
+
+// Type checks
+if fs.is_file("/path")? { ... }
+if fs.is_dir("/path")? { ... }
+<span class="boring">}</span></code></pre>
 <hr>
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
-<h3 id="reading"><a class="header" href="#reading">Reading</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Check existence
-container.exists("/path")?                    // → bool
+fs.exists("/path")?                     // -&gt; bool
 
-// Get metadata (follows symlinks)
-let meta = container.metadata("/path")?;
-meta.size                                     // file size
-meta.file_type                                // File | Directory | Symlink
-meta.permissions                              // Permissions
-meta.nlink                                    // hard link count
-meta.created                                  // Option&lt;SystemTime&gt;
-meta.modified                                 // Option&lt;SystemTime&gt;
-meta.accessed                                 // Option&lt;SystemTime&gt;
+// Metadata
+let meta = fs.metadata("/path")?;
+meta.size                                // file size
+meta.file_type                           // File | Directory | Symlink
+meta.permissions
+meta.created                             // Option&lt;SystemTime&gt;
+meta.modified
 
-// Get metadata without following symlinks
-let meta = container.symlink_metadata("/path")?;
+// Read
+let bytes = fs.read("/path")?;           // -&gt; Vec&lt;u8&gt;
+let text = fs.read_to_string("/path")?;  // -&gt; String
+let chunk = fs.read_range("/path", 0, 1024)?;
 
-// Read file
-let bytes = container.read("/path")?;         // → Vec&lt;u8&gt;
-let text = container.read_to_string("/path")?; // → String (UTF-8)
-let chunk = container.read_range("/path", 0, 1024)?;  // partial read
+// List directory
+let entries = fs.read_dir("/path")?;     // -&gt; Vec&lt;DirEntry&gt;
 
-// List directory (std::fs aligned name)
-let entries = container.read_dir("/path")?;   // → Vec&lt;DirEntry&gt;
-for entry in entries {
-    println!("{}: {:?}", entry.name, entry.file_type);
-}
+// Write
+fs.write("/path", b"content")?;          // Create or overwrite
+fs.append("/path", b"more")?;            // Append
 
-// Read symlink target (without following; requires symlinks enabled)
-let target = container.read_link("/path")?;   // → PathBuf
-<span class="boring">}</span></code></pre>
-<h3 id="writing"><a class="header" href="#writing">Writing</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Create directory (std::fs aligned names)
-container.create_dir("/path")?;               // single level
-container.create_dir_all("/path")?;           // recursive
+// Directories
+fs.create_dir("/path")?;
+fs.create_dir_all("/path")?;
 
-// Write file (create or overwrite)
-container.write("/path", b"content")?;
+// Delete
+fs.remove_file("/path")?;
+fs.remove_dir("/path")?;                 // Empty only
+fs.remove_dir_all("/path")?;             // Recursive
 
-// Append to file
-container.append("/path", b"more")?;
+// Move/Copy
+fs.rename("/from", "/to")?;
+fs.copy("/from", "/to")?;
 
-// Create symlink (requires symlinks enabled)
-container.symlink("/target", "/link")?;       // link points to target
+// Links (requires FeatureGatedBackend)
+fs.symlink("/target", "/link")?;
+fs.hard_link("/original", "/link")?;
+fs.read_link("/link")?;                  // -&gt; PathBuf
 
-// Create hard link (requires hard links enabled)
-container.hard_link("/original", "/link")?;   // link shares content with original
+// Permissions (requires FeatureGatedBackend)
+fs.set_permissions("/path", perms)?;
 
-// Delete (std::fs aligned: separate file/dir methods)
-container.remove_file("/path")?;              // file only
-container.remove_dir("/path")?;               // empty directory only
-container.remove_dir_all("/path")?;           // recursive
+// File size
+fs.truncate("/path", 1024)?;             // Resize to 1024 bytes
 
-// Set permissions (requires permissions enabled)
-container.set_permissions("/path", Permissions::new())?;
-
-// Rename/move
-container.rename("/from", "/to")?;
-
-// Copy
-container.copy("/from", "/to")?;              // single file
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="capacity-management"><a class="header" href="#capacity-management">Capacity Management</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Check usage
-let usage = container.usage()?;
-usage.total_size       // bytes used
-usage.node_count       // total nodes
-usage.file_count
-usage.directory_count
-
-// Check limits
-let limits = container.limits();
-limits.max_total_size  // Option&lt;u64&gt;
-limits.max_file_size
-
-// Check remaining
-let remaining = container.remaining()?;
-remaining.bytes        // Option&lt;u64&gt;
-remaining.nodes
-remaining.can_write    // quick check
+// Durability
+fs.sync()?;                              // Flush all writes
+fs.fsync("/path")?;                      // Flush writes for one file
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_container::ContainerError;
+</span>use anyfs_backend::VfsError;
 
-match container.write("/path", &amp;data) {
-    Ok(()) =&gt; println!("Written"),
-
-    Err(ContainerError::NotFound(p)) =&gt; println!("Path not found: {}", p),
-    Err(ContainerError::AlreadyExists(p)) =&gt; println!("Already exists: {}", p),
-    Err(ContainerError::NotADirectory(p)) =&gt; println!("Not a directory: {}", p),
-    Err(ContainerError::NotAFile(p)) =&gt; println!("Not a file: {}", p),
-    Err(ContainerError::DirectoryNotEmpty(p)) =&gt; println!("Not empty: {}", p),
-
-    Err(ContainerError::TotalSizeExceeded { used, limit }) =&gt; {
-        println!("Storage full: {} / {} bytes", used, limit);
+match result {
+    Err(VfsError::NotFound { path, operation }) =&gt; {
+        // e.g., path="/file.txt", operation="read"
     }
-    Err(ContainerError::FileSizeExceeded { size, limit }) =&gt; {
-        println!("File too large: {} &gt; {} bytes", size, limit);
-    }
-
-    Err(ContainerError::FeatureNotEnabled(name)) =&gt; {
-        println!("Feature not enabled: {}", name);
-    }
-
-    Err(e) =&gt; println!("Other error: {}", e),
+    Err(VfsError::AlreadyExists { path, operation }) =&gt; ...
+    Err(VfsError::NotADirectory { path }) =&gt; ...
+    Err(VfsError::NotAFile { path }) =&gt; ...
+    Err(VfsError::DirectoryNotEmpty { path }) =&gt; ...
+    Err(VfsError::QuotaExceeded { limit, requested, usage }) =&gt; ...
+    Err(VfsError::FileSizeExceeded { path, size, limit }) =&gt; ...
+    Err(VfsError::FeatureNotEnabled { feature, operation }) =&gt; ...
+    Err(VfsError::Serialization(msg)) =&gt; ...   // from VfsBackendExt
+    Err(VfsError::Deserialization(msg)) =&gt; ... // from VfsBackendExt
+    Err(e) =&gt; ...
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="backend-lifecycle"><a class="header" href="#backend-lifecycle">Backend Lifecycle</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
-
-// Create new (fails if exists)
-let backend = SqliteBackend::create("new.db")?;
-
-// Open existing (fails if doesn't exist)
-let backend = SqliteBackend::open("existing.db")?;
-
-// Open or create
-let backend = SqliteBackend::open_or_create("data.db")?;
-<span class="boring">}</span></code></pre>
+<h2 id="built-in-backends"><a class="header" href="#built-in-backends">Built-in Backends</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Feature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>MemoryBackend</code></td><td><code>memory</code> (default)</td><td>In-memory</td></tr>
+<tr><td><code>SqliteBackend</code></td><td><code>sqlite</code></td><td>Persistent</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td><code>vrootfs</code></td><td>Host filesystem</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
-<h2 id="quick-patterns"><a class="header" href="#quick-patterns">Quick Patterns</a></h2>
-<h3 id="ensure-parent-directories-exist"><a class="header" href="#ensure-parent-directories-exist">Ensure parent directories exist</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs_backend::VfsBackend;
-use anyfs_container::{FilesContainer, ContainerError};
-
-fn write_with_parents&lt;B: VfsBackend&gt;(
-    container: &amp;mut FilesContainer&lt;B&gt;,
-    path: &amp;str,
-    data: &amp;[u8],
-) -&gt; Result&lt;(), ContainerError&gt; {
-    if let Some(parent) = std::path::Path::new(path).parent() {
-        container.create_dir_all(parent)?;
-    }
-    container.write(path, data)
-}
-<span class="boring">}</span></code></pre>
-<h3 id="walk-directory-tree"><a class="header" href="#walk-directory-tree">Walk directory tree</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs_backend::{VfsBackend, DirEntry, FileType};
-use anyfs_container::{FilesContainer, ContainerError};
-
-fn walk&lt;B: VfsBackend&gt;(
-    container: &amp;FilesContainer&lt;B&gt;,
-    path: &amp;str,
-    f: &amp;mut impl FnMut(&amp;str, &amp;DirEntry),
-) -&gt; Result&lt;(), ContainerError&gt; {
-    for entry in container.read_dir(path)? {
-        let child_path = format!("{}/{}", path, entry.name);
-        f(&amp;child_path, &amp;entry);
-        if entry.file_type == FileType::Directory {
-            walk(container, &amp;child_path, f)?;
-        }
-    }
-    Ok(())
-}
-<span class="boring">}</span></code></pre>
+<h2 id="middleware"><a class="header" href="#middleware">Middleware</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>LimitedBackend&lt;B&gt;</code></td><td>Quota enforcement</td></tr>
+<tr><td><code>FeatureGatedBackend&lt;B&gt;</code></td><td>Least privilege</td></tr>
+<tr><td><code>TracingBackend&lt;B&gt;</code></td><td>Instrumentation (tracing ecosystem)</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="layers"><a class="header" href="#layers">Layers</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Layer</th><th>Creates</th></tr>
+</thead>
+<tbody>
+<tr><td><code>LimitedLayer</code></td><td><code>LimitedBackend&lt;B&gt;</code></td></tr>
+<tr><td><code>FeatureGateLayer</code></td><td><code>FeatureGatedBackend&lt;B&gt;</code></td></tr>
+<tr><td><code>TracingLayer</code></td><td><code>TracingBackend&lt;B&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
 <hr>
 <h2 id="type-reference"><a class="header" href="#type-reference">Type Reference</a></h2>
 <h3 id="from-anyfs-backend"><a class="header" href="#from-anyfs-backend">From <code>anyfs-backend</code></a></h3>
@@ -422,12 +414,15 @@ fn walk&lt;B: VfsBackend&gt;(
 <tr><th>Type</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>VfsBackend</code></td><td>Core trait for backends</td></tr>
+<tr><td><code>VfsBackend</code></td><td>Core trait</td></tr>
+<tr><td><code>Layer</code></td><td>Middleware composition trait</td></tr>
+<tr><td><code>VfsBackendExt</code></td><td>Extension methods trait</td></tr>
+<tr><td><code>VfsError</code></td><td>Error type (with context)</td></tr>
 <tr><td><code>FileType</code></td><td><code>File</code>, <code>Directory</code>, <code>Symlink</code></td></tr>
-<tr><td><code>Metadata</code></td><td>File/directory metadata (includes <code>nlink</code>, <code>permissions</code>, <code>accessed</code>)</td></tr>
-<tr><td><code>Permissions</code></td><td>File permissions (readonly flag)</td></tr>
-<tr><td><code>DirEntry</code></td><td>Directory listing entry</td></tr>
-<tr><td><code>VfsError</code></td><td>Backend-level errors</td></tr>
+<tr><td><code>Metadata</code></td><td>File/dir metadata</td></tr>
+<tr><td><code>DirEntry</code></td><td>Directory entry</td></tr>
+<tr><td><code>Permissions</code></td><td>File permissions</td></tr>
+<tr><td><code>StatFs</code></td><td>Filesystem stats</td></tr>
 </tbody>
 </table>
 </div>
@@ -438,9 +433,15 @@ fn walk&lt;B: VfsBackend&gt;(
 <tr><th>Type</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>MemoryBackend</code></td><td>In-memory storage (fast, isolated)</td></tr>
-<tr><td><code>SqliteBackend</code></td><td>SQLite-backed storage (portable)</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td>Host filesystem (contained via strict-path)</td></tr>
+<tr><td><code>MemoryBackend</code></td><td>In-memory backend</td></tr>
+<tr><td><code>SqliteBackend</code></td><td>SQLite backend</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td>Host FS backend</td></tr>
+<tr><td><code>LimitedBackend&lt;B&gt;</code></td><td>Quota middleware</td></tr>
+<tr><td><code>FeatureGatedBackend&lt;B&gt;</code></td><td>Feature gate middleware</td></tr>
+<tr><td><code>TracingBackend&lt;B&gt;</code></td><td>Tracing middleware</td></tr>
+<tr><td><code>LimitedLayer</code></td><td>Layer for LimitedBackend</td></tr>
+<tr><td><code>FeatureGateLayer</code></td><td>Layer for FeatureGatedBackend</td></tr>
+<tr><td><code>TracingLayer</code></td><td>Layer for TracingBackend</td></tr>
 </tbody>
 </table>
 </div>
@@ -451,15 +452,11 @@ fn walk&lt;B: VfsBackend&gt;(
 <tr><th>Type</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FilesContainer&lt;B&gt;</code></td><td>Main API, generic over backend (includes builder methods)</td></tr>
-<tr><td><code>CapacityLimits</code></td><td>Quota configuration</td></tr>
-<tr><td><code>CapacityUsage</code></td><td>Current usage stats</td></tr>
-<tr><td><code>ContainerError</code></td><td>Container-level errors</td></tr>
+<tr><td><code>FilesContainer&lt;B&gt;</code></td><td>Ergonomic wrapper</td></tr>
+<tr><td><code>BackendStack</code></td><td>Fluent builder for middleware stacks</td></tr>
 </tbody>
 </table>
 </div>
-<hr>
-<p><em>For full details, see the <a href="../architecture/design-overview.html">Design Overview</a>.</em></p>
 
                     </main>
 

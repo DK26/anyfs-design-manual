@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,18 +187,17 @@
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
 anyfs = "0.1"
-anyfs-container = "0.1"
+anyfs-container = "0.1"  # Optional: for ergonomic wrapper
 </code></pre>
-<p>By default, <code>anyfs</code> includes only the in-memory backend. For additional backends:</p>
+<p>For additional backends:</p>
 <pre><code class="language-toml">[dependencies]
 anyfs = { version = "0.1", features = ["sqlite", "vrootfs"] }
-anyfs-container = "0.1"
 </code></pre>
-<p>Available features for <code>anyfs</code>:</p>
+<p>Available features:</p>
 <ul>
-<li><code>memory</code> — In-memory storage (default). Fast and isolated—useful for testing, caching, or any speed-critical application.</li>
-<li><code>sqlite</code> — SQLite-backed persistent storage. Portable single-file storage.</li>
-<li><code>vrootfs</code> — Host filesystem backend (uses <code>strict-path</code> internally for path containment).</li>
+<li><code>memory</code> — In-memory storage (default)</li>
+<li><code>sqlite</code> — SQLite-backed persistent storage</li>
+<li><code>vrootfs</code> — Host filesystem backend</li>
 </ul>
 <hr>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
@@ -207,351 +206,253 @@ anyfs-container = "0.1"
 use anyfs_container::FilesContainer;
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    // Create an in-memory container
-    let mut container = FilesContainer::new(MemoryBackend::new());
+    let mut fs = FilesContainer::new(MemoryBackend::new());
 
-    // Write a file (accepts any path-like type)
-    container.write("/hello.txt", b"Hello, AnyFS!")?;
-
-    // Read it back
-    let content = container.read("/hello.txt")?;
+    fs.write("/hello.txt", b"Hello, AnyFS!")?;
+    let content = fs.read("/hello.txt")?;
     println!("{}", String::from_utf8_lossy(&amp;content));
-    // Output: Hello, AnyFS!
 
     Ok(())
 }</code></pre>
-<h3 id="persistent-storage-with-sqlite"><a class="header" href="#persistent-storage-with-sqlite">Persistent Storage with SQLite</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::SqliteBackend;
+<h3 id="with-limits-limitedbackend"><a class="header" href="#with-limits-limitedbackend">With Limits (LimitedBackend)</a></h3>
+<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, LimitedBackend};
 use anyfs_container::FilesContainer;
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    // Create or open a SQLite-backed container
-    let mut container = FilesContainer::new(
-        SqliteBackend::open_or_create("my_data.db")?
-    );
+    let backend = LimitedBackend::new(SqliteBackend::open_or_create("data.db")?)
+        .with_max_total_size(100 * 1024 * 1024)  // 100 MB
+        .with_max_file_size(10 * 1024 * 1024);   // 10 MB per file
 
-    // Create a directory structure
-    container.create_dir_all("/documents/work")?;
+    let mut fs = FilesContainer::new(backend);
 
-    // Write some files
-    container.write("/documents/work/notes.txt", b"Meeting notes for Monday")?;
+    fs.create_dir_all("/documents")?;
+    fs.write("/documents/notes.txt", b"Meeting notes")?;
 
-    // Data persists across program runs
+    Ok(())
+}</code></pre>
+<h3 id="with-feature-gates-featuregatedbackend"><a class="header" href="#with-feature-gates-featuregatedbackend">With Feature Gates (FeatureGatedBackend)</a></h3>
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, FeatureGatedBackend};
+use anyfs_container::FilesContainer;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let backend = FeatureGatedBackend::new(MemoryBackend::new())
+        .with_symlinks()      // Enable symlinks
+        .with_hard_links();   // Enable hard links
+
+    let mut fs = FilesContainer::new(backend);
+
+    fs.write("/original.txt", b"content")?;
+    fs.symlink("/original.txt", "/shortcut")?;
+
+    Ok(())
+}</code></pre>
+<h3 id="full-stack-limits--feature-gates"><a class="header" href="#full-stack-limits--feature-gates">Full Stack (Limits + Feature Gates)</a></h3>
+<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, LimitedBackend, FeatureGatedBackend};
+use anyfs_container::FilesContainer;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Compose: storage -&gt; limits -&gt; feature gates
+    let backend = FeatureGatedBackend::new(
+        LimitedBackend::new(SqliteBackend::open_or_create("data.db")?)
+            .with_max_total_size(100 * 1024 * 1024)
+    )
+    .with_symlinks();
+
+    let mut fs = FilesContainer::new(backend);
+
+    fs.create_dir_all("/data")?;
+    fs.write("/data/file.txt", b"hello")?;
+
     Ok(())
 }</code></pre>
 <hr>
-<h2 id="common-tasks"><a class="header" href="#common-tasks">Common Tasks</a></h2>
+<h2 id="common-operations"><a class="header" href="#common-operations">Common Operations</a></h2>
 <h3 id="creating-directories"><a class="header" href="#creating-directories">Creating Directories</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Single directory (parent must exist)
-container.create_dir("/documents")?;
-
-// Recursive (creates parents as needed)
-container.create_dir_all("/documents/projects/2024/q1")?;
+</span>fs.create_dir("/documents")?;              // Single level
+fs.create_dir_all("/documents/2024/q1")?;  // Recursive
 <span class="boring">}</span></code></pre>
 <h3 id="reading-and-writing-files"><a class="header" href="#reading-and-writing-files">Reading and Writing Files</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Write (creates or overwrites)
-container.write("/data.txt", b"line 1\n")?;
+</span>fs.write("/data.txt", b"line 1\n")?;       // Create or overwrite
+fs.append("/data.txt", b"line 2\n")?;      // Append
 
-// Append
-container.append("/data.txt", b"line 2\n")?;
-
-// Read entire file
-let content = container.read("/data.txt")?;
-
-// Read partial (offset 0, length 6)
-let partial = container.read_range("/data.txt", 0, 6)?;
+let content = fs.read("/data.txt")?;                    // Read all
+let partial = fs.read_range("/data.txt", 0, 6)?;        // Read range
+let text = fs.read_to_string("/data.txt")?;             // Read as String
 <span class="boring">}</span></code></pre>
 <h3 id="listing-directories"><a class="header" href="#listing-directories">Listing Directories</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>for entry in container.read_dir("/documents")? {
-    match entry.file_type {
-        FileType::File =&gt; {
-            println!("  {} (file)", entry.name);
-        }
-        FileType::Directory =&gt; {
-            println!("  {}/", entry.name);
-        }
-        FileType::Symlink =&gt; {
-            println!("  {} -&gt; ...", entry.name);
-        }
-    }
+</span>for entry in fs.read_dir("/documents")? {
+    println!("{}: {:?}", entry.name, entry.file_type);
 }
 <span class="boring">}</span></code></pre>
 <h3 id="checking-existence-and-metadata"><a class="header" href="#checking-existence-and-metadata">Checking Existence and Metadata</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>if container.exists("/maybe-exists.txt")? {
-    let meta = container.metadata("/maybe-exists.txt")?;
+</span>if fs.exists("/file.txt")? {
+    let meta = fs.metadata("/file.txt")?;
     println!("Size: {} bytes", meta.size);
-    println!("Created: {:?}", meta.created);
-    println!("Modified: {:?}", meta.modified);
 }
 <span class="boring">}</span></code></pre>
 <h3 id="copying-and-moving"><a class="header" href="#copying-and-moving">Copying and Moving</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Copy a file
-container.copy("/original.txt", "/copy.txt")?;
-
-// Move (rename)
-container.rename("/original.txt", "/renamed.txt")?;
+</span>fs.copy("/original.txt", "/copy.txt")?;
+fs.rename("/original.txt", "/renamed.txt")?;
 <span class="boring">}</span></code></pre>
 <h3 id="deleting"><a class="header" href="#deleting">Deleting</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Delete a file
-container.remove_file("/old-file.txt")?;
-
-// Delete an empty directory
-container.remove_dir("/empty-folder")?;
-
-// Delete directory and all contents
-container.remove_dir_all("/old-folder")?;
+</span>fs.remove_file("/old-file.txt")?;
+fs.remove_dir("/empty-folder")?;
+fs.remove_dir_all("/old-folder")?;
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
-<h3 id="builder-pattern"><a class="header" href="#builder-pattern">Builder Pattern</a></h3>
+<h2 id="middleware"><a class="header" href="#middleware">Middleware</a></h2>
+<h3 id="limitedbackend--quota-enforcement"><a class="header" href="#limitedbackend--quota-enforcement">LimitedBackend — Quota Enforcement</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
-use anyfs_container::FilesContainer;
+</span>use anyfs::{MemoryBackend, LimitedBackend};
 
-let container = FilesContainer::new(SqliteBackend::open_or_create("data.db")?)
-    // Set capacity limits
+let backend = LimitedBackend::new(MemoryBackend::new())
     .with_max_total_size(500 * 1024 * 1024)  // 500 MB total
     .with_max_file_size(50 * 1024 * 1024)    // 50 MB per file
     .with_max_node_count(100_000)             // 100K files/dirs
-    .with_max_dir_entries(5_000)              // 5K entries per directory
-    // Set depth limits
-    .with_max_path_depth(32);
-<span class="boring">}</span></code></pre>
-<h3 id="checking-capacity"><a class="header" href="#checking-capacity">Checking Capacity</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Current usage
-let usage = container.usage()?;
-println!("Using {} bytes", usage.total_size);
-println!("Files: {}", usage.file_count);
-println!("Directories: {}", usage.directory_count);
+    .with_max_dir_entries(5_000)              // 5K per directory
+    .with_max_path_depth(32);                 // Max nesting
 
-// Remaining capacity
-let remaining = container.remaining()?;
+// Check usage
+let usage = backend.usage();
+println!("Using {} bytes", usage.total_size);
+
+// Check remaining
+let remaining = backend.remaining();
 if !remaining.can_write {
-    println!("Storage is full!");
+    println!("Storage full!");
 }
 <span class="boring">}</span></code></pre>
-<hr>
-<h2 id="links"><a class="header" href="#links">Links</a></h2>
-<p>Symlinks, hard links, and permission mutation are <strong>disabled by default</strong>. Enable only what you need via the builder pattern (feature whitelist).</p>
-<h3 id="symbolic-links"><a class="header" href="#symbolic-links">Symbolic Links</a></h3>
+<h3 id="featuregatedbackend--least-privilege"><a class="header" href="#featuregatedbackend--least-privilege">FeatureGatedBackend — Least Privilege</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::MemoryBackend;
-use anyfs_container::FilesContainer;
+</span>use anyfs::{MemoryBackend, FeatureGatedBackend};
 
-let mut container = FilesContainer::new(MemoryBackend::new())
-    .with_symlinks()                     // disabled by default (least privilege)
-    .with_max_symlink_resolution(40);    // optional; default: 40
+// All features disabled by default
+let backend = FeatureGatedBackend::new(MemoryBackend::new())
+    .with_symlinks()                  // Enable symlink operations
+    .with_max_symlink_resolution(40)  // Max hops (default: 40)
+    .with_hard_links()                // Enable hard links
+    .with_permissions();              // Enable set_permissions
 
-// Create a symlink
-container.create_dir_all("/deep/nested/dir")?;
-container.symlink("/deep/nested/dir", "/shortcut")?;
-
-// Read the target (without following)
-let target = container.read_link("/shortcut")?;
-
-// Regular operations follow symlinks when enabled
-container.read_dir("/shortcut")?;  // lists /deep/nested/dir
+// Disabled operations return VfsError::FeatureNotEnabled
 <span class="boring">}</span></code></pre>
-<h3 id="hard-links"><a class="header" href="#hard-links">Hard Links</a></h3>
+<h3 id="loggingbackend--audit-trail"><a class="header" href="#loggingbackend--audit-trail">LoggingBackend — Audit Trail</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::MemoryBackend;
-use anyfs_container::FilesContainer;
+</span>use anyfs::{MemoryBackend, LoggingBackend};
 
-let mut container = FilesContainer::new(MemoryBackend::new())
-    .with_hard_links();              // disabled by default (least privilege)
-
-// Create a file
-container.write("/original.txt", b"content")?;
-
-// Create a hard link (same file, different path)
-container.hard_link("/original.txt", "/link.txt")?;
-
-// Both paths refer to the same content
-// Deleting one doesn't affect the other
-container.remove_file("/original.txt")?;
-let content = container.read("/link.txt")?;  // Still works
+let backend = LoggingBackend::new(MemoryBackend::new())
+    .with_logger(MyLogger::new());
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
-<h3 id="pattern-matching-on-errors"><a class="header" href="#pattern-matching-on-errors">Pattern Matching on Errors</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_container::ContainerError;
+</span>use anyfs_backend::VfsError;
 
-match container.write("/file.txt", &amp;large_data) {
-    Ok(()) =&gt; println!("Written successfully"),
+match fs.write("/file.txt", &amp;large_data) {
+    Ok(()) =&gt; println!("Written"),
 
-    Err(ContainerError::NotFound(p)) =&gt; {
-        println!("Parent directory doesn't exist: {}", p);
-    }
+    Err(VfsError::NotFound(p)) =&gt; println!("Not found: {}", p),
+    Err(VfsError::AlreadyExists(p)) =&gt; println!("Exists: {}", p),
+    Err(VfsError::QuotaExceeded) =&gt; println!("Quota exceeded"),
+    Err(VfsError::FeatureNotEnabled(f)) =&gt; println!("Feature disabled: {}", f),
 
-    Err(ContainerError::FileSizeExceeded { size, limit }) =&gt; {
-        println!("File too large: {} bytes (limit: {})", size, limit);
-    }
-
-    Err(ContainerError::TotalSizeExceeded { used, limit }) =&gt; {
-        println!("Storage full: {} / {} bytes", used, limit);
-    }
-
-    Err(ContainerError::FeatureNotEnabled(name)) =&gt; {
-        println!("Feature is disabled by default: {}", name);
-    }
-
-    Err(e) =&gt; println!("Other error: {}", e),
+    Err(e) =&gt; println!("Error: {}", e),
 }
 <span class="boring">}</span></code></pre>
-<h3 id="common-error-scenarios"><a class="header" href="#common-error-scenarios">Common Error Scenarios</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Error</th><th>Cause</th><th>Solution</th></tr>
-</thead>
-<tbody>
-<tr><td><code>NotFound</code></td><td>Path doesn’t exist</td><td>Check with <code>exists()</code> first, or use <code>create_dir_all</code></td></tr>
-<tr><td><code>AlreadyExists</code></td><td>Creating over existing</td><td>Remove first, or check existence</td></tr>
-<tr><td><code>NotADirectory</code></td><td>Operating on file as dir</td><td>Check <code>metadata().file_type</code></td></tr>
-<tr><td><code>DirectoryNotEmpty</code></td><td>Removing non-empty dir</td><td>Use <code>remove_dir_all()</code> instead</td></tr>
-<tr><td><code>FileSizeExceeded</code></td><td>File too large</td><td>Increase limit or split file</td></tr>
-<tr><td><code>TotalSizeExceeded</code></td><td>Storage full</td><td>Delete files or increase quota</td></tr>
-<tr><td><code>FeatureNotEnabled</code></td><td>Feature is disabled by policy</td><td>Enable via <code>ContainerBuilder</code> (whitelist)</td></tr>
-</tbody>
-</table>
-</div>
 <hr>
 <h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
-<h3 id="use-in-memory-backend"><a class="header" href="#use-in-memory-backend">Use In-Memory Backend</a></h3>
-<p>The in-memory backend is fast and isolated. It’s useful for:</p>
-<ul>
-<li>Unit and integration tests</li>
-<li>Caching or temporary storage</li>
-<li>Speed-critical applications where persistence isn’t needed</li>
-</ul>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[cfg(test)]
-mod tests {
-    use anyfs::MemoryBackend;
-    use anyfs_container::FilesContainer;
-
-    fn test_container() -&gt; FilesContainer&lt;MemoryBackend&gt; {
-        FilesContainer::new(MemoryBackend::new())
-    }
-
-    #[test]
-    fn test_write_and_read() {
-        let mut container = test_container();
-
-        container.write("/test.txt", b"test data").unwrap();
-        let content = container.read("/test.txt").unwrap();
-
-        assert_eq!(content, b"test data");
-    }
-
-    #[test]
-    fn test_directory_operations() {
-        let mut container = test_container();
-
-        container.create_dir_all("/a/b/c").unwrap();
-
-        assert!(container.exists("/a").unwrap());
-        assert!(container.exists("/a/b").unwrap());
-        assert!(container.exists("/a/b/c").unwrap());
-    }
-}
-<span class="boring">}</span></code></pre>
-<h3 id="test-with-capacity-limits"><a class="header" href="#test-with-capacity-limits">Test with Capacity Limits</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::MemoryBackend;
 use anyfs_container::FilesContainer;
 
 #[test]
-fn test_storage_limit() {
-    let mut container = FilesContainer::new(MemoryBackend::new())
-        .with_max_total_size(1024);  // 1 KB limit
+fn test_write_and_read() {
+    let mut fs = FilesContainer::new(MemoryBackend::new());
+
+    fs.write("/test.txt", b"test data").unwrap();
+    let content = fs.read("/test.txt").unwrap();
+
+    assert_eq!(content, b"test data");
+}
+<span class="boring">}</span></code></pre>
+<p>With limits:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{MemoryBackend, LimitedBackend};
+use anyfs_container::FilesContainer;
+
+#[test]
+fn test_quota_exceeded() {
+    let backend = LimitedBackend::new(MemoryBackend::new())
+        .with_max_total_size(1024);  // 1 KB
+    let mut fs = FilesContainer::new(backend);
 
     let big_data = vec![0u8; 2048];  // 2 KB
-
-    let result = container.write("/big.bin", &amp;big_data);
+    let result = fs.write("/big.bin", &amp;big_data);
 
     assert!(result.is_err());
 }
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
-<h3 id="1-handle-errors-gracefully"><a class="header" href="#1-handle-errors-gracefully">1. Handle Errors Gracefully</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs_backend::VfsBackend;
-use anyfs_container::{FilesContainer, ContainerError};
-
-fn ensure_parent_exists&lt;B: VfsBackend&gt;(
-    container: &amp;mut FilesContainer&lt;B&gt;,
-    path: &amp;str,
-) -&gt; Result&lt;(), ContainerError&gt; {
-    // FilesContainer handles path parsing internally
-    if let Some(parent) = std::path::Path::new(path).parent() {
-        if !container.exists(parent)? {
-            container.create_dir_all(parent)?;
-        }
-    }
-    Ok(())
-}
-<span class="boring">}</span></code></pre>
-<h3 id="2-use-appropriate-backend-for-use-case"><a class="header" href="#2-use-appropriate-backend-for-use-case">2. Use Appropriate Backend for Use Case</a></h3>
+<h3 id="1-use-appropriate-backend"><a class="header" href="#1-use-appropriate-backend">1. Use Appropriate Backend</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Use Case</th><th>Recommended Backend</th></tr>
+<tr><th>Use Case</th><th>Backend</th></tr>
 </thead>
 <tbody>
-<tr><td>Unit tests</td><td><code>MemoryBackend</code></td></tr>
-<tr><td>Integration tests</td><td><code>MemoryBackend</code> or temp <code>SqliteBackend</code></td></tr>
+<tr><td>Testing</td><td><code>MemoryBackend</code></td></tr>
 <tr><td>Production</td><td><code>SqliteBackend</code></td></tr>
-<tr><td>Host filesystem access</td><td><code>VRootFsBackend</code></td></tr>
+<tr><td>Host filesystem</td><td><code>VRootFsBackend</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="3-set-reasonable-limits"><a class="header" href="#3-set-reasonable-limits">3. Set Reasonable Limits</a></h3>
+<h3 id="2-compose-middleware-for-your-needs"><a class="header" href="#2-compose-middleware-for-your-needs">2. Compose Middleware for Your Needs</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteBackend;
-use anyfs_container::FilesContainer;
+</span>// Minimal: just storage
+let fs = FilesContainer::new(MemoryBackend::new());
 
-// Production defaults suggestion
-let container = FilesContainer::new(SqliteBackend::create("data.db")?)
-    .with_max_total_size(1024 * 1024 * 1024)  // 1 GB
-    .with_max_file_size(100 * 1024 * 1024)    // 100 MB
-    .with_max_node_count(1_000_000)            // 1M nodes
-    .with_max_dir_entries(10_000)              // 10K per dir
-    .with_max_path_depth(64);
+// With limits
+let fs = FilesContainer::new(
+    LimitedBackend::new(MemoryBackend::new())
+        .with_max_total_size(100 * 1024 * 1024)
+);
+
+// Full security
+let fs = FilesContainer::new(
+    FeatureGatedBackend::new(
+        LimitedBackend::new(SqliteBackend::open("data.db")?)
+    )
+    .with_symlinks()
+);
 <span class="boring">}</span></code></pre>
+<h3 id="3-handle-errors-gracefully"><a class="header" href="#3-handle-errors-gracefully">3. Handle Errors Gracefully</a></h3>
+<p>Always check for quota exceeded, feature not enabled, and other errors.</p>
 <hr>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li><a href="./api-reference.html">API Quick Reference</a> — Condensed API overview</li>
-<li><a href="../implementation/backend-guide.html">Backend Implementer’s Guide</a> — Create custom backends</li>
-<li><a href="../architecture/design-overview.html">Design Overview</a> — Technical architecture</li>
+<li><a href="./api-reference.html">API Quick Reference</a></li>
+<li><a href="../architecture/design-overview.html">Design Overview</a></li>
+<li><a href="../implementation/backend-guide.html">Backend Implementer’s Guide</a></li>
 </ul>
-<hr>
-<p><em>Happy coding!</em></p>
 
                     </main>
 

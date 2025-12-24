@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-788b0482.js";
+            window.path_to_searchindex_js = "../searchindex-3caf12ec.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-076f33df.js"></script>
+        <script src="../toc-a787d6ec.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,66 +182,76 @@
                     <main>
                         <h1 id="anyfs---project-structure"><a class="header" href="#anyfs---project-structure">AnyFS - Project Structure</a></h1>
 <p><strong>Status:</strong> Current
-<strong>Last updated:</strong> 2025-12-23</p>
+<strong>Last updated:</strong> 2025-12-24</p>
 <hr>
 <h2 id="repository-layout"><a class="header" href="#repository-layout">Repository Layout</a></h2>
-<pre><code>anyfs-backend/             # Crate 1: core trait + types
+<pre><code>anyfs-backend/              # Crate 1: trait + types
   Cargo.toml
   src/
     lib.rs
-    backend.rs
-    types.rs
-    error.rs
+    backend.rs              # VfsBackend trait
+    types.rs                # Metadata, DirEntry, Permissions, StatFs
+    error.rs                # VfsError
 
-anyfs/                     # Crate 2: built-in backends (feature-gated)
-  Cargo.toml
-  src/
-    lib.rs                 # backend implementations
-    memory/                # [feature: memory] (default)
-    vrootfs/               # [feature: vrootfs]
-    sqlite/                # [feature: sqlite]
-
-anyfs-container/           # Crate 3: policy layer (quotas + isolation)
+anyfs/                      # Crate 2: backends + middleware
   Cargo.toml
   src/
     lib.rs
-    container.rs           # FilesContainer&lt;B: VfsBackend&gt;
-    limits.rs              # CapacityLimits
-    usage.rs               # CapacityUsage, CapacityRemaining
-    error.rs               # ContainerError
+    backends/
+      memory.rs             # MemoryBackend [feature: memory, default]
+      sqlite.rs             # SqliteBackend [feature: sqlite]
+      vrootfs.rs            # VRootFsBackend [feature: vrootfs]
+    middleware/
+      limited.rs            # LimitedBackend&lt;B&gt;
+      logging.rs            # LoggingBackend&lt;B&gt;
+      feature_gated.rs      # FeatureGatedBackend&lt;B&gt;
+
+anyfs-container/            # Crate 3: ergonomic wrapper
+  Cargo.toml
+  src/
+    lib.rs
+    container.rs            # FilesContainer&lt;B&gt;
 </code></pre>
 <hr>
 <h2 id="dependency-model"><a class="header" href="#dependency-model">Dependency Model</a></h2>
 <pre><code>anyfs-backend (trait + types)
-    &lt;- anyfs (execution layer, calls any VfsBackend)
-    &lt;- anyfs-container (wraps backends with policy)
-
-strict-path (VirtualPath, VirtualRoot)
-    &lt;- anyfs [vrootfs feature only]
+     ^
+     |-- anyfs (backends + middleware)
+     |     ^-- vrootfs feature uses strict-path
+     |
+     +-- anyfs-container (ergonomic wrapper)
 </code></pre>
-<p><strong>Key point:</strong> Custom backends depend only on <code>anyfs-backend</code>. The <code>anyfs</code> crate is the execution layer that can call any backend—built-in or custom. <code>strict-path</code> is only used by the <code>vrootfs</code> feature.</p>
+<p><strong>Key points:</strong></p>
+<ul>
+<li>Custom backends depend only on <code>anyfs-backend</code></li>
+<li><code>anyfs</code> provides built-in backends and middleware</li>
+<li><code>anyfs-container</code> provides the ergonomic <code>FilesContainer</code> wrapper</li>
+</ul>
 <hr>
-<h2 id="path-flow"><a class="header" href="#path-flow">Path Flow</a></h2>
-<pre><code>User code:  container.read("/a/b.txt")
-   -&gt; FilesContainer (policy checks, normalization)
-   -&gt; backend.read(path)  # receives impl AsRef&lt;Path&gt;
+<h2 id="middleware-pattern"><a class="header" href="#middleware-pattern">Middleware Pattern</a></h2>
+<pre><code>FilesContainer&lt;B&gt;
+    wraps -&gt; LoggingBackend&lt;B&gt;
+        wraps -&gt; FeatureGatedBackend&lt;B&gt;
+            wraps -&gt; LimitedBackend&lt;B&gt;
+                wraps -&gt; SqliteBackend (or any VfsBackend)
 </code></pre>
-<p>Both layers use <code>impl AsRef&lt;Path&gt;</code> for std::fs alignment.</p>
+<p>Each layer implements <code>VfsBackend</code>, enabling composition.</p>
 <hr>
 <h2 id="cargo-features"><a class="header" href="#cargo-features">Cargo Features</a></h2>
-<p>Cargo features in <code>anyfs</code> select which built-in backends to include:</p>
+<p>Features in <code>anyfs</code> select which backends to include:</p>
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>sqlite</code> — SQLite-backed persistent storage</li>
-<li><code>vrootfs</code> — Host filesystem backend (uses <code>strict-path</code> internally)</li>
+<li><code>vrootfs</code> — Host filesystem backend (uses <code>strict-path</code>)</li>
 </ul>
-<p>The runtime feature whitelist (symlinks, hard_links, permissions) is configured per <code>FilesContainer</code> instance, not at compile time.</p>
+<p>Middleware is always available (no feature flags).</p>
 <hr>
 <h2 id="where-to-start"><a class="header" href="#where-to-start">Where To Start</a></h2>
 <ul>
 <li>Application usage: <code>book/src/getting-started/guide.md</code></li>
 <li>Trait details: <code>book/src/traits/vfs-trait.md</code></li>
-<li>Decisions and rationale: <code>book/src/architecture/adrs.md</code></li>
+<li>Middleware: <code>book/src/architecture/design-overview.md</code></li>
+<li>Decisions: <code>book/src/architecture/adrs.md</code></li>
 </ul>
 
                     </main>
