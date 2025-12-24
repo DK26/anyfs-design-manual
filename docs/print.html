@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-96b92abe.js";
+            window.path_to_searchindex_js = "searchindex-c8e37e0f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a787d6ec.js"></script>
+        <script src="toc-49a6e0ad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2637,12 +2637,21 @@ impl&lt;B: VfsBackend&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 <tr><td>Path sandboxing</td><td>Backend-dependent</td><td>Yes (PathFilter middleware)</td></tr>
 <tr><td>Feature gating</td><td>No</td><td>Yes (FeatureGuard middleware)</td></tr>
 <tr><td>SQLite backend</td><td>No</td><td>Yes (built-in)</td></tr>
+<tr><td>Path containment</td><td>Prefix-based (AltrootFS)</td><td>Canonicalization-based (<code>strict-path</code>)</td></tr>
 <tr><td>Third-party extensibility</td><td>Implement trait</td><td>Implement trait + Layer</td></tr>
+<tr><td>Path type</td><td>Custom <code>VfsPath</code></td><td><code>impl AsRef&lt;Path&gt;</code> (std-compatible)</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies.</p>
-<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging).</p>
+<p><strong>Path containment difference:</strong></p>
+<p>The <code>vfs</code> crate’s <code>AltrootFS</code> uses path prefix translation - it prepends a root path before delegating to the underlying filesystem. This is vulnerable to symlink-based escapes:</p>
+<pre><code>AltrootFS root: /data/tenant1/
+Symlink: /data/tenant1/link → ../tenant2/secrets.txt
+Access: /link → escapes to /data/tenant2/secrets.txt
+</code></pre>
+<p>AnyFS’s <code>VRootFsBackend</code> uses <code>strict-path</code> for full canonicalization. Symlinks are resolved and validated <em>before</em> any filesystem operation, preventing escapes.</p>
+<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies or security-sensitive containment.</p>
+<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging) or hardened path containment.</p>
 <hr>
 <h3 id="vs-agentfs-turso"><a class="header" href="#vs-agentfs-turso">vs. AgentFS (Turso)</a></h3>
 <div class="table-wrapper">
@@ -2725,7 +2734,8 @@ impl&lt;B: VfsBackend&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 <tr><td>Memory backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
 <tr><td>Real FS backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
 <tr><td>Quota enforcement</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Symlink-safe containment</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">N/A</td><td style="text-align: center">N/A</td></tr>
 <tr><td>Rate limiting</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
 <tr><td>Streaming I/O</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
 <tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
@@ -2912,6 +2922,22 @@ let secure_backend = Tracing::new(           // Audit trail
 </tbody>
 </table>
 </div>
+<h3 id="7-why-virtual-backends-are-inherently-safe"><a class="header" href="#7-why-virtual-backends-are-inherently-safe">7. Why Virtual Backends Are Inherently Safe</a></h3>
+<p>For <code>MemoryBackend</code> and <code>SqliteBackend</code>, paths are <strong>just keys</strong> (strings or normalized path components). There is no underlying OS filesystem to exploit.</p>
+<p><strong>Lexical path resolution</strong>: Unlike POSIX filesystems, virtual backends resolve paths <strong>lexically</strong> without consulting any filesystem:</p>
+<pre><code>POSIX behavior (dangerous):
+  /foo/bar/..  where bar → /etc  resolves to /etc/../ → /
+
+AnyFS virtual backend behavior (safe):
+  /foo/bar/..  always resolves to /foo (pure string manipulation)
+</code></pre>
+<p>This means:</p>
+<ul>
+<li><strong>No symlink-based escapes</strong> - symlinks are data, not OS-resolved references</li>
+<li><strong>No TOCTOU via filesystem state</strong> - resolution is deterministic</li>
+<li><strong>No host path leakage</strong> - paths never touch the OS path resolver</li>
+</ul>
+<p>For <code>VRootFsBackend</code> (real filesystem), <code>strict-path::VirtualRoot</code> provides equivalent guarantees by validating and containing all paths before they reach the OS.</p>
 <hr>
 <h2 id="secure-usage-patterns"><a class="header" href="#secure-usage-patterns">Secure Usage Patterns</a></h2>
 <h3 id="ai-agent-sandbox"><a class="header" href="#ai-agent-sandbox">AI Agent Sandbox</a></h3>
@@ -3339,6 +3365,79 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <li><code>anyfs-container</code>: <code>FilesContainer&lt;B&gt;</code> ergonomic wrapper</li>
 </ul>
 <hr>
+<h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
+<p>These guidelines apply to ALL implementation work. Derived from analysis of issues in similar projects (<code>vfs</code>, <code>agentfs</code>).</p>
+<h3 id="1-no-panic-policy"><a class="header" href="#1-no-panic-policy">1. No Panic Policy</a></h3>
+<p><strong>NEVER panic in library code.</strong> Always return <code>Result&lt;T, VfsError&gt;</code>.</p>
+<ul>
+<li>Audit all <code>.unwrap()</code> and <code>.expect()</code> calls - replace with <code>?</code> or proper error handling</li>
+<li>Use <code>ok_or_else(|| VfsError::...)</code> instead of <code>.unwrap()</code></li>
+<li>Edge cases must return errors, not panic</li>
+<li>Test in constrained environments (WASM) to catch hidden panics</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD
+let entry = self.entries.get(&amp;path).unwrap();
+
+// GOOD
+let entry = self.entries.get(&amp;path)
+    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+<span class="boring">}</span></code></pre>
+<h3 id="2-thread-safety-requirements"><a class="header" href="#2-thread-safety-requirements">2. Thread Safety Requirements</a></h3>
+<p>All backends must be safe for concurrent access:</p>
+<ul>
+<li><code>MemoryBackend</code>: Use <code>Arc&lt;RwLock&lt;...&gt;&gt;</code> for internal state</li>
+<li><code>SqliteBackend</code>: Use WAL mode, handle <code>SQLITE_BUSY</code></li>
+<li><code>VRootFsBackend</code>: File operations are inherently concurrent-safe</li>
+</ul>
+<p><strong>Required:</strong> Concurrent stress tests in conformance suite.</p>
+<h3 id="3-consistent-path-handling"><a class="header" href="#3-consistent-path-handling">3. Consistent Path Handling</a></h3>
+<p>Normalize paths in ONE place (FilesContainer or dedicated normalizer):</p>
+<ul>
+<li>Always absolute paths internally</li>
+<li>Always <code>/</code> separator (even on Windows)</li>
+<li>Normalize <code>..</code> and <code>.</code> components</li>
+<li>Handle edge cases: <code>//</code>, trailing <code>/</code>, empty string</li>
+</ul>
+<h3 id="4-error-type-design"><a class="header" href="#4-error-type-design">4. Error Type Design</a></h3>
+<p><code>VfsError</code> must be:</p>
+<ul>
+<li>Easy to pattern match</li>
+<li>Include context (path, operation)</li>
+<li>Derive <code>thiserror</code> for good messages</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, thiserror::Error)]
+pub enum VfsError {
+    #[error("not found: {path}")]
+    NotFound { path: PathBuf },
+
+    #[error("already exists: {path}")]
+    AlreadyExists { path: PathBuf },
+
+    #[error("quota exceeded: limit {limit}, attempted {attempted}")]
+    QuotaExceeded { limit: u64, attempted: u64 },
+
+    #[error("feature not enabled: {feature}")]
+    FeatureNotEnabled { feature: &amp;'static str },
+
+    #[error("permission denied: {path} ({operation})")]
+    PermissionDenied { path: PathBuf, operation: &amp;'static str },
+
+    // ... etc
+}
+<span class="boring">}</span></code></pre>
+<h3 id="5-documentation-requirements"><a class="header" href="#5-documentation-requirements">5. Documentation Requirements</a></h3>
+<p>Every backend and middleware must document:</p>
+<ul>
+<li>Thread safety guarantees</li>
+<li>Performance characteristics</li>
+<li>Which operations are O(1) vs O(n)</li>
+<li>Any platform-specific behavior</li>
+</ul>
+<hr>
 <h2 id="phase-1-anyfs-backend-core-contract"><a class="header" href="#phase-1-anyfs-backend-core-contract">Phase 1: <code>anyfs-backend</code> (core contract)</a></h2>
 <p><strong>Goal:</strong> Define the stable backend interface and composition traits.</p>
 <ul>
@@ -3346,7 +3445,7 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <li>Define <code>Layer</code> trait (Tower-style middleware composition)</li>
 <li>Define <code>VfsBackendExt</code> trait (extension methods)</li>
 <li>Define core types (<code>Metadata</code>, <code>Permissions</code>, <code>FileType</code>, <code>DirEntry</code>, <code>StatFs</code>)</li>
-<li>Define <code>VfsError</code> with contextual variants</li>
+<li>Define <code>VfsError</code> with contextual variants (see guidelines above)</li>
 </ul>
 <p><strong>Exit criteria:</strong> <code>anyfs-backend</code> stands alone with minimal dependencies (<code>thiserror</code>).</p>
 <hr>
@@ -3385,6 +3484,7 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <h2 id="phase-4-conformance-test-suite"><a class="header" href="#phase-4-conformance-test-suite">Phase 4: Conformance test suite</a></h2>
 <p><strong>Goal:</strong> Prevent backend divergence and validate middleware behavior.</p>
 <h3 id="backend-conformance-tests"><a class="header" href="#backend-conformance-tests">Backend conformance tests</a></h3>
+<h4 id="basic-operations"><a class="header" href="#basic-operations">Basic Operations</a></h4>
 <ul>
 <li><code>read</code>/<code>write</code>/<code>append</code> semantics</li>
 <li>Directory operations (<code>create_dir*</code>, <code>read_dir</code>, <code>remove_dir*</code>)</li>
@@ -3393,15 +3493,80 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <li>Streaming I/O (<code>open_read</code>, <code>open_write</code>)</li>
 <li><code>truncate</code>, <code>sync</code>, <code>fsync</code>, <code>statfs</code></li>
 </ul>
+<h4 id="path-edge-cases-learned-from-vfs-issues"><a class="header" href="#path-edge-cases-learned-from-vfs-issues">Path Edge Cases (learned from <code>vfs</code> issues)</a></h4>
+<ul>
+<li><code>/foo/../bar</code> normalizes to <code>/bar</code></li>
+<li><code>//double//slashes//</code> normalizes correctly</li>
+<li>Trailing slashes handled consistently</li>
+<li>Empty path returns error (not panic)</li>
+<li>Root path <code>/</code> works correctly</li>
+<li>Very long paths (near OS limits)</li>
+<li>Unicode paths</li>
+<li>Paths with spaces and special characters</li>
+</ul>
+<h4 id="thread-safety-tests-learned-from-vfs-72-47"><a class="header" href="#thread-safety-tests-learned-from-vfs-72-47">Thread Safety Tests (learned from <code>vfs</code> #72, #47)</a></h4>
+<ul>
+<li>Concurrent <code>read</code> from multiple threads</li>
+<li>Concurrent <code>write</code> to different files</li>
+<li>Concurrent <code>create_dir_all</code> to same path (must not race)</li>
+<li>Concurrent <code>read_dir</code> while modifying directory</li>
+<li>Stress test: 100 threads, 1000 operations each</li>
+</ul>
+<h4 id="error-handling-tests-learned-from-vfs-8-23"><a class="header" href="#error-handling-tests-learned-from-vfs-8-23">Error Handling Tests (learned from <code>vfs</code> #8, #23)</a></h4>
+<ul>
+<li>Missing file returns <code>NotFound</code>, not panic</li>
+<li>Missing parent directory returns error, not panic</li>
+<li>Invalid UTF-8 in path returns error, not panic</li>
+<li>All error variants are matchable</li>
+</ul>
+<h4 id="platform-tests"><a class="header" href="#platform-tests">Platform Tests</a></h4>
+<ul>
+<li>Windows path separators (<code>\</code> vs <code>/</code>)</li>
+<li>Case sensitivity differences</li>
+<li>Symlink behavior differences</li>
+</ul>
 <h3 id="middleware-tests"><a class="header" href="#middleware-tests">Middleware tests</a></h3>
 <ul>
-<li><code>Quota</code>: Limit enforcement, usage tracking</li>
-<li><code>FeatureGuard</code>: Feature blocking</li>
-<li><code>PathFilter</code>: Glob pattern matching</li>
-<li><code>RateLimit</code>: Throttling behavior</li>
-<li>Middleware composition order</li>
+<li><code>Quota</code>: Limit enforcement, usage tracking, streaming writes</li>
+<li><code>FeatureGuard</code>: Feature blocking, error messages</li>
+<li><code>PathFilter</code>: Glob pattern matching, deny-by-default</li>
+<li><code>RateLimit</code>: Throttling behavior, burst handling</li>
+<li><code>ReadOnly</code>: All write operations blocked</li>
+<li><code>Tracing</code>: Operations logged correctly</li>
+<li>Middleware composition order (inner to outer)</li>
+<li>Middleware with streaming I/O (wrappers work correctly)</li>
 </ul>
-<p><strong>Exit criteria:</strong> All backends pass same suite; middleware tests are backend-agnostic.</p>
+<h3 id="no-panic-tests"><a class="header" href="#no-panic-tests">No-Panic Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn no_panic_on_missing_file() {
+    let backend = create_backend();
+    let result = backend.read("/nonexistent");
+    assert!(matches!(result, Err(VfsError::NotFound { .. })));
+}
+
+#[test]
+fn no_panic_on_invalid_operation() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+    // Try to read directory on a file
+    let result = backend.read_dir("/file.txt");
+    assert!(matches!(result, Err(VfsError::NotADirectory { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="wasm-compatibility-tests-learned-from-vfs-68"><a class="header" href="#wasm-compatibility-tests-learned-from-vfs-68">WASM Compatibility Tests (learned from <code>vfs</code> #68)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn memory_backend_works_in_wasm() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/test.txt", b"hello").unwrap();
+    // Should not panic
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Exit criteria:</strong> All backends pass same suite; middleware tests are backend-agnostic; zero panics in any test.</p>
 <hr>
 <h2 id="phase-5-documentation--examples"><a class="header" href="#phase-5-documentation--examples">Phase 5: Documentation + examples</a></h2>
 <ul>
@@ -3409,6 +3574,42 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <li>Provide example per backend</li>
 <li>Provide backend implementer guide</li>
 <li>Provide middleware implementer guide</li>
+<li>Document performance characteristics per backend</li>
+<li>Document thread safety guarantees per backend</li>
+<li>Document platform-specific behavior</li>
+</ul>
+<hr>
+<h2 id="phase-6-cicd-pipeline"><a class="header" href="#phase-6-cicd-pipeline">Phase 6: CI/CD Pipeline</a></h2>
+<p><strong>Goal:</strong> Ensure quality across platforms and prevent regressions.</p>
+<h3 id="cross-platform-testing"><a class="header" href="#cross-platform-testing">Cross-Platform Testing</a></h3>
+<pre><code class="language-yaml"># .github/workflows/ci.yml
+strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+    rust: [stable, beta]
+</code></pre>
+<p>Required CI checks:</p>
+<ul>
+<li><code>cargo test</code> on all platforms</li>
+<li><code>cargo clippy -- -D warnings</code></li>
+<li><code>cargo fmt --check</code></li>
+<li><code>cargo doc --no-deps</code></li>
+<li>WASM build test: <code>cargo build --target wasm32-unknown-unknown</code></li>
+</ul>
+<h3 id="additional-ci-jobs"><a class="header" href="#additional-ci-jobs">Additional CI Jobs</a></h3>
+<ul>
+<li><strong>Miri</strong> (undefined behavior detection): <code>cargo +nightly miri test</code></li>
+<li><strong>Address Sanitizer</strong>: Detect memory issues</li>
+<li><strong>Thread Sanitizer</strong>: Detect data races</li>
+<li><strong>Coverage</strong>: Minimum 80% line coverage</li>
+</ul>
+<h3 id="release-checklist"><a class="header" href="#release-checklist">Release Checklist</a></h3>
+<ul>
+<li><input disabled="" type="checkbox"> All CI checks pass</li>
+<li><input disabled="" type="checkbox"> No new <code>clippy</code> warnings</li>
+<li><input disabled="" type="checkbox"> CHANGELOG updated</li>
+<li><input disabled="" type="checkbox"> Version bumped appropriately</li>
+<li><input disabled="" type="checkbox"> Documentation builds without warnings</li>
 </ul>
 <hr>
 <h2 id="future-work-post-mvp"><a class="header" href="#future-work-post-mvp">Future work (post-MVP)</a></h2>
@@ -3419,7 +3620,31 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <li>Encryption middleware</li>
 <li>Compression middleware</li>
 <li><code>vfs</code> crate compatibility adapter</li>
+<li><code>no_std</code> support (learned from <code>vfs</code> #38)</li>
+<li>Batch operations for performance (learned from <code>agentfs</code> #130)</li>
 </ul>
+<hr>
+<h2 id="lessons-learned-reference"><a class="header" href="#lessons-learned-reference">Lessons Learned (Reference)</a></h2>
+<p>This plan incorporates lessons from issues in similar projects:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source</th><th>Issue</th><th>Lesson Applied</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs #72</td><td>RwLock panic</td><td>Thread safety tests</td></tr>
+<tr><td>vfs #47</td><td><code>create_dir_all</code> race</td><td>Concurrent stress tests</td></tr>
+<tr><td>vfs #8, #23</td><td>Panics instead of errors</td><td>No-panic policy</td></tr>
+<tr><td>vfs #24, #42</td><td>Path inconsistencies</td><td>Path edge case tests</td></tr>
+<tr><td>vfs #33</td><td>Hard to match errors</td><td>Ergonomic <code>VfsError</code> design</td></tr>
+<tr><td>vfs #68</td><td>WASM panics</td><td>WASM compatibility tests</td></tr>
+<tr><td>vfs #66</td><td><code>'static</code> confusion</td><td>Minimal trait bounds</td></tr>
+<tr><td>agentfs #130</td><td>Slow file deletion</td><td>Performance documentation</td></tr>
+<tr><td>agentfs #129</td><td>Signal handling</td><td>Proper <code>Drop</code> implementations</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <a href="#lessons-from-similar-projects">Lessons from Similar Projects</a> for full analysis.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="backend-implementers-guide"><a class="header" href="#backend-implementers-guide">Backend Implementer’s Guide</a></h1>
 <p>This guide walks you through implementing a custom AnyFS backend.</p>
@@ -3837,31 +4062,896 @@ let fs = MemoryBackend::new()
 <li><input disabled="" type="checkbox"> Implements <code>truncate</code> (shrink/extend files)</li>
 <li><input disabled="" type="checkbox"> Implements <code>sync</code>/<code>fsync</code> (durability)</li>
 <li><input disabled="" type="checkbox"> Passes conformance tests</li>
+<li><input disabled="" type="checkbox"> No panics (see below)</li>
+<li><input disabled="" type="checkbox"> Thread-safe (see below)</li>
+<li><input disabled="" type="checkbox"> Documents performance characteristics</li>
+</ul>
+<hr>
+<h2 id="critical-implementation-guidelines"><a class="header" href="#critical-implementation-guidelines">Critical Implementation Guidelines</a></h2>
+<p>These guidelines are derived from issues found in similar projects (<code>vfs</code>, <code>agentfs</code>). <strong>All implementations MUST follow these.</strong></p>
+<h3 id="1-no-panic-policy-1"><a class="header" href="#1-no-panic-policy-1">1. No Panic Policy</a></h3>
+<p><strong>NEVER use <code>.unwrap()</code> or <code>.expect()</code> in library code.</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD - will panic on missing file
+fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+    let entry = self.entries.get(path.as_ref()).unwrap();  // PANIC!
+    Ok(entry.content.clone())
+}
+
+// GOOD - returns error
+fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+    let path = path.as_ref();
+    let entry = self.entries.get(path)
+        .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    Ok(entry.content.clone())
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Edge cases that must NOT panic:</strong></p>
+<ul>
+<li>File doesn’t exist</li>
+<li>Directory doesn’t exist</li>
+<li>Path is empty string</li>
+<li>Path is invalid UTF-8 (if using OsStr)</li>
+<li>Parent directory missing</li>
+<li>Trying to read a directory as a file</li>
+<li>Trying to list a file as a directory</li>
+<li>Concurrent access conflicts</li>
+</ul>
+<h3 id="2-thread-safety"><a class="header" href="#2-thread-safety">2. Thread Safety</a></h3>
+<p>Backends must be safe for concurrent access. Use appropriate synchronization:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub struct MemoryBackend {
+    entries: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, Entry&gt;&gt;&gt;,
+}
+
+impl VfsBackend for MemoryBackend {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+        let entries = self.entries.read()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt; {
+        let mut entries = self.entries.write()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Common race conditions to avoid:</strong></p>
+<ul>
+<li><code>create_dir_all</code> called concurrently for same path</li>
+<li><code>read</code> during <code>write</code> to same file</li>
+<li><code>read_dir</code> while directory is being modified</li>
+<li><code>rename</code> with concurrent access to source or destination</li>
+</ul>
+<h3 id="3-path-normalization"><a class="header" href="#3-path-normalization">3. Path Normalization</a></h3>
+<p>Normalize paths consistently. Recommended approach:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn normalize_path(path: &amp;Path) -&gt; PathBuf {
+    let mut components = Vec::new();
+
+    for component in path.components() {
+        match component {
+            Component::RootDir =&gt; {
+                components.clear();
+                components.push(Component::RootDir);
+            }
+            Component::CurDir =&gt; {
+                // Skip "."
+            }
+            Component::ParentDir =&gt; {
+                // Go up, but don't go past root
+                if components.len() &gt; 1 {
+                    components.pop();
+                }
+            }
+            Component::Normal(name) =&gt; {
+                components.push(Component::Normal(name));
+            }
+            Component::Prefix(_) =&gt; {
+                // Windows prefix - handle appropriately
+            }
+        }
+    }
+
+    components.iter().collect()
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Path edge cases to test:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th>Expected Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/foo/../bar</code></td><td><code>/bar</code></td></tr>
+<tr><td><code>/foo/./bar</code></td><td><code>/foo/bar</code></td></tr>
+<tr><td><code>//double//slash</code></td><td><code>/double/slash</code></td></tr>
+<tr><td><code>/</code></td><td><code>/</code></td></tr>
+<tr><td>`` (empty)</td><td>Error</td></tr>
+<tr><td><code>/foo/bar/</code></td><td><code>/foo/bar</code> (or keep trailing, be consistent)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="4-error-messages"><a class="header" href="#4-error-messages">4. Error Messages</a></h3>
+<p>Include context in errors for debugging:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD - no context
+Err(VfsError::NotFound)
+
+// GOOD - includes path
+Err(VfsError::NotFound { path: path.to_path_buf() })
+
+// BETTER - includes operation context
+Err(VfsError::Io {
+    path: path.to_path_buf(),
+    operation: "read",
+    source: io_error,
+})
+<span class="boring">}</span></code></pre>
+<h3 id="5-drop-implementation"><a class="header" href="#5-drop-implementation">5. Drop Implementation</a></h3>
+<p>Ensure cleanup happens correctly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Drop for SqliteBackend {
+    fn drop(&amp;mut self) {
+        // Flush any pending writes
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync on drop: {}", e);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="6-performance-documentation"><a class="header" href="#6-performance-documentation">6. Performance Documentation</a></h3>
+<p>Document the complexity of operations:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Memory-based virtual filesystem backend.
+///
+/// # Performance Characteristics
+///
+/// | Operation | Complexity | Notes |
+/// |-----------|------------|-------|
+/// | `read` | O(1) | HashMap lookup |
+/// | `write` | O(n) | n = data size |
+/// | `read_dir` | O(k) | k = entries in directory |
+/// | `create_dir_all` | O(d) | d = path depth |
+/// | `remove_dir_all` | O(n) | n = total descendants |
+///
+/// # Thread Safety
+///
+/// All operations are thread-safe. Uses `RwLock` internally.
+/// Multiple concurrent reads are allowed.
+/// Writes are exclusive.
+pub struct MemoryBackend { ... }
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="testing-requirements"><a class="header" href="#testing-requirements">Testing Requirements</a></h2>
+<p>Your backend MUST pass these test categories:</p>
+<h3 id="basic-functionality"><a class="header" href="#basic-functionality">Basic Functionality</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_read_write_roundtrip() { ... }
+
+#[test]
+fn test_create_dir_and_list() { ... }
+
+#[test]
+fn test_remove_file() { ... }
+<span class="boring">}</span></code></pre>
+<h3 id="edge-cases-no-panics"><a class="header" href="#edge-cases-no-panics">Edge Cases (No Panics)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_read_nonexistent_returns_error() {
+    let backend = create_backend();
+    assert!(matches!(
+        backend.read("/nonexistent"),
+        Err(VfsError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn test_read_dir_on_file_returns_error() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+    assert!(matches!(
+        backend.read_dir("/file.txt"),
+        Err(VfsError::NotADirectory { .. })
+    ));
+}
+
+#[test]
+fn test_empty_path_returns_error() {
+    let backend = create_backend();
+    assert!(backend.read("").is_err());
+}
+<span class="boring">}</span></code></pre>
+<h3 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_concurrent_reads() {
+    let backend = Arc::new(create_backend_with_data());
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            for _ in 0..100 {
+                backend.read("/test.txt").unwrap();
+            }
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+
+#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(RwLock::new(create_backend()));
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let mut backend = backend.write().unwrap();
+            // Should not panic or corrupt state
+            let _ = backend.create_dir_all("/a/b/c/d");
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="path-normalization"><a class="header" href="#path-normalization">Path Normalization</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_path_with_dotdot() {
+    let mut backend = create_backend();
+    backend.create_dir_all("/foo/bar").unwrap();
+    backend.write("/foo/bar/test.txt", b"data").unwrap();
+
+    // These should all access the same file
+    assert_eq!(backend.read("/foo/bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/bar/../bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/./bar/test.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="lessons-from-similar-projects"><a class="header" href="#lessons-from-similar-projects">Lessons from Similar Projects</a></h1>
+<p><strong>Analysis of issues from <code>vfs</code> and <code>agentfs</code> to inform AnyFS design.</strong></p>
+<p>This chapter documents problems encountered by similar projects and how AnyFS addresses them. These lessons are incorporated into our <a href="#implementation-plan">Implementation Plan</a> and <a href="#backend-implementers-guide">Backend Guide</a>.</p>
+<hr>
+<h2 id="summary-1"><a class="header" href="#summary-1">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Priority</th><th>Issue</th><th>AnyFS Response</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Panics instead of errors</td><td>No-panic policy, always return <code>Result</code></td></tr>
+<tr><td>2</td><td>Thread safety problems</td><td>Concurrent stress tests required</td></tr>
+<tr><td>3</td><td>Inconsistent path handling</td><td>Normalize in one place, test edge cases</td></tr>
+<tr><td>4</td><td>Poor error ergonomics</td><td><code>VfsError</code> with context fields</td></tr>
+<tr><td>5</td><td>Missing documentation</td><td>Performance &amp; thread safety docs required</td></tr>
+<tr><td>6</td><td>Platform issues</td><td>Cross-platform CI pipeline</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="1-thread-safety-issues"><a class="header" href="#1-thread-safety-issues">1. Thread Safety Issues</a></h2>
+<h3 id="what-happened"><a class="header" href="#what-happened">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/72">#72</a></td><td>RwLock panic in production</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/47">#47</a></td><td><code>create_dir_all</code> races with itself</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Insufficient synchronization in concurrent access patterns.</p>
+<h3 id="anyfs-response"><a class="header" href="#anyfs-response">AnyFS Response</a></h3>
+<ul>
+<li><strong>Test concurrent operations explicitly</strong> - stress test with multiple threads</li>
+<li><strong>Document thread safety guarantees</strong> per backend</li>
+<li><strong><code>VfsBackend: Send</code></strong> bound is intentional</li>
+<li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for interior mutability</li>
+</ul>
+<p><strong>Required tests:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(RwLock::new(create_backend()));
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let mut backend = backend.write().unwrap();
+            let _ = backend.create_dir_all("/a/b/c/d");
+        })
+    }).collect();
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="2-panics-instead-of-errors"><a class="header" href="#2-panics-instead-of-errors">2. Panics Instead of Errors</a></h2>
+<h3 id="what-happened-1"><a class="header" href="#what-happened-1">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/8">#8</a></td><td>AltrootFS panics when file doesn’t exist</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/23">#23</a></td><td>Unhandled edge cases cause panics</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/68">#68</a></td><td>MemoryFS panics in WebAssembly</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Using <code>.unwrap()</code> or <code>.expect()</code> on fallible operations.</p>
+<h3 id="anyfs-response-1"><a class="header" href="#anyfs-response-1">AnyFS Response</a></h3>
+<p><strong>No-panic policy:</strong> Never use <code>.unwrap()</code> or <code>.expect()</code> in library code.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD - will panic
+let entry = self.entries.get(&amp;path).unwrap();
+
+// GOOD - returns error
+let entry = self.entries.get(&amp;path)
+    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+<span class="boring">}</span></code></pre>
+<p><strong>Edge cases that must return errors (not panic):</strong></p>
+<ul>
+<li>File doesn’t exist</li>
+<li>Directory doesn’t exist</li>
+<li>Path is empty string</li>
+<li>Invalid UTF-8 in path</li>
+<li>Parent directory missing</li>
+<li>Type mismatch (file vs directory)</li>
+<li>Concurrent access conflicts</li>
+</ul>
+<hr>
+<h2 id="3-path-handling-inconsistencies"><a class="header" href="#3-path-handling-inconsistencies">3. Path Handling Inconsistencies</a></h2>
+<h3 id="what-happened-2"><a class="header" href="#what-happened-2">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/24">#24</a></td><td>Inconsistent path definition across backends</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/42">#42</a></td><td>Path join doesn’t behave Unix-like</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/22">#22</a></td><td>Non-UTF-8 path support questions</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Each backend implemented path handling differently.</p>
+<h3 id="anyfs-response-2"><a class="header" href="#anyfs-response-2">AnyFS Response</a></h3>
+<ul>
+<li><strong>Normalize paths in ONE place</strong> (FilesContainer or dedicated normalizer)</li>
+<li><strong>Consistent semantics:</strong> always absolute, always <code>/</code> separator</li>
+<li><strong>Use <code>impl AsRef&lt;Path&gt;</code></strong> but normalize internally</li>
+</ul>
+<p><strong>Required conformance tests:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th>Expected Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/foo/../bar</code></td><td><code>/bar</code></td></tr>
+<tr><td><code>/foo/./bar</code></td><td><code>/foo/bar</code></td></tr>
+<tr><td><code>//double//slash</code></td><td><code>/double/slash</code></td></tr>
+<tr><td><code>/</code></td><td><code>/</code></td></tr>
+<tr><td>`` (empty)</td><td>Error</td></tr>
+<tr><td><code>/foo/bar/</code></td><td><code>/foo/bar</code></td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="4-static-lifetime-requirements"><a class="header" href="#4-static-lifetime-requirements">4. Static Lifetime Requirements</a></h2>
+<h3 id="what-happened-3"><a class="header" href="#what-happened-3">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/66">#66</a></td><td>Why does filesystem require <code>'static</code>?</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Design decision that confused users and limited flexibility.</p>
+<h3 id="anyfs-response-3"><a class="header" href="#anyfs-response-3">AnyFS Response</a></h3>
+<ul>
+<li><strong>Avoid <code>'static</code> bounds</strong> unless necessary</li>
+<li><strong>Our design:</strong> <code>VfsBackend: Send</code> (not <code>'static</code>)</li>
+<li><strong>Document why bounds exist</strong> when needed</li>
+</ul>
+<hr>
+<h2 id="5-missing-symlink-support"><a class="header" href="#5-missing-symlink-support">5. Missing Symlink Support</a></h2>
+<h3 id="what-happened-4"><a class="header" href="#what-happened-4">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/81">#81</a></td><td>Symlink support missing entirely</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Symlinks are complex and were deferred indefinitely.</p>
+<h3 id="anyfs-response-4"><a class="header" href="#anyfs-response-4">AnyFS Response</a></h3>
+<ul>
+<li><strong>Symlinks are opt-in</strong> via <code>FeatureGuard</code> middleware</li>
+<li><strong>Default deny is correct</strong> - most use cases don’t need symlinks</li>
+<li><strong>When enabled, bound resolution depth</strong> (default: 40 hops)</li>
+<li><strong><code>strict-path</code> prevents symlink escapes</strong> in <code>VRootFsBackend</code></li>
+</ul>
+<hr>
+<h2 id="6-error-type-ergonomics"><a class="header" href="#6-error-type-ergonomics">6. Error Type Ergonomics</a></h2>
+<h3 id="what-happened-5"><a class="header" href="#what-happened-5">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/33">#33</a></td><td>VfsError hard to match programmatically</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Error enum wasn’t designed for pattern matching.</p>
+<h3 id="anyfs-response-5"><a class="header" href="#anyfs-response-5">AnyFS Response</a></h3>
+<p><code>VfsError</code> includes context and is easy to match:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, thiserror::Error)]
+pub enum VfsError {
+    #[error("not found: {path}")]
+    NotFound { path: PathBuf },
+
+    #[error("already exists: {path}")]
+    AlreadyExists { path: PathBuf },
+
+    #[error("quota exceeded: limit {limit}, attempted {attempted}")]
+    QuotaExceeded { limit: u64, attempted: u64 },
+
+    #[error("feature not enabled: {feature}")]
+    FeatureNotEnabled { feature: &amp;'static str },
+
+    #[error("permission denied: {path} ({operation})")]
+    PermissionDenied { path: PathBuf, operation: &amp;'static str },
+
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="7-seek--write-operations"><a class="header" href="#7-seek--write-operations">7. Seek + Write Operations</a></h2>
+<h3 id="what-happened-6"><a class="header" href="#what-happened-6">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/35">#35</a></td><td>Missing file positioning features</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Initial API was too simple.</p>
+<h3 id="anyfs-response-6"><a class="header" href="#anyfs-response-6">AnyFS Response</a></h3>
+<ul>
+<li><strong>Streaming I/O:</strong> <code>open_read</code>/<code>open_write</code> return <code>Box&lt;dyn Read/Write + Send&gt;</code></li>
+<li><strong>Seek support varies by backend</strong> - document which support it</li>
+<li><strong>Consider future:</strong> <code>open_read_seek</code> variant or capability query</li>
+</ul>
+<hr>
+<h2 id="8-read-only-filesystem-request"><a class="header" href="#8-read-only-filesystem-request">8. Read-Only Filesystem Request</a></h2>
+<h3 id="what-happened-7"><a class="header" href="#what-happened-7">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/58">#58</a></td><td>Request for immutable filesystem</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> No built-in way to enforce read-only access.</p>
+<h3 id="anyfs-response-7"><a class="header" href="#anyfs-response-7">AnyFS Response</a></h3>
+<p><strong>Already solved:</strong> <code>ReadOnly&lt;B&gt;</code> middleware blocks all writes.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let readonly_fs = FilesContainer::new(
+    ReadOnly::new(SqliteBackend::open("archive.db")?)
+);
+// All write operations return VfsError::ReadOnly
+<span class="boring">}</span></code></pre>
+<p>This validates our middleware approach.</p>
+<hr>
+<h2 id="9-performance-issues"><a class="header" href="#9-performance-issues">9. Performance Issues</a></h2>
+<h3 id="what-happened-8"><a class="header" href="#what-happened-8">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/130">#130</a></td><td>File deletion is slow</td></tr>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/135">#135</a></td><td>Benchmark hangs</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> SQLite operations not optimized, FUSE overhead.</p>
+<h3 id="anyfs-response-8"><a class="header" href="#anyfs-response-8">AnyFS Response</a></h3>
+<ul>
+<li><strong>Batch operations</strong> where possible in <code>SqliteBackend</code></li>
+<li><strong>Use transactions</strong> for multi-file operations</li>
+<li><strong>Document performance characteristics</strong> per backend</li>
+<li><strong>Avoid FUSE</strong> - we’re a library, not a mount</li>
+</ul>
+<p><strong>Documentation requirement:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// # Performance Characteristics
+///
+/// | Operation | Complexity | Notes |
+/// |-----------|------------|-------|
+/// | `read` | O(1) | Single DB query |
+/// | `write` | O(n) | n = data size |
+/// | `remove_dir_all` | O(n) | n = descendants |
+pub struct SqliteBackend { ... }
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="10-signal-handling--shutdown"><a class="header" href="#10-signal-handling--shutdown">10. Signal Handling / Shutdown</a></h2>
+<h3 id="what-happened-9"><a class="header" href="#what-happened-9">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/129">#129</a></td><td>Doesn’t shutdown on SIGTERM</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> FUSE mount cleanup issues.</p>
+<h3 id="anyfs-response-9"><a class="header" href="#anyfs-response-9">AnyFS Response</a></h3>
+<ul>
+<li><strong>Not our problem</strong> - we’re a library, not a daemon</li>
+<li><strong>Ensure <code>Drop</code> implementations clean up properly</strong></li>
+<li><strong><code>SqliteBackend</code> flushes on drop</strong></li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Drop for SqliteBackend {
+    fn drop(&amp;mut self) {
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync on drop: {}", e);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="11-platform-compatibility"><a class="header" href="#11-platform-compatibility">11. Platform Compatibility</a></h2>
+<h3 id="what-happened-10"><a class="header" href="#what-happened-10">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/132">#132</a></td><td>FUSE-T support (macOS)</td></tr>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/138">#138</a></td><td>virtio-fs support</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Platform-specific FUSE variants.</p>
+<h3 id="anyfs-response-10"><a class="header" href="#anyfs-response-10">AnyFS Response</a></h3>
+<ul>
+<li><strong>We avoid this</strong> - no FUSE, pure library</li>
+<li><strong>Cross-platform by design</strong> - Memory and SQLite work everywhere</li>
+<li><strong><code>VRootFsBackend</code> uses <code>strict-path</code></strong> which handles Windows/Unix</li>
+</ul>
+<p><strong>CI requirement:</strong></p>
+<pre><code class="language-yaml">strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+</code></pre>
+<hr>
+<h2 id="12-multiple-sessions--concurrent-access"><a class="header" href="#12-multiple-sessions--concurrent-access">12. Multiple Sessions / Concurrent Access</a></h2>
+<h3 id="what-happened-11"><a class="header" href="#what-happened-11">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/126">#126</a></td><td>Can’t have multiple sessions on same filesystem</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Locking/concurrency design.</p>
+<h3 id="anyfs-response-11"><a class="header" href="#anyfs-response-11">AnyFS Response</a></h3>
+<ul>
+<li><strong><code>SqliteBackend</code> uses WAL mode</strong> for concurrent readers</li>
+<li><strong>Document concurrency model</strong> per backend</li>
+<li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for sharing</li>
+</ul>
+<hr>
+<h2 id="issues-we-already-avoid"><a class="header" href="#issues-we-already-avoid">Issues We Already Avoid</a></h2>
+<p>Our design decisions already prevent these problems:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Problem in Others</th><th>AnyFS Solution</th></tr>
+</thead>
+<tbody>
+<tr><td>No middleware pattern</td><td>Tower-style composable middleware</td></tr>
+<tr><td>No quota enforcement</td><td><code>Quota&lt;B&gt;</code> middleware</td></tr>
+<tr><td>No read-only mode</td><td><code>ReadOnly&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Symlink complexity</td><td><code>FeatureGuard&lt;B&gt;</code> (opt-in)</td></tr>
+<tr><td>Path escape via symlinks</td><td><code>strict-path</code> canonicalization</td></tr>
+<tr><td>FUSE complexity</td><td>Pure library, no mount</td></tr>
+<tr><td>SQLite-only</td><td>Multiple backends</td></tr>
+<tr><td>Monolithic features</td><td>Composable middleware</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="https://github.com/manuel-woelker/rust-vfs/issues">rust-vfs Issues</a></li>
+<li><a href="https://github.com/tursodatabase/agentfs/issues">agentfs Issues</a></li>
+<li><a href="#implementation-plan">Implementation Plan</a> - incorporates these lessons</li>
+<li><a href="#backend-implementers-guide">Backend Guide</a> - implementation requirements</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="open-questions--future-considerations"><a class="header" href="#open-questions--future-considerations">Open Questions &amp; Future Considerations</a></h1>
 <p><strong>Status:</strong> Under Discussion
-<strong>Last Updated:</strong> 2025-12-23</p>
+<strong>Last Updated:</strong> 2025-12-24</p>
 <hr>
 <p>This document captures open questions and design considerations that may influence future development of AnyFS.</p>
 <hr>
-<h2 id="symlink-handling-with-vrootfsbackend"><a class="header" href="#symlink-handling-with-vrootfsbackend">Symlink Handling with VRootFsBackend</a></h2>
-<p><strong>Question:</strong> If VRootFsBackend wraps a real filesystem directory, and the user has symlinks disabled at the FilesContainer level, what happens to symlinks that exist in the underlying host filesystem?</p>
-<p><strong>Considerations:</strong></p>
+<h2 id="symlink-security-following-vs-creating"><a class="header" href="#symlink-security-following-vs-creating">Symlink Security: Following vs Creating</a></h2>
+<p><strong>IMPORTANT:</strong> The current discussion about symlinks has been fundamentally reconsidered.</p>
+<h3 id="the-correct-understanding"><a class="header" href="#the-correct-understanding">The Correct Understanding</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Action</th><th>Security Concern?</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Creating symlinks</strong></td><td>No</td><td>Symlinks are just data. Creating them is harmless.</td></tr>
+<tr><td><strong>Following symlinks</strong></td><td><strong>YES</strong></td><td>Following a symlink can escape containment.</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Example attack:</strong></p>
+<pre><code>/sandbox/escape -&gt; /etc/passwd
+
+If we follow the symlink:
+  read("/sandbox/escape") → reads /etc/passwd → JAIL ESCAPE
+</code></pre>
+<p>The security feature is <strong>controlling symlink resolution</strong>, not symlink creation.</p>
+<h3 id="virtual-vs-real-backends-a-fundamental-difference"><a class="header" href="#virtual-vs-real-backends-a-fundamental-difference">Virtual vs Real Backends: A Fundamental Difference</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Who Controls Symlink Resolution?</th></tr>
+</thead>
+<tbody>
+<tr><td><code>MemoryBackend</code></td><td><strong>We do</strong> (symlinks are stored data, we choose whether to follow)</td></tr>
+<tr><td><code>SqliteBackend</code></td><td><strong>We do</strong> (symlinks are stored data, we choose whether to follow)</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td><strong>The OS does</strong> (we call <code>std::fs::read</code>, OS follows symlinks)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>This is the core problem:</strong> For virtual backends, we have full control. For real filesystem backends, the OS controls symlink resolution and we cannot easily change that.</p>
+<h3 id="options-analysis"><a class="header" href="#options-analysis">Options Analysis</a></h3>
+<h4 id="option-1-custom-path-resolution-for-vrootfsbackend"><a class="header" href="#option-1-custom-path-resolution-for-vrootfsbackend">Option 1: Custom Path Resolution for VRootFsBackend</a></h4>
+<p>Walk each path component manually using <code>lstat</code> (symlink_metadata):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn resolve_no_follow(&amp;self, path: &amp;Path) -&gt; Result&lt;PathBuf, VfsError&gt; {
+    let mut current = self.root.clone();
+    for component in path.components() {
+        current = current.join(component);
+        let meta = std::fs::symlink_metadata(&amp;current)?;
+        if meta.file_type().is_symlink() {
+            return Err(VfsError::SymlinkNotAllowed { path: current });
+        }
+    }
+    Ok(current)
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Would work</td><td>Complex implementation</td></tr>
+<tr><td>Consistent with virtual backends</td><td>TOCTOU vulnerability (symlink created between check and use)</td></tr>
+<tr><td></td><td>Performance overhead (lstat per component)</td></tr>
+<tr><td></td><td>Platform differences (Windows junctions, etc.)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="option-2-two-different-traits"><a class="header" href="#option-2-two-different-traits">Option 2: Two Different Traits</a></h4>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Virtual backends where we control everything
+pub trait VirtualVfsBackend: VfsBackend {
+    fn set_symlink_resolution(&amp;mut self, enabled: bool);
+}
+
+/// Real filesystem backends where OS controls symlink resolution
+pub trait RealFsBackend: VfsBackend {
+    // OS controls symlinks, we just ensure containment
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Honest about capabilities</td><td>Complicates API</td></tr>
+<tr><td>Clear separation of concerns</td><td>Middleware must handle both</td></tr>
+<tr><td>No false promises</td><td>Harder to swap backends</td></tr>
+<tr><td></td><td>Users must understand the difference</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="option-3-capability-query"><a class="header" href="#option-3-capability-query">Option 3: Capability Query</a></h4>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait VfsBackend {
+    fn capabilities(&amp;self) -&gt; Capabilities;
+    // ...
+}
+
+pub struct Capabilities {
+    pub can_control_symlink_following: bool,
+    pub supports_hard_links: bool,
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Single trait surface</td><td>Runtime capability discovery</td></tr>
+<tr><td>Backends self-describe</td><td>Middleware becomes conditional</td></tr>
+<tr><td>Extensible</td><td>Can’t enforce at compile time</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="option-4-accept-the-limitation"><a class="header" href="#option-4-accept-the-limitation">Option 4: Accept the Limitation</a></h4>
+<ul>
+<li>For virtual backends: We control symlink following</li>
+<li>For VRootFsBackend: Rely on <code>strict-path</code> to prevent escapes</li>
+<li>Document that <code>FeatureGuard</code> symlink control only applies to virtual backends</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Simple</td><td>Inconsistent behavior</td></tr>
+<tr><td>Honest</td><td>Feature doesn’t work everywhere</td></tr>
+<tr><td>No complexity</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="option-5-drop-the-symlink-control-feature"><a class="header" href="#option-5-drop-the-symlink-control-feature">Option 5: Drop the Symlink Control Feature</a></h4>
+<p>User’s suggestion: Low ROI, just drop it.</p>
+<ul>
+<li>Virtual backends: Symlinks are data, inherently safe</li>
+<li>VRootFsBackend: <code>strict-path</code> prevents escapes anyway</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Simplest</td><td>Loses archive extraction use case</td></tr>
+<tr><td>No false expectations</td><td></td></tr>
+<tr><td>Focus on what we can actually control</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="the-archive-extraction-use-case"><a class="header" href="#the-archive-extraction-use-case">The Archive Extraction Use Case</a></h3>
+<p>One valid use case for symlink control:</p>
+<blockquote>
+<p>“Someone using our files container to contain their own user-based-tenants or as an archive extraction, where they wish to prevent symlinks as an easy resolution to make sure there is no jail-escape.”</p>
+</blockquote>
+<p>For this use case:</p>
+<ul>
+<li><strong>Virtual backends</strong>: Works perfectly - we can refuse to follow symlinks</li>
+<li><strong>VRootFsBackend</strong>: Would need custom path resolution or OS-specific flags</li>
+</ul>
+<h3 id="what-strict-path-actually-does"><a class="header" href="#what-strict-path-actually-does">What <code>strict-path</code> Actually Does</a></h3>
+<p><code>strict-path::VirtualRoot</code>:</p>
+<ol>
+<li>Takes a user path</li>
+<li>Canonicalizes it (follows symlinks, resolves <code>.</code> and <code>..</code>)</li>
+<li>Checks the canonical path is within the root</li>
+<li>Returns the safe path</li>
+</ol>
+<p><strong>Key insight:</strong> <code>strict-path</code> FOLLOWS symlinks but ensures the final path is contained. It does NOT prevent symlink following.</p>
+<pre><code>/root/link -&gt; ../escape
+User requests: /link
+strict-path: canonicalize(/root/link) = /escape
+strict-path: /escape is NOT within /root → DENIED
+</code></pre>
+<p>This is secure against escape, but it’s “follow and check” not “don’t follow”.</p>
+<h3 id="recommendation-1"><a class="header" href="#recommendation-1">Recommendation</a></h3>
+<p><strong>For v1, we should:</strong></p>
 <ol>
 <li>
-<p><strong>VRootFsBackend inherits real FS behavior</strong>: The underlying filesystem still has symlinks. Even if we don’t expose symlink <em>creation</em> APIs, operations like <code>read</code> or <code>metadata</code> might still follow symlinks on the host.</p>
+<p><strong>Remove the misleading “allow symlinks” feature from FeatureGuard</strong> - it doesn’t mean what we thought</p>
 </li>
 <li>
-<p><strong>Options:</strong></p>
+<p><strong>Document the real situation:</strong></p>
 <ul>
-<li><strong>Transparent following</strong>: VRootFsBackend always follows symlinks on the host (simplest, matches host behavior)</li>
-<li><strong>Refuse symlinks</strong>: VRootFsBackend returns an error if it encounters a symlink</li>
-<li><strong>Configurable per-backend</strong>: Let VRootFsBackend accept a <code>follow_symlinks: bool</code> option</li>
+<li>Virtual backends: We control symlink resolution</li>
+<li>VRootFsBackend: OS controls symlink resolution, <code>strict-path</code> prevents escapes</li>
 </ul>
 </li>
 <li>
-<p><strong>Recommendation:</strong> VRootFsBackend should transparently follow symlinks on the host filesystem. The “symlinks disabled” policy at the container level means <em>creating</em> symlinks is disabled, not that the backend must refuse to traverse existing ones.</p>
+<p><strong>For archive extraction safety:</strong></p>
+<ul>
+<li>Virtual backends: Can add a <code>follow_symlinks: bool</code> option to path resolution</li>
+<li>VRootFsBackend: <code>strict-path</code> provides escape protection (different model)</li>
+</ul>
+</li>
+<li>
+<p><strong>Consider for future:</strong></p>
+<ul>
+<li>Option 2 (two traits) if the abstraction mismatch becomes painful</li>
+<li>Option 3 (capabilities) for gradual feature discovery</li>
+</ul>
+</li>
+</ol>
+<h3 id="questions-for-discussion"><a class="header" href="#questions-for-discussion">Questions for Discussion</a></h3>
+<ol>
+<li>
+<p><strong>Is the two-trait approach worth the complexity?</strong> Would it actually help users, or just confuse them?</p>
+</li>
+<li>
+<p><strong>Should VRootFsBackend implement custom path resolution?</strong> The TOCTOU and complexity costs are real.</p>
+</li>
+<li>
+<p><strong>Is escape prevention (strict-path) sufficient?</strong> Or do users need “no symlink following at all”?</p>
+</li>
+<li>
+<p><strong>Should we rename <code>FeatureGuard</code>?</strong> Current name implies features we can’t reliably provide.</p>
 </li>
 </ol>
 <hr>
@@ -3874,13 +4964,14 @@ let fs = MemoryBackend::new()
 <tr><th>Backend Type</th><th>Path Resolution</th><th>Symlink Handling</th></tr>
 </thead>
 <tbody>
-<tr><td>MemoryBackend</td><td>Pure lexical (in our code)</td><td>We control everything</td></tr>
-<tr><td>SqliteBackend</td><td>Pure lexical (in our code)</td><td>We control everything</td></tr>
-<tr><td>VRootFsBackend</td><td>OS handles it</td><td>OS follows symlinks on host</td></tr>
+<tr><td>MemoryBackend</td><td>Pure lexical (our code)</td><td>We control everything</td></tr>
+<tr><td>SqliteBackend</td><td>Pure lexical (our code)</td><td>We control everything</td></tr>
+<tr><td>VRootFsBackend</td><td>OS handles it</td><td>OS follows symlinks</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Recommendation:</strong> For virtual backends, we perform lexical path resolution ourselves. For VRootFsBackend, we delegate to the OS via <code>std::fs</code>. The <code>strict-path::VirtualRoot</code> ensures we can’t escape the root directory, but symlink resolution within that root is handled by the OS.</p>
+<p><strong>Current design:</strong> For virtual backends, we perform lexical path resolution ourselves. For VRootFsBackend, we delegate to the OS via <code>std::fs</code>, with <code>strict-path::VirtualRoot</code> ensuring containment.</p>
+<p><strong>Open question:</strong> Should we abstract this difference, accept it, or use two traits?</p>
 <hr>
 <h2 id="compression-and-encryption"><a class="header" href="#compression-and-encryption">Compression and Encryption</a></h2>
 <p><strong>Question:</strong> Does the current design allow backends to compress/decompress or encrypt/decrypt files transparently?</p>
@@ -3937,11 +5028,11 @@ let fs = MemoryBackend::new()
 </thead>
 <tbody>
 <tr><td><strong>Scope</strong></td><td>Filesystem abstraction</td><td>Agent runtime</td></tr>
-<tr><td><strong>Filesystem</strong></td><td>✅ Full</td><td>✅ Full</td></tr>
-<tr><td><strong>Key-Value store</strong></td><td>❌ Not our domain</td><td>✅ Included</td></tr>
-<tr><td><strong>Tool auditing</strong></td><td>⚠️ <code>Tracing</code> middleware</td><td>✅ Built-in</td></tr>
+<tr><td><strong>Filesystem</strong></td><td>Full</td><td>Full</td></tr>
+<tr><td><strong>Key-Value store</strong></td><td>Not our domain</td><td>Included</td></tr>
+<tr><td><strong>Tool auditing</strong></td><td><code>Tracing</code> middleware</td><td>Built-in</td></tr>
 <tr><td><strong>Backends</strong></td><td>Memory, SQLite, VRootFs, custom</td><td>SQLite only (spec)</td></tr>
-<tr><td><strong>Middleware</strong></td><td>✅ Composable layers</td><td>❌ Monolithic</td></tr>
+<tr><td><strong>Middleware</strong></td><td>Composable layers</td><td>Monolithic</td></tr>
 </tbody>
 </table>
 </div>
@@ -4089,36 +5180,35 @@ let fs = MemoryBackend::new()
 <li>No breaking changes to existing sync API</li>
 </ul>
 <hr>
-<h2 id="summary-1"><a class="header" href="#summary-1">Summary</a></h2>
-<p>These questions inform future development but don’t block v1:</p>
+<h2 id="summary-2"><a class="header" href="#summary-2">Summary</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Topic</th><th>v1 Decision</th></tr>
 </thead>
 <tbody>
-<tr><td>Symlinks with VRootFsBackend</td><td>Transparent following on host</td></tr>
+<tr><td>Symlink security</td><td><strong>NEEDS REDESIGN</strong> - see discussion above</td></tr>
 <tr><td>Path resolution</td><td>Virtual = lexical; VRootFs = OS</td></tr>
 <tr><td>Compression/encryption</td><td>Backend responsibility</td></tr>
 <tr><td>Hooks/callbacks</td><td>Defer to v2</td></tr>
 <tr><td>FUSE mount</td><td>Possible with current trait (has truncate, fsync, statfs)</td></tr>
 <tr><td>Type-system protection</td><td>Defer</td></tr>
 <tr><td>POSIX compatibility</td><td>Not a goal</td></tr>
-<tr><td><code>truncate</code></td><td>✅ Added to VfsBackend</td></tr>
-<tr><td><code>sync</code> / <code>fsync</code></td><td>✅ Added to VfsBackend</td></tr>
-<tr><td>Async support</td><td>✅ Sync-first, async-ready (ADR-010)</td></tr>
-<tr><td>Layer trait</td><td>✅ Tower-style composition (ADR-011)</td></tr>
-<tr><td>Logging</td><td>✅ Tracing with tracing ecosystem (ADR-012)</td></tr>
-<tr><td>Extension methods</td><td>✅ VfsBackendExt (ADR-013)</td></tr>
-<tr><td>Zero-copy bytes</td><td>✅ Optional <code>bytes</code> feature (ADR-014)</td></tr>
-<tr><td>Error context</td><td>✅ Contextual VfsError (ADR-015)</td></tr>
-<tr><td>BackendStack builder</td><td>✅ Fluent API in anyfs-container</td></tr>
-<tr><td>Path-based access control</td><td>✅ PathFilter middleware (ADR-016)</td></tr>
-<tr><td>Read-only mode</td><td>✅ ReadOnly middleware (ADR-017)</td></tr>
-<tr><td>Rate limiting</td><td>✅ RateLimit middleware (ADR-018)</td></tr>
-<tr><td>Dry-run testing</td><td>✅ DryRun middleware (ADR-019)</td></tr>
-<tr><td>Read caching</td><td>✅ Cache middleware (ADR-020)</td></tr>
-<tr><td>Union filesystem</td><td>✅ Overlay middleware (ADR-021)</td></tr>
+<tr><td><code>truncate</code></td><td>Added to VfsBackend</td></tr>
+<tr><td><code>sync</code> / <code>fsync</code></td><td>Added to VfsBackend</td></tr>
+<tr><td>Async support</td><td>Sync-first, async-ready (ADR-010)</td></tr>
+<tr><td>Layer trait</td><td>Tower-style composition (ADR-011)</td></tr>
+<tr><td>Logging</td><td>Tracing with tracing ecosystem (ADR-012)</td></tr>
+<tr><td>Extension methods</td><td>VfsBackendExt (ADR-013)</td></tr>
+<tr><td>Zero-copy bytes</td><td>Optional <code>bytes</code> feature (ADR-014)</td></tr>
+<tr><td>Error context</td><td>Contextual VfsError (ADR-015)</td></tr>
+<tr><td>BackendStack builder</td><td>Fluent API in anyfs-container</td></tr>
+<tr><td>Path-based access control</td><td>PathFilter middleware (ADR-016)</td></tr>
+<tr><td>Read-only mode</td><td>ReadOnly middleware (ADR-017)</td></tr>
+<tr><td>Rate limiting</td><td>RateLimit middleware (ADR-018)</td></tr>
+<tr><td>Dry-run testing</td><td>DryRun middleware (ADR-019)</td></tr>
+<tr><td>Read caching</td><td>Cache middleware (ADR-020)</td></tr>
+<tr><td>Union filesystem</td><td>Overlay middleware (ADR-021)</td></tr>
 </tbody>
 </table>
 </div>

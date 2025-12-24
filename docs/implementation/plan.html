@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
+            window.path_to_searchindex_js = "../searchindex-c8e37e0f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a787d6ec.js"></script>
+        <script src="../toc-49a6e0ad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,6 +188,79 @@
 <li><code>anyfs-container</code>: <code>FilesContainer&lt;B&gt;</code> ergonomic wrapper</li>
 </ul>
 <hr>
+<h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
+<p>These guidelines apply to ALL implementation work. Derived from analysis of issues in similar projects (<code>vfs</code>, <code>agentfs</code>).</p>
+<h3 id="1-no-panic-policy"><a class="header" href="#1-no-panic-policy">1. No Panic Policy</a></h3>
+<p><strong>NEVER panic in library code.</strong> Always return <code>Result&lt;T, VfsError&gt;</code>.</p>
+<ul>
+<li>Audit all <code>.unwrap()</code> and <code>.expect()</code> calls - replace with <code>?</code> or proper error handling</li>
+<li>Use <code>ok_or_else(|| VfsError::...)</code> instead of <code>.unwrap()</code></li>
+<li>Edge cases must return errors, not panic</li>
+<li>Test in constrained environments (WASM) to catch hidden panics</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD
+let entry = self.entries.get(&amp;path).unwrap();
+
+// GOOD
+let entry = self.entries.get(&amp;path)
+    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+<span class="boring">}</span></code></pre>
+<h3 id="2-thread-safety-requirements"><a class="header" href="#2-thread-safety-requirements">2. Thread Safety Requirements</a></h3>
+<p>All backends must be safe for concurrent access:</p>
+<ul>
+<li><code>MemoryBackend</code>: Use <code>Arc&lt;RwLock&lt;...&gt;&gt;</code> for internal state</li>
+<li><code>SqliteBackend</code>: Use WAL mode, handle <code>SQLITE_BUSY</code></li>
+<li><code>VRootFsBackend</code>: File operations are inherently concurrent-safe</li>
+</ul>
+<p><strong>Required:</strong> Concurrent stress tests in conformance suite.</p>
+<h3 id="3-consistent-path-handling"><a class="header" href="#3-consistent-path-handling">3. Consistent Path Handling</a></h3>
+<p>Normalize paths in ONE place (FilesContainer or dedicated normalizer):</p>
+<ul>
+<li>Always absolute paths internally</li>
+<li>Always <code>/</code> separator (even on Windows)</li>
+<li>Normalize <code>..</code> and <code>.</code> components</li>
+<li>Handle edge cases: <code>//</code>, trailing <code>/</code>, empty string</li>
+</ul>
+<h3 id="4-error-type-design"><a class="header" href="#4-error-type-design">4. Error Type Design</a></h3>
+<p><code>VfsError</code> must be:</p>
+<ul>
+<li>Easy to pattern match</li>
+<li>Include context (path, operation)</li>
+<li>Derive <code>thiserror</code> for good messages</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, thiserror::Error)]
+pub enum VfsError {
+    #[error("not found: {path}")]
+    NotFound { path: PathBuf },
+
+    #[error("already exists: {path}")]
+    AlreadyExists { path: PathBuf },
+
+    #[error("quota exceeded: limit {limit}, attempted {attempted}")]
+    QuotaExceeded { limit: u64, attempted: u64 },
+
+    #[error("feature not enabled: {feature}")]
+    FeatureNotEnabled { feature: &amp;'static str },
+
+    #[error("permission denied: {path} ({operation})")]
+    PermissionDenied { path: PathBuf, operation: &amp;'static str },
+
+    // ... etc
+}
+<span class="boring">}</span></code></pre>
+<h3 id="5-documentation-requirements"><a class="header" href="#5-documentation-requirements">5. Documentation Requirements</a></h3>
+<p>Every backend and middleware must document:</p>
+<ul>
+<li>Thread safety guarantees</li>
+<li>Performance characteristics</li>
+<li>Which operations are O(1) vs O(n)</li>
+<li>Any platform-specific behavior</li>
+</ul>
+<hr>
 <h2 id="phase-1-anyfs-backend-core-contract"><a class="header" href="#phase-1-anyfs-backend-core-contract">Phase 1: <code>anyfs-backend</code> (core contract)</a></h2>
 <p><strong>Goal:</strong> Define the stable backend interface and composition traits.</p>
 <ul>
@@ -195,7 +268,7 @@
 <li>Define <code>Layer</code> trait (Tower-style middleware composition)</li>
 <li>Define <code>VfsBackendExt</code> trait (extension methods)</li>
 <li>Define core types (<code>Metadata</code>, <code>Permissions</code>, <code>FileType</code>, <code>DirEntry</code>, <code>StatFs</code>)</li>
-<li>Define <code>VfsError</code> with contextual variants</li>
+<li>Define <code>VfsError</code> with contextual variants (see guidelines above)</li>
 </ul>
 <p><strong>Exit criteria:</strong> <code>anyfs-backend</code> stands alone with minimal dependencies (<code>thiserror</code>).</p>
 <hr>
@@ -234,6 +307,7 @@
 <h2 id="phase-4-conformance-test-suite"><a class="header" href="#phase-4-conformance-test-suite">Phase 4: Conformance test suite</a></h2>
 <p><strong>Goal:</strong> Prevent backend divergence and validate middleware behavior.</p>
 <h3 id="backend-conformance-tests"><a class="header" href="#backend-conformance-tests">Backend conformance tests</a></h3>
+<h4 id="basic-operations"><a class="header" href="#basic-operations">Basic Operations</a></h4>
 <ul>
 <li><code>read</code>/<code>write</code>/<code>append</code> semantics</li>
 <li>Directory operations (<code>create_dir*</code>, <code>read_dir</code>, <code>remove_dir*</code>)</li>
@@ -242,15 +316,80 @@
 <li>Streaming I/O (<code>open_read</code>, <code>open_write</code>)</li>
 <li><code>truncate</code>, <code>sync</code>, <code>fsync</code>, <code>statfs</code></li>
 </ul>
+<h4 id="path-edge-cases-learned-from-vfs-issues"><a class="header" href="#path-edge-cases-learned-from-vfs-issues">Path Edge Cases (learned from <code>vfs</code> issues)</a></h4>
+<ul>
+<li><code>/foo/../bar</code> normalizes to <code>/bar</code></li>
+<li><code>//double//slashes//</code> normalizes correctly</li>
+<li>Trailing slashes handled consistently</li>
+<li>Empty path returns error (not panic)</li>
+<li>Root path <code>/</code> works correctly</li>
+<li>Very long paths (near OS limits)</li>
+<li>Unicode paths</li>
+<li>Paths with spaces and special characters</li>
+</ul>
+<h4 id="thread-safety-tests-learned-from-vfs-72-47"><a class="header" href="#thread-safety-tests-learned-from-vfs-72-47">Thread Safety Tests (learned from <code>vfs</code> #72, #47)</a></h4>
+<ul>
+<li>Concurrent <code>read</code> from multiple threads</li>
+<li>Concurrent <code>write</code> to different files</li>
+<li>Concurrent <code>create_dir_all</code> to same path (must not race)</li>
+<li>Concurrent <code>read_dir</code> while modifying directory</li>
+<li>Stress test: 100 threads, 1000 operations each</li>
+</ul>
+<h4 id="error-handling-tests-learned-from-vfs-8-23"><a class="header" href="#error-handling-tests-learned-from-vfs-8-23">Error Handling Tests (learned from <code>vfs</code> #8, #23)</a></h4>
+<ul>
+<li>Missing file returns <code>NotFound</code>, not panic</li>
+<li>Missing parent directory returns error, not panic</li>
+<li>Invalid UTF-8 in path returns error, not panic</li>
+<li>All error variants are matchable</li>
+</ul>
+<h4 id="platform-tests"><a class="header" href="#platform-tests">Platform Tests</a></h4>
+<ul>
+<li>Windows path separators (<code>\</code> vs <code>/</code>)</li>
+<li>Case sensitivity differences</li>
+<li>Symlink behavior differences</li>
+</ul>
 <h3 id="middleware-tests"><a class="header" href="#middleware-tests">Middleware tests</a></h3>
 <ul>
-<li><code>Quota</code>: Limit enforcement, usage tracking</li>
-<li><code>FeatureGuard</code>: Feature blocking</li>
-<li><code>PathFilter</code>: Glob pattern matching</li>
-<li><code>RateLimit</code>: Throttling behavior</li>
-<li>Middleware composition order</li>
+<li><code>Quota</code>: Limit enforcement, usage tracking, streaming writes</li>
+<li><code>FeatureGuard</code>: Feature blocking, error messages</li>
+<li><code>PathFilter</code>: Glob pattern matching, deny-by-default</li>
+<li><code>RateLimit</code>: Throttling behavior, burst handling</li>
+<li><code>ReadOnly</code>: All write operations blocked</li>
+<li><code>Tracing</code>: Operations logged correctly</li>
+<li>Middleware composition order (inner to outer)</li>
+<li>Middleware with streaming I/O (wrappers work correctly)</li>
 </ul>
-<p><strong>Exit criteria:</strong> All backends pass same suite; middleware tests are backend-agnostic.</p>
+<h3 id="no-panic-tests"><a class="header" href="#no-panic-tests">No-Panic Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn no_panic_on_missing_file() {
+    let backend = create_backend();
+    let result = backend.read("/nonexistent");
+    assert!(matches!(result, Err(VfsError::NotFound { .. })));
+}
+
+#[test]
+fn no_panic_on_invalid_operation() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+    // Try to read directory on a file
+    let result = backend.read_dir("/file.txt");
+    assert!(matches!(result, Err(VfsError::NotADirectory { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="wasm-compatibility-tests-learned-from-vfs-68"><a class="header" href="#wasm-compatibility-tests-learned-from-vfs-68">WASM Compatibility Tests (learned from <code>vfs</code> #68)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn memory_backend_works_in_wasm() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/test.txt", b"hello").unwrap();
+    // Should not panic
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Exit criteria:</strong> All backends pass same suite; middleware tests are backend-agnostic; zero panics in any test.</p>
 <hr>
 <h2 id="phase-5-documentation--examples"><a class="header" href="#phase-5-documentation--examples">Phase 5: Documentation + examples</a></h2>
 <ul>
@@ -258,6 +397,42 @@
 <li>Provide example per backend</li>
 <li>Provide backend implementer guide</li>
 <li>Provide middleware implementer guide</li>
+<li>Document performance characteristics per backend</li>
+<li>Document thread safety guarantees per backend</li>
+<li>Document platform-specific behavior</li>
+</ul>
+<hr>
+<h2 id="phase-6-cicd-pipeline"><a class="header" href="#phase-6-cicd-pipeline">Phase 6: CI/CD Pipeline</a></h2>
+<p><strong>Goal:</strong> Ensure quality across platforms and prevent regressions.</p>
+<h3 id="cross-platform-testing"><a class="header" href="#cross-platform-testing">Cross-Platform Testing</a></h3>
+<pre><code class="language-yaml"># .github/workflows/ci.yml
+strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+    rust: [stable, beta]
+</code></pre>
+<p>Required CI checks:</p>
+<ul>
+<li><code>cargo test</code> on all platforms</li>
+<li><code>cargo clippy -- -D warnings</code></li>
+<li><code>cargo fmt --check</code></li>
+<li><code>cargo doc --no-deps</code></li>
+<li>WASM build test: <code>cargo build --target wasm32-unknown-unknown</code></li>
+</ul>
+<h3 id="additional-ci-jobs"><a class="header" href="#additional-ci-jobs">Additional CI Jobs</a></h3>
+<ul>
+<li><strong>Miri</strong> (undefined behavior detection): <code>cargo +nightly miri test</code></li>
+<li><strong>Address Sanitizer</strong>: Detect memory issues</li>
+<li><strong>Thread Sanitizer</strong>: Detect data races</li>
+<li><strong>Coverage</strong>: Minimum 80% line coverage</li>
+</ul>
+<h3 id="release-checklist"><a class="header" href="#release-checklist">Release Checklist</a></h3>
+<ul>
+<li><input disabled="" type="checkbox"> All CI checks pass</li>
+<li><input disabled="" type="checkbox"> No new <code>clippy</code> warnings</li>
+<li><input disabled="" type="checkbox"> CHANGELOG updated</li>
+<li><input disabled="" type="checkbox"> Version bumped appropriately</li>
+<li><input disabled="" type="checkbox"> Documentation builds without warnings</li>
 </ul>
 <hr>
 <h2 id="future-work-post-mvp"><a class="header" href="#future-work-post-mvp">Future work (post-MVP)</a></h2>
@@ -268,7 +443,31 @@
 <li>Encryption middleware</li>
 <li>Compression middleware</li>
 <li><code>vfs</code> crate compatibility adapter</li>
+<li><code>no_std</code> support (learned from <code>vfs</code> #38)</li>
+<li>Batch operations for performance (learned from <code>agentfs</code> #130)</li>
 </ul>
+<hr>
+<h2 id="lessons-learned-reference"><a class="header" href="#lessons-learned-reference">Lessons Learned (Reference)</a></h2>
+<p>This plan incorporates lessons from issues in similar projects:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source</th><th>Issue</th><th>Lesson Applied</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs #72</td><td>RwLock panic</td><td>Thread safety tests</td></tr>
+<tr><td>vfs #47</td><td><code>create_dir_all</code> race</td><td>Concurrent stress tests</td></tr>
+<tr><td>vfs #8, #23</td><td>Panics instead of errors</td><td>No-panic policy</td></tr>
+<tr><td>vfs #24, #42</td><td>Path inconsistencies</td><td>Path edge case tests</td></tr>
+<tr><td>vfs #33</td><td>Hard to match errors</td><td>Ergonomic <code>VfsError</code> design</td></tr>
+<tr><td>vfs #68</td><td>WASM panics</td><td>WASM compatibility tests</td></tr>
+<tr><td>vfs #66</td><td><code>'static</code> confusion</td><td>Minimal trait bounds</td></tr>
+<tr><td>agentfs #130</td><td>Slow file deletion</td><td>Performance documentation</td></tr>
+<tr><td>agentfs #129</td><td>Signal handling</td><td>Proper <code>Drop</code> implementations</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <a href="./lessons-learned.html">Lessons from Similar Projects</a> for full analysis.</p>
 
                     </main>
 

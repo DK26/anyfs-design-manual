@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
+            window.path_to_searchindex_js = "../searchindex-c8e37e0f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a787d6ec.js"></script>
+        <script src="../toc-49a6e0ad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -214,12 +214,21 @@
 <tr><td>Path sandboxing</td><td>Backend-dependent</td><td>Yes (PathFilter middleware)</td></tr>
 <tr><td>Feature gating</td><td>No</td><td>Yes (FeatureGuard middleware)</td></tr>
 <tr><td>SQLite backend</td><td>No</td><td>Yes (built-in)</td></tr>
+<tr><td>Path containment</td><td>Prefix-based (AltrootFS)</td><td>Canonicalization-based (<code>strict-path</code>)</td></tr>
 <tr><td>Third-party extensibility</td><td>Implement trait</td><td>Implement trait + Layer</td></tr>
+<tr><td>Path type</td><td>Custom <code>VfsPath</code></td><td><code>impl AsRef&lt;Path&gt;</code> (std-compatible)</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies.</p>
-<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging).</p>
+<p><strong>Path containment difference:</strong></p>
+<p>The <code>vfs</code> crate’s <code>AltrootFS</code> uses path prefix translation - it prepends a root path before delegating to the underlying filesystem. This is vulnerable to symlink-based escapes:</p>
+<pre><code>AltrootFS root: /data/tenant1/
+Symlink: /data/tenant1/link → ../tenant2/secrets.txt
+Access: /link → escapes to /data/tenant2/secrets.txt
+</code></pre>
+<p>AnyFS’s <code>VRootFsBackend</code> uses <code>strict-path</code> for full canonicalization. Symlinks are resolved and validated <em>before</em> any filesystem operation, preventing escapes.</p>
+<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies or security-sensitive containment.</p>
+<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging) or hardened path containment.</p>
 <hr>
 <h3 id="vs-agentfs-turso"><a class="header" href="#vs-agentfs-turso">vs. AgentFS (Turso)</a></h3>
 <div class="table-wrapper">
@@ -302,7 +311,8 @@
 <tr><td>Memory backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
 <tr><td>Real FS backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
 <tr><td>Quota enforcement</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td>Symlink-safe containment</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">N/A</td><td style="text-align: center">N/A</td></tr>
 <tr><td>Rate limiting</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
 <tr><td>Streaming I/O</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
 <tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>

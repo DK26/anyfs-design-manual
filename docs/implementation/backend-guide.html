@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-96b92abe.js";
+            window.path_to_searchindex_js = "../searchindex-c8e37e0f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a787d6ec.js"></script>
+        <script src="../toc-49a6e0ad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -596,7 +596,273 @@ let fs = MemoryBackend::new()
 <li><input disabled="" type="checkbox"> Implements <code>truncate</code> (shrink/extend files)</li>
 <li><input disabled="" type="checkbox"> Implements <code>sync</code>/<code>fsync</code> (durability)</li>
 <li><input disabled="" type="checkbox"> Passes conformance tests</li>
+<li><input disabled="" type="checkbox"> No panics (see below)</li>
+<li><input disabled="" type="checkbox"> Thread-safe (see below)</li>
+<li><input disabled="" type="checkbox"> Documents performance characteristics</li>
 </ul>
+<hr>
+<h2 id="critical-implementation-guidelines"><a class="header" href="#critical-implementation-guidelines">Critical Implementation Guidelines</a></h2>
+<p>These guidelines are derived from issues found in similar projects (<code>vfs</code>, <code>agentfs</code>). <strong>All implementations MUST follow these.</strong></p>
+<h3 id="1-no-panic-policy"><a class="header" href="#1-no-panic-policy">1. No Panic Policy</a></h3>
+<p><strong>NEVER use <code>.unwrap()</code> or <code>.expect()</code> in library code.</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD - will panic on missing file
+fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+    let entry = self.entries.get(path.as_ref()).unwrap();  // PANIC!
+    Ok(entry.content.clone())
+}
+
+// GOOD - returns error
+fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+    let path = path.as_ref();
+    let entry = self.entries.get(path)
+        .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    Ok(entry.content.clone())
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Edge cases that must NOT panic:</strong></p>
+<ul>
+<li>File doesn’t exist</li>
+<li>Directory doesn’t exist</li>
+<li>Path is empty string</li>
+<li>Path is invalid UTF-8 (if using OsStr)</li>
+<li>Parent directory missing</li>
+<li>Trying to read a directory as a file</li>
+<li>Trying to list a file as a directory</li>
+<li>Concurrent access conflicts</li>
+</ul>
+<h3 id="2-thread-safety"><a class="header" href="#2-thread-safety">2. Thread Safety</a></h3>
+<p>Backends must be safe for concurrent access. Use appropriate synchronization:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub struct MemoryBackend {
+    entries: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, Entry&gt;&gt;&gt;,
+}
+
+impl VfsBackend for MemoryBackend {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt; {
+        let entries = self.entries.read()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt; {
+        let mut entries = self.entries.write()
+            .map_err(|_| VfsError::Backend("lock poisoned".into()))?;
+        // ...
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Common race conditions to avoid:</strong></p>
+<ul>
+<li><code>create_dir_all</code> called concurrently for same path</li>
+<li><code>read</code> during <code>write</code> to same file</li>
+<li><code>read_dir</code> while directory is being modified</li>
+<li><code>rename</code> with concurrent access to source or destination</li>
+</ul>
+<h3 id="3-path-normalization"><a class="header" href="#3-path-normalization">3. Path Normalization</a></h3>
+<p>Normalize paths consistently. Recommended approach:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn normalize_path(path: &amp;Path) -&gt; PathBuf {
+    let mut components = Vec::new();
+
+    for component in path.components() {
+        match component {
+            Component::RootDir =&gt; {
+                components.clear();
+                components.push(Component::RootDir);
+            }
+            Component::CurDir =&gt; {
+                // Skip "."
+            }
+            Component::ParentDir =&gt; {
+                // Go up, but don't go past root
+                if components.len() &gt; 1 {
+                    components.pop();
+                }
+            }
+            Component::Normal(name) =&gt; {
+                components.push(Component::Normal(name));
+            }
+            Component::Prefix(_) =&gt; {
+                // Windows prefix - handle appropriately
+            }
+        }
+    }
+
+    components.iter().collect()
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Path edge cases to test:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th>Expected Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/foo/../bar</code></td><td><code>/bar</code></td></tr>
+<tr><td><code>/foo/./bar</code></td><td><code>/foo/bar</code></td></tr>
+<tr><td><code>//double//slash</code></td><td><code>/double/slash</code></td></tr>
+<tr><td><code>/</code></td><td><code>/</code></td></tr>
+<tr><td>`` (empty)</td><td>Error</td></tr>
+<tr><td><code>/foo/bar/</code></td><td><code>/foo/bar</code> (or keep trailing, be consistent)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="4-error-messages"><a class="header" href="#4-error-messages">4. Error Messages</a></h3>
+<p>Include context in errors for debugging:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// BAD - no context
+Err(VfsError::NotFound)
+
+// GOOD - includes path
+Err(VfsError::NotFound { path: path.to_path_buf() })
+
+// BETTER - includes operation context
+Err(VfsError::Io {
+    path: path.to_path_buf(),
+    operation: "read",
+    source: io_error,
+})
+<span class="boring">}</span></code></pre>
+<h3 id="5-drop-implementation"><a class="header" href="#5-drop-implementation">5. Drop Implementation</a></h3>
+<p>Ensure cleanup happens correctly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Drop for SqliteBackend {
+    fn drop(&amp;mut self) {
+        // Flush any pending writes
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync on drop: {}", e);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="6-performance-documentation"><a class="header" href="#6-performance-documentation">6. Performance Documentation</a></h3>
+<p>Document the complexity of operations:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Memory-based virtual filesystem backend.
+///
+/// # Performance Characteristics
+///
+/// | Operation | Complexity | Notes |
+/// |-----------|------------|-------|
+/// | `read` | O(1) | HashMap lookup |
+/// | `write` | O(n) | n = data size |
+/// | `read_dir` | O(k) | k = entries in directory |
+/// | `create_dir_all` | O(d) | d = path depth |
+/// | `remove_dir_all` | O(n) | n = total descendants |
+///
+/// # Thread Safety
+///
+/// All operations are thread-safe. Uses `RwLock` internally.
+/// Multiple concurrent reads are allowed.
+/// Writes are exclusive.
+pub struct MemoryBackend { ... }
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="testing-requirements"><a class="header" href="#testing-requirements">Testing Requirements</a></h2>
+<p>Your backend MUST pass these test categories:</p>
+<h3 id="basic-functionality"><a class="header" href="#basic-functionality">Basic Functionality</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_read_write_roundtrip() { ... }
+
+#[test]
+fn test_create_dir_and_list() { ... }
+
+#[test]
+fn test_remove_file() { ... }
+<span class="boring">}</span></code></pre>
+<h3 id="edge-cases-no-panics"><a class="header" href="#edge-cases-no-panics">Edge Cases (No Panics)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_read_nonexistent_returns_error() {
+    let backend = create_backend();
+    assert!(matches!(
+        backend.read("/nonexistent"),
+        Err(VfsError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn test_read_dir_on_file_returns_error() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+    assert!(matches!(
+        backend.read_dir("/file.txt"),
+        Err(VfsError::NotADirectory { .. })
+    ));
+}
+
+#[test]
+fn test_empty_path_returns_error() {
+    let backend = create_backend();
+    assert!(backend.read("").is_err());
+}
+<span class="boring">}</span></code></pre>
+<h3 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_concurrent_reads() {
+    let backend = Arc::new(create_backend_with_data());
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            for _ in 0..100 {
+                backend.read("/test.txt").unwrap();
+            }
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+
+#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(RwLock::new(create_backend()));
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let mut backend = backend.write().unwrap();
+            // Should not panic or corrupt state
+            let _ = backend.create_dir_all("/a/b/c/d");
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="path-normalization"><a class="header" href="#path-normalization">Path Normalization</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_path_with_dotdot() {
+    let mut backend = create_backend();
+    backend.create_dir_all("/foo/bar").unwrap();
+    backend.write("/foo/bar/test.txt", b"data").unwrap();
+
+    // These should all access the same file
+    assert_eq!(backend.read("/foo/bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/bar/../bar/test.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/foo/./bar/test.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
 
                     </main>
 
@@ -606,7 +872,7 @@ let fs = MemoryBackend::new()
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../review/open-questions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../implementation/lessons-learned.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -620,7 +886,7 @@ let fs = MemoryBackend::new()
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../review/open-questions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../implementation/lessons-learned.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

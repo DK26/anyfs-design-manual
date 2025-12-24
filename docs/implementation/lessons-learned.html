@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Security Considerations - AnyFS Ecosystem Manual</title>
+        <title>Lessons from Similar Projects - AnyFS Ecosystem Manual</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/DK26/vfs-design-manual" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/DK26/vfs-design-manual/edit/main/src/comparisons/security.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/DK26/vfs-design-manual/edit/main/src/implementation/lessons-learned.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,258 +180,412 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h1>
-<p><strong>Security model, threat analysis, and containment guarantees</strong></p>
+                        <h1 id="lessons-from-similar-projects"><a class="header" href="#lessons-from-similar-projects">Lessons from Similar Projects</a></h1>
+<p><strong>Analysis of issues from <code>vfs</code> and <code>agentfs</code> to inform AnyFS design.</strong></p>
+<p>This chapter documents problems encountered by similar projects and how AnyFS addresses them. These lessons are incorporated into our <a href="./plan.html">Implementation Plan</a> and <a href="./backend-guide.html">Backend Guide</a>.</p>
 <hr>
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>AnyFS is designed with security as a primary concern. Security policies are enforced via <strong>composable middleware</strong>, not hardcoded in backends or the container wrapper.</p>
-<hr>
-<h2 id="threat-model"><a class="header" href="#threat-model">Threat Model</a></h2>
-<h3 id="in-scope-mitigated-by-middleware"><a class="header" href="#in-scope-mitigated-by-middleware">In Scope (Mitigated by Middleware)</a></h3>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Threat</th><th>Description</th><th>Middleware</th></tr>
+<tr><th>Priority</th><th>Issue</th><th>AnyFS Response</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Path traversal</strong></td><td>Access files outside allowed paths</td><td><code>PathFilter</code></td></tr>
-<tr><td><strong>Symlink attacks</strong></td><td>Use symlinks to bypass controls</td><td><code>FeatureGuard</code> (disabled by default)</td></tr>
-<tr><td><strong>Resource exhaustion</strong></td><td>Fill storage or create excessive files</td><td><code>Quota</code></td></tr>
-<tr><td><strong>Runaway processes</strong></td><td>Excessive operations consuming resources</td><td><code>RateLimit</code></td></tr>
-<tr><td><strong>Unauthorized writes</strong></td><td>Modifications to read-only data</td><td><code>ReadOnly</code></td></tr>
-<tr><td><strong>Sensitive file access</strong></td><td>Access to <code>.env</code>, secrets, etc.</td><td><code>PathFilter</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="out-of-scope"><a class="header" href="#out-of-scope">Out of Scope</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Threat</th><th>Reason</th></tr>
-</thead>
-<tbody>
-<tr><td><strong>Side-channel attacks</strong></td><td>Requires OS-level mitigations</td></tr>
-<tr><td><strong>Physical access</strong></td><td>Disk encryption is application’s responsibility</td></tr>
-<tr><td><strong>SQLite vulnerabilities</strong></td><td>Upstream dependency; update regularly</td></tr>
-<tr><td><strong>Network attacks</strong></td><td>AnyFS is local storage, not network-facing</td></tr>
+<tr><td>1</td><td>Panics instead of errors</td><td>No-panic policy, always return <code>Result</code></td></tr>
+<tr><td>2</td><td>Thread safety problems</td><td>Concurrent stress tests required</td></tr>
+<tr><td>3</td><td>Inconsistent path handling</td><td>Normalize in one place, test edge cases</td></tr>
+<tr><td>4</td><td>Poor error ergonomics</td><td><code>VfsError</code> with context fields</td></tr>
+<tr><td>5</td><td>Missing documentation</td><td>Performance &amp; thread safety docs required</td></tr>
+<tr><td>6</td><td>Platform issues</td><td>Cross-platform CI pipeline</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="security-architecture"><a class="header" href="#security-architecture">Security Architecture</a></h2>
-<h3 id="1-middleware-based-policy"><a class="header" href="#1-middleware-based-policy">1. Middleware-Based Policy</a></h3>
-<p>Security policies are composable middleware layers:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
-
-let secure_backend = Tracing::new(           // Audit trail
-    RateLimit::new(                          // Throttle operations
-        PathFilter::new(                     // Sandbox paths
-            FeatureGuard::new(               // Block dangerous features
-                Quota::new(MemoryBackend::new())  // Limit resources
-                    .with_max_total_size(100 * 1024 * 1024)
-            )
-        )
-        .allow("/workspace/**")
-        .deny("**/.env")
-        .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
-<span class="boring">}</span></code></pre>
-<h3 id="2-path-sandboxing-pathfilter"><a class="header" href="#2-path-sandboxing-pathfilter">2. Path Sandboxing (PathFilter)</a></h3>
-<p><code>PathFilter</code> middleware restricts path access using glob patterns:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
-    .allow("/workspace/**")    // Allow workspace access
-    .deny("**/.env")           // Block .env files
-    .deny("**/secrets/**")     // Block secrets directories
-    .deny("**/*.key")          // Block key files
-<span class="boring">}</span></code></pre>
-<p><strong>Guarantees:</strong></p>
-<ul>
-<li>First matching rule wins</li>
-<li>No rule = denied (deny by default)</li>
-<li><code>read_dir</code> filters denied entries from results</li>
-</ul>
-<h3 id="3-feature-gating-featureguard"><a class="header" href="#3-feature-gating-featureguard">3. Feature Gating (FeatureGuard)</a></h3>
-<p>Dangerous features are disabled by default:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>FeatureGuard::new(backend)
-    // Symlinks disabled by default
-    // Hard links disabled by default
-    // Permissions disabled by default
-    .with_symlinks()           // Opt-in if needed
-    .with_max_symlink_resolution(40)
-<span class="boring">}</span></code></pre>
-<p><strong>Guarantees:</strong></p>
-<ul>
-<li>Symlinks, hard links, permission changes blocked unless enabled</li>
-<li>Symlink resolution depth is bounded</li>
-</ul>
-<h3 id="4-resource-limits-quota"><a class="header" href="#4-resource-limits-quota">4. Resource Limits (Quota)</a></h3>
-<p><code>Quota</code> middleware enforces capacity limits:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>Quota::new(backend)
-    .with_max_total_size(100 * 1024 * 1024)  // 100 MB total
-    .with_max_file_size(10 * 1024 * 1024)    // 10 MB per file
-    .with_max_node_count(10_000)             // Max files/dirs
-    .with_max_dir_entries(1_000)             // Max per directory
-    .with_max_path_depth(64)                 // Max nesting
-<span class="boring">}</span></code></pre>
-<p><strong>Guarantees:</strong></p>
-<ul>
-<li>Writes rejected when limits exceeded</li>
-<li>Streaming writes tracked via <code>CountingWriter</code></li>
-</ul>
-<h3 id="5-rate-limiting-ratelimit"><a class="header" href="#5-rate-limiting-ratelimit">5. Rate Limiting (RateLimit)</a></h3>
-<p><code>RateLimit</code> middleware throttles operations:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
-    .max_ops(1000)
-    .per_second()
-<span class="boring">}</span></code></pre>
-<p><strong>Guarantees:</strong></p>
-<ul>
-<li>Operations rejected when limit exceeded</li>
-<li>Protects against runaway processes</li>
-</ul>
-<h3 id="6-backend-level-containment"><a class="header" href="#6-backend-level-containment">6. Backend-Level Containment</a></h3>
-<p>Different backends achieve containment differently:</p>
+<h2 id="1-thread-safety-issues"><a class="header" href="#1-thread-safety-issues">1. Thread Safety Issues</a></h2>
+<h3 id="what-happened"><a class="header" href="#what-happened">What Happened</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Backend</th><th>Containment Mechanism</th></tr>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
 </thead>
 <tbody>
-<tr><td><code>MemoryBackend</code></td><td>Isolated in process memory</td></tr>
-<tr><td><code>SqliteBackend</code></td><td>Each container is a separate <code>.db</code> file</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td>Uses <code>strict-path::VirtualRoot</code> to contain paths</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/72">#72</a></td><td>RwLock panic in production</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/47">#47</a></td><td><code>create_dir_all</code> races with itself</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="7-why-virtual-backends-are-inherently-safe"><a class="header" href="#7-why-virtual-backends-are-inherently-safe">7. Why Virtual Backends Are Inherently Safe</a></h3>
-<p>For <code>MemoryBackend</code> and <code>SqliteBackend</code>, paths are <strong>just keys</strong> (strings or normalized path components). There is no underlying OS filesystem to exploit.</p>
-<p><strong>Lexical path resolution</strong>: Unlike POSIX filesystems, virtual backends resolve paths <strong>lexically</strong> without consulting any filesystem:</p>
-<pre><code>POSIX behavior (dangerous):
-  /foo/bar/..  where bar → /etc  resolves to /etc/../ → /
-
-AnyFS virtual backend behavior (safe):
-  /foo/bar/..  always resolves to /foo (pure string manipulation)
-</code></pre>
-<p>This means:</p>
+<p><strong>Root cause:</strong> Insufficient synchronization in concurrent access patterns.</p>
+<h3 id="anyfs-response"><a class="header" href="#anyfs-response">AnyFS Response</a></h3>
 <ul>
-<li><strong>No symlink-based escapes</strong> - symlinks are data, not OS-resolved references</li>
-<li><strong>No TOCTOU via filesystem state</strong> - resolution is deterministic</li>
-<li><strong>No host path leakage</strong> - paths never touch the OS path resolver</li>
+<li><strong>Test concurrent operations explicitly</strong> - stress test with multiple threads</li>
+<li><strong>Document thread safety guarantees</strong> per backend</li>
+<li><strong><code>VfsBackend: Send</code></strong> bound is intentional</li>
+<li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for interior mutability</li>
 </ul>
-<p>For <code>VRootFsBackend</code> (real filesystem), <code>strict-path::VirtualRoot</code> provides equivalent guarantees by validating and containing all paths before they reach the OS.</p>
-<hr>
-<h2 id="secure-usage-patterns"><a class="header" href="#secure-usage-patterns">Secure Usage Patterns</a></h2>
-<h3 id="ai-agent-sandbox"><a class="header" href="#ai-agent-sandbox">AI Agent Sandbox</a></h3>
+<p><strong>Required tests:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
-use anyfs_container::FilesContainer;
-
-let sandbox = Tracing::new(
-    RateLimit::new(
-        PathFilter::new(
-            FeatureGuard::new(
-                Quota::new(MemoryBackend::new())
-                    .with_max_total_size(50 * 1024 * 1024)
-                    .with_max_file_size(5 * 1024 * 1024)
-            )
-        )
-        .allow("/workspace/**")
-        .deny("**/.env")
-        .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
-
-let mut fs = FilesContainer::new(sandbox);
-// Agent code can only access /workspace, limited resources, audited
-<span class="boring">}</span></code></pre>
-<h3 id="multi-tenant-isolation"><a class="header" href="#multi-tenant-isolation">Multi-Tenant Isolation</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota};
-use anyfs_container::FilesContainer;
-
-fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FilesContainer&lt;...&gt; {
-    let db_path = format!("tenants/{}.db", tenant_id);
-    let backend = Quota::new(SqliteBackend::open(&amp;db_path).unwrap())
-        .with_max_total_size(quota_bytes);
-
-    FilesContainer::new(backend)
+</span>#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(RwLock::new(create_backend()));
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let mut backend = backend.write().unwrap();
+            let _ = backend.create_dir_all("/a/b/c/d");
+        })
+    }).collect();
+    for handle in handles {
+        handle.join().unwrap();
+    }
 }
-
-// Complete isolation: separate database files
 <span class="boring">}</span></code></pre>
-<h3 id="read-only-browsing"><a class="header" href="#read-only-browsing">Read-Only Browsing</a></h3>
+<hr>
+<h2 id="2-panics-instead-of-errors"><a class="header" href="#2-panics-instead-of-errors">2. Panics Instead of Errors</a></h2>
+<h3 id="what-happened-1"><a class="header" href="#what-happened-1">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/8">#8</a></td><td>AltrootFS panics when file doesn’t exist</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/23">#23</a></td><td>Unhandled edge cases cause panics</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/68">#68</a></td><td>MemoryFS panics in WebAssembly</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Using <code>.unwrap()</code> or <code>.expect()</code> on fallible operations.</p>
+<h3 id="anyfs-response-1"><a class="header" href="#anyfs-response-1">AnyFS Response</a></h3>
+<p><strong>No-panic policy:</strong> Never use <code>.unwrap()</code> or <code>.expect()</code> in library code.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, ReadOnly};
-use anyfs_container::FilesContainer;
+</span>// BAD - will panic
+let entry = self.entries.get(&amp;path).unwrap();
 
-let readonly_fs = FilesContainer::new(
+// GOOD - returns error
+let entry = self.entries.get(&amp;path)
+    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+<span class="boring">}</span></code></pre>
+<p><strong>Edge cases that must return errors (not panic):</strong></p>
+<ul>
+<li>File doesn’t exist</li>
+<li>Directory doesn’t exist</li>
+<li>Path is empty string</li>
+<li>Invalid UTF-8 in path</li>
+<li>Parent directory missing</li>
+<li>Type mismatch (file vs directory)</li>
+<li>Concurrent access conflicts</li>
+</ul>
+<hr>
+<h2 id="3-path-handling-inconsistencies"><a class="header" href="#3-path-handling-inconsistencies">3. Path Handling Inconsistencies</a></h2>
+<h3 id="what-happened-2"><a class="header" href="#what-happened-2">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/24">#24</a></td><td>Inconsistent path definition across backends</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/42">#42</a></td><td>Path join doesn’t behave Unix-like</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/22">#22</a></td><td>Non-UTF-8 path support questions</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Each backend implemented path handling differently.</p>
+<h3 id="anyfs-response-2"><a class="header" href="#anyfs-response-2">AnyFS Response</a></h3>
+<ul>
+<li><strong>Normalize paths in ONE place</strong> (FilesContainer or dedicated normalizer)</li>
+<li><strong>Consistent semantics:</strong> always absolute, always <code>/</code> separator</li>
+<li><strong>Use <code>impl AsRef&lt;Path&gt;</code></strong> but normalize internally</li>
+</ul>
+<p><strong>Required conformance tests:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th>Expected Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/foo/../bar</code></td><td><code>/bar</code></td></tr>
+<tr><td><code>/foo/./bar</code></td><td><code>/foo/bar</code></td></tr>
+<tr><td><code>//double//slash</code></td><td><code>/double/slash</code></td></tr>
+<tr><td><code>/</code></td><td><code>/</code></td></tr>
+<tr><td>`` (empty)</td><td>Error</td></tr>
+<tr><td><code>/foo/bar/</code></td><td><code>/foo/bar</code></td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="4-static-lifetime-requirements"><a class="header" href="#4-static-lifetime-requirements">4. Static Lifetime Requirements</a></h2>
+<h3 id="what-happened-3"><a class="header" href="#what-happened-3">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/66">#66</a></td><td>Why does filesystem require <code>'static</code>?</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Design decision that confused users and limited flexibility.</p>
+<h3 id="anyfs-response-3"><a class="header" href="#anyfs-response-3">AnyFS Response</a></h3>
+<ul>
+<li><strong>Avoid <code>'static</code> bounds</strong> unless necessary</li>
+<li><strong>Our design:</strong> <code>VfsBackend: Send</code> (not <code>'static</code>)</li>
+<li><strong>Document why bounds exist</strong> when needed</li>
+</ul>
+<hr>
+<h2 id="5-missing-symlink-support"><a class="header" href="#5-missing-symlink-support">5. Missing Symlink Support</a></h2>
+<h3 id="what-happened-4"><a class="header" href="#what-happened-4">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/81">#81</a></td><td>Symlink support missing entirely</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Symlinks are complex and were deferred indefinitely.</p>
+<h3 id="anyfs-response-4"><a class="header" href="#anyfs-response-4">AnyFS Response</a></h3>
+<ul>
+<li><strong>Symlinks are opt-in</strong> via <code>FeatureGuard</code> middleware</li>
+<li><strong>Default deny is correct</strong> - most use cases don’t need symlinks</li>
+<li><strong>When enabled, bound resolution depth</strong> (default: 40 hops)</li>
+<li><strong><code>strict-path</code> prevents symlink escapes</strong> in <code>VRootFsBackend</code></li>
+</ul>
+<hr>
+<h2 id="6-error-type-ergonomics"><a class="header" href="#6-error-type-ergonomics">6. Error Type Ergonomics</a></h2>
+<h3 id="what-happened-5"><a class="header" href="#what-happened-5">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/33">#33</a></td><td>VfsError hard to match programmatically</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Error enum wasn’t designed for pattern matching.</p>
+<h3 id="anyfs-response-5"><a class="header" href="#anyfs-response-5">AnyFS Response</a></h3>
+<p><code>VfsError</code> includes context and is easy to match:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, thiserror::Error)]
+pub enum VfsError {
+    #[error("not found: {path}")]
+    NotFound { path: PathBuf },
+
+    #[error("already exists: {path}")]
+    AlreadyExists { path: PathBuf },
+
+    #[error("quota exceeded: limit {limit}, attempted {attempted}")]
+    QuotaExceeded { limit: u64, attempted: u64 },
+
+    #[error("feature not enabled: {feature}")]
+    FeatureNotEnabled { feature: &amp;'static str },
+
+    #[error("permission denied: {path} ({operation})")]
+    PermissionDenied { path: PathBuf, operation: &amp;'static str },
+
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="7-seek--write-operations"><a class="header" href="#7-seek--write-operations">7. Seek + Write Operations</a></h2>
+<h3 id="what-happened-6"><a class="header" href="#what-happened-6">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/35">#35</a></td><td>Missing file positioning features</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Initial API was too simple.</p>
+<h3 id="anyfs-response-6"><a class="header" href="#anyfs-response-6">AnyFS Response</a></h3>
+<ul>
+<li><strong>Streaming I/O:</strong> <code>open_read</code>/<code>open_write</code> return <code>Box&lt;dyn Read/Write + Send&gt;</code></li>
+<li><strong>Seek support varies by backend</strong> - document which support it</li>
+<li><strong>Consider future:</strong> <code>open_read_seek</code> variant or capability query</li>
+</ul>
+<hr>
+<h2 id="8-read-only-filesystem-request"><a class="header" href="#8-read-only-filesystem-request">8. Read-Only Filesystem Request</a></h2>
+<h3 id="what-happened-7"><a class="header" href="#what-happened-7">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/58">#58</a></td><td>Request for immutable filesystem</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> No built-in way to enforce read-only access.</p>
+<h3 id="anyfs-response-7"><a class="header" href="#anyfs-response-7">AnyFS Response</a></h3>
+<p><strong>Already solved:</strong> <code>ReadOnly&lt;B&gt;</code> middleware blocks all writes.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let readonly_fs = FilesContainer::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );
-
 // All write operations return VfsError::ReadOnly
 <span class="boring">}</span></code></pre>
+<p>This validates our middleware approach.</p>
 <hr>
-<h2 id="security-checklist"><a class="header" href="#security-checklist">Security Checklist</a></h2>
-<h3 id="for-application-developers"><a class="header" href="#for-application-developers">For Application Developers</a></h3>
+<h2 id="9-performance-issues"><a class="header" href="#9-performance-issues">9. Performance Issues</a></h2>
+<h3 id="what-happened-8"><a class="header" href="#what-happened-8">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/130">#130</a></td><td>File deletion is slow</td></tr>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/135">#135</a></td><td>Benchmark hangs</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> SQLite operations not optimized, FUSE overhead.</p>
+<h3 id="anyfs-response-8"><a class="header" href="#anyfs-response-8">AnyFS Response</a></h3>
 <ul>
-<li><input disabled="" type="checkbox"> Use <code>PathFilter</code> to sandbox untrusted code</li>
-<li><input disabled="" type="checkbox"> Use <code>Quota</code> to prevent resource exhaustion</li>
-<li><input disabled="" type="checkbox"> Use <code>FeatureGuard</code> (default) to disable dangerous features</li>
-<li><input disabled="" type="checkbox"> Use <code>RateLimit</code> for untrusted/shared environments</li>
-<li><input disabled="" type="checkbox"> Use <code>Tracing</code> for audit trails</li>
-<li><input disabled="" type="checkbox"> Use separate backends for separate tenants</li>
-<li><input disabled="" type="checkbox"> Keep dependencies updated</li>
+<li><strong>Batch operations</strong> where possible in <code>SqliteBackend</code></li>
+<li><strong>Use transactions</strong> for multi-file operations</li>
+<li><strong>Document performance characteristics</strong> per backend</li>
+<li><strong>Avoid FUSE</strong> - we’re a library, not a mount</li>
 </ul>
-<h3 id="for-backend-implementers"><a class="header" href="#for-backend-implementers">For Backend Implementers</a></h3>
+<p><strong>Documentation requirement:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// # Performance Characteristics
+///
+/// | Operation | Complexity | Notes |
+/// |-----------|------------|-------|
+/// | `read` | O(1) | Single DB query |
+/// | `write` | O(n) | n = data size |
+/// | `remove_dir_all` | O(n) | n = descendants |
+pub struct SqliteBackend { ... }
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="10-signal-handling--shutdown"><a class="header" href="#10-signal-handling--shutdown">10. Signal Handling / Shutdown</a></h2>
+<h3 id="what-happened-9"><a class="header" href="#what-happened-9">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/129">#129</a></td><td>Doesn’t shutdown on SIGTERM</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> FUSE mount cleanup issues.</p>
+<h3 id="anyfs-response-9"><a class="header" href="#anyfs-response-9">AnyFS Response</a></h3>
 <ul>
-<li><input disabled="" type="checkbox"> Ensure paths cannot escape intended scope</li>
-<li><input disabled="" type="checkbox"> For filesystem backends: use <code>strict-path</code> for containment</li>
-<li><input disabled="" type="checkbox"> Handle concurrent access safely</li>
-<li><input disabled="" type="checkbox"> Don’t leak internal paths in errors</li>
+<li><strong>Not our problem</strong> - we’re a library, not a daemon</li>
+<li><strong>Ensure <code>Drop</code> implementations clean up properly</strong></li>
+<li><strong><code>SqliteBackend</code> flushes on drop</strong></li>
 </ul>
-<h3 id="for-middleware-implementers"><a class="header" href="#for-middleware-implementers">For Middleware Implementers</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Drop for SqliteBackend {
+    fn drop(&amp;mut self) {
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync on drop: {}", e);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="11-platform-compatibility"><a class="header" href="#11-platform-compatibility">11. Platform Compatibility</a></h2>
+<h3 id="what-happened-10"><a class="header" href="#what-happened-10">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/132">#132</a></td><td>FUSE-T support (macOS)</td></tr>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/138">#138</a></td><td>virtio-fs support</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Platform-specific FUSE variants.</p>
+<h3 id="anyfs-response-10"><a class="header" href="#anyfs-response-10">AnyFS Response</a></h3>
 <ul>
-<li><input disabled="" type="checkbox"> Handle streaming I/O appropriately (wrap or block)</li>
-<li><input disabled="" type="checkbox"> Document which operations are intercepted</li>
-<li><input disabled="" type="checkbox"> Fail closed (deny on error)</li>
+<li><strong>We avoid this</strong> - no FUSE, pure library</li>
+<li><strong>Cross-platform by design</strong> - Memory and SQLite work everywhere</li>
+<li><strong><code>VRootFsBackend</code> uses <code>strict-path</code></strong> which handles Windows/Unix</li>
+</ul>
+<p><strong>CI requirement:</strong></p>
+<pre><code class="language-yaml">strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+</code></pre>
+<hr>
+<h2 id="12-multiple-sessions--concurrent-access"><a class="header" href="#12-multiple-sessions--concurrent-access">12. Multiple Sessions / Concurrent Access</a></h2>
+<h3 id="what-happened-11"><a class="header" href="#what-happened-11">What Happened</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>agentfs</td><td><a href="https://github.com/tursodatabase/agentfs/issues/126">#126</a></td><td>Can’t have multiple sessions on same filesystem</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root cause:</strong> Locking/concurrency design.</p>
+<h3 id="anyfs-response-11"><a class="header" href="#anyfs-response-11">AnyFS Response</a></h3>
+<ul>
+<li><strong><code>SqliteBackend</code> uses WAL mode</strong> for concurrent readers</li>
+<li><strong>Document concurrency model</strong> per backend</li>
+<li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for sharing</li>
 </ul>
 <hr>
-<h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
-<ol>
-<li><strong>No encryption at rest</strong>: Use OS-level encryption or implement <code>Encrypted</code> middleware</li>
-<li><strong>No ACLs</strong>: Simple permissions only (Unix mode bits)</li>
-<li><strong>TOCTOU</strong>: Check-then-act patterns may race (like all filesystems)</li>
-</ol>
+<h2 id="issues-we-already-avoid"><a class="header" href="#issues-we-already-avoid">Issues We Already Avoid</a></h2>
+<p>Our design decisions already prevent these problems:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Problem in Others</th><th>AnyFS Solution</th></tr>
+</thead>
+<tbody>
+<tr><td>No middleware pattern</td><td>Tower-style composable middleware</td></tr>
+<tr><td>No quota enforcement</td><td><code>Quota&lt;B&gt;</code> middleware</td></tr>
+<tr><td>No read-only mode</td><td><code>ReadOnly&lt;B&gt;</code> middleware</td></tr>
+<tr><td>Symlink complexity</td><td><code>FeatureGuard&lt;B&gt;</code> (opt-in)</td></tr>
+<tr><td>Path escape via symlinks</td><td><code>strict-path</code> canonicalization</td></tr>
+<tr><td>FUSE complexity</td><td>Pure library, no mount</td></tr>
+<tr><td>SQLite-only</td><td>Multiple backends</td></tr>
+<tr><td>Monolithic features</td><td>Composable middleware</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
-<p><em>For implementation details, see <a href="../architecture/adrs.html">Architecture Decision Records</a>.</em></p>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="https://github.com/manuel-woelker/rust-vfs/issues">rust-vfs Issues</a></li>
+<li><a href="https://github.com/tursodatabase/agentfs/issues">agentfs Issues</a></li>
+<li><a href="./plan.html">Implementation Plan</a> - incorporates these lessons</li>
+<li><a href="./backend-guide.html">Backend Guide</a> - implementation requirements</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../comparisons/positioning.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../implementation/backend-guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../comparisons/technical-comparison.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../review/open-questions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -441,11 +595,11 @@ let readonly_fs = FilesContainer::new(
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../comparisons/positioning.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../implementation/backend-guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../comparisons/technical-comparison.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../review/open-questions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
