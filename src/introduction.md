@@ -35,21 +35,19 @@ You get:
 
 ---
 
-## Three-Crate Structure
+## Two-Crate Structure
 
 | Crate             | Purpose                                      |
 | ----------------- | -------------------------------------------- |
-| `anyfs-backend`   | Minimal contract: `Fs` trait + types |
-| `anyfs`           | Backends + middleware                        |
-| `anyfs-container` | Ergonomic `FileStorage<M>` wrapper           |
+| `anyfs-backend`   | Minimal contract: `Fs` trait + types         |
+| `anyfs`           | Backends + middleware + ergonomic `FileStorage<M>` wrapper |
 
 ---
 
 ## Quick Example
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Layer-based composition
 let backend = SqliteBackend::open("data.db")?

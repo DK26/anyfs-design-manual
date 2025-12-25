@@ -69,8 +69,7 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 Tower-style middleware + pluggable backends:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing};
-use anyfs_container::FilesContainer;
+use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing, FileStorage};
 
 // Compose middleware stack
 let backend = Tracing::new(
@@ -84,7 +83,7 @@ let backend = Tracing::new(
     .deny("**/.env")
 );
 
-let mut fs = FilesContainer::new(backend);
+let mut fs = FileStorage::new(backend);
 ```
 
 **Advantages:**
@@ -247,9 +246,9 @@ Future `anyfs-vfs-compat` crate provides bidirectional adapters:
 use anyfs_vfs_compat::{VfsCompat, AnyFsCompat};
 
 // Use a vfs backend in AnyFS
-// Missing features return VfsError::NotSupported
+// Missing features return FsError::NotSupported
 let backend = VfsCompat::new(vfs::MemoryFS::new());
-let fs = FilesContainer::new(backend);
+let fs = FileStorage::new(backend);
 
 // Use an AnyFS backend in vfs-based code
 // Only exposes what vfs supports

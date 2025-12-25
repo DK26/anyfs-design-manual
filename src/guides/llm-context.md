@@ -356,7 +356,7 @@ let backend = MemoryBackend::new()
 ### With FileStorage wrapper
 
 ```rust
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let mut fs = FileStorage::new(backend);
 fs.write("/file.txt", b"hello")?;

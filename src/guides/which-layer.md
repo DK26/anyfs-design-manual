@@ -6,7 +6,7 @@
 
 | You want to... | Use |
 |----------------|-----|
-| Build an application | `anyfs` + `anyfs-container` |
+| Build an application | `anyfs` |
 | Use built-in backends (Memory, SQLite, VRootFs) | `anyfs` |
 | Use built-in middleware (Quota, PathFilter, etc.) | `anyfs` |
 | Implement a custom backend | `anyfs-backend` only |
@@ -20,7 +20,7 @@
 
 ```rust
 use anyfs::MemoryBackend;
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let mut fs = FileStorage::new(MemoryBackend::new());
 fs.create_dir_all("/data")?;
@@ -31,7 +31,7 @@ fs.write("/data/file.txt", b"hello")?;
 
 ```rust
 use anyfs::{SqliteBackend, Quota, Restrictions, PathFilter, Tracing};
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let backend = SqliteBackend::open("tenant.db")?;
 
@@ -53,7 +53,7 @@ let mut fs = FileStorage::new(stack);
 
 ```rust
 use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let backend = SqliteBackend::open("tenant.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))

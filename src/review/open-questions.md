@@ -380,10 +380,10 @@ Based on review feedback, the following naming concerns were raised:
 | Current Name | Concern | Alternatives Considered |
 |--------------|---------|------------------------|
 | `anyfs-traits` | "traits" is vague | `anyfs-backend` (adopted) |
-| `anyfs-container` | Could imply Docker | `anyfs-storage`, `anyfs-fs`, `fsContainer` |
+| `anyfs-container` | Could imply Docker | Merged into `anyfs` (adopted) |
 | `anyfs` | Sounds like Hebrew "ani efes" (I am zero) | `anyfs` retained for simplicity |
 
-**Decision:** Renamed `anyfs-traits` to `anyfs-backend`. Other names retained.
+**Decision:** Renamed `anyfs-traits` to `anyfs-backend`. Merged `anyfs-container` into `anyfs`.
 
 ---
 
@@ -443,7 +443,7 @@ Based on review feedback, the following naming concerns were raised:
 | Extension methods | VfsBackendExt (ADR-013) |
 | Zero-copy bytes | Optional `bytes` feature (ADR-014) |
 | Error context | Contextual VfsError (ADR-015) |
-| BackendStack builder | Fluent API in anyfs-container |
+| BackendStack builder | Fluent API in anyfs |
 | Path-based access control | PathFilter middleware (ADR-016) |
 | Read-only mode | ReadOnly middleware (ADR-017) |
 | Rate limiting | RateLimit middleware (ADR-018) |

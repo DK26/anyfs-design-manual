@@ -3,8 +3,7 @@
 This plan describes a phased rollout of the AnyFS ecosystem:
 
 - `anyfs-backend`: Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`) + `Layer` + types
-- `anyfs`: Built-in backends + middleware (feature-gated)
-- `anyfs-container`: `FileStorage<M>` ergonomic wrapper
+- `anyfs`: Built-in backends + middleware (feature-gated) + `FileStorage<M>` ergonomic wrapper
 
 ---
 
@@ -222,27 +221,22 @@ Each backend implements the traits it supports:
 - `Cache<B>` + `CacheLayer` - LRU read cache
 - `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
 
-**Exit criteria:** Each backend implements the appropriate trait level (`Fs`, `FsFull`, `FsFuse`) and passes conformance suite. Each middleware wraps backends implementing the same traits.
-
----
-
-## Phase 3: `anyfs-container` (ergonomics)
-
-**Goal:** Provide user-facing ergonomic wrapper.
+### FileStorage<M> (Ergonomic Wrapper)
 
 - `FileStorage<M>` - Thin wrapper with `std::fs`-aligned API
   - Type-erased backend (`Box<dyn Fs>`) for clean API
   - Optional marker type `M` for compile-time container differentiation
+- `BackendStack` builder for fluent middleware composition
 - Accepts `impl AsRef<Path>` for convenience
 - Delegates all operations to wrapped backend
 
 **Note:** `FileStorage` contains NO policy logic. Policy is handled by middleware.
 
-**Exit criteria:** Applications can use `FileStorage` as drop-in for `std::fs` patterns.
+**Exit criteria:** Each backend implements the appropriate trait level (`Fs`, `FsFull`, `FsFuse`) and passes conformance suite. Each middleware wraps backends implementing the same traits. Applications can use `FileStorage` as drop-in for `std::fs` patterns.
 
 ---
 
-## Phase 4: Conformance test suite
+## Phase 3: Conformance test suite
 
 **Goal:** Prevent backend divergence and validate middleware behavior.
 
@@ -353,7 +347,7 @@ fn memory_backend_works_in_wasm() {
 
 ---
 
-## Phase 5: Documentation + examples
+## Phase 4: Documentation + examples
 
 - Keep `AGENTS.md` and `src/architecture/design-overview.md` authoritative
 - Provide example per backend
@@ -365,7 +359,7 @@ fn memory_backend_works_in_wasm() {
 
 ---
 
-## Phase 6: CI/CD Pipeline
+## Phase 5: CI/CD Pipeline
 
 **Goal:** Ensure quality across platforms and prevent regressions.
 
@@ -624,7 +618,7 @@ A `Vfs` implementation that connects to a remote server. Works with `FileStorage
 
 ```rust
 use anyfs_remote::RemoteBackend;
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 // Connect to your cloud service
 let remote = RemoteBackend::connect("https://api.yourservice.com")

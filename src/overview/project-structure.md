@@ -16,7 +16,7 @@ anyfs-backend/              # Crate 1: trait + types
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
-anyfs/                      # Crate 2: backends + middleware
+anyfs/                      # Crate 2: backends + middleware + ergonomics
   Cargo.toml
   src/
     lib.rs
@@ -28,12 +28,8 @@ anyfs/                      # Crate 2: backends + middleware
       quota.rs              # Quota<B>
       tracing.rs            # Tracing<B>
       feature_guard.rs      # Restrictions<B>
-
-anyfs-container/            # Crate 3: ergonomic wrapper
-  Cargo.toml
-  src/
-    lib.rs
-    container.rs            # FileStorage<B>
+    container.rs            # FileStorage<M>
+    stack.rs                # BackendStack builder
 ```
 
 ---
@@ -43,16 +39,13 @@ anyfs-container/            # Crate 3: ergonomic wrapper
 ```
 anyfs-backend (trait + types)
      ^
-     |-- anyfs (backends + middleware)
-     |     ^-- vrootfs feature uses strict-path
-     |
-     +-- anyfs-container (ergonomic wrapper)
+     |-- anyfs (backends + middleware + ergonomics)
+           ^-- vrootfs feature uses strict-path
 ```
 
 **Key points:**
 - Custom backends depend only on `anyfs-backend`
-- `anyfs` provides built-in backends and middleware
-- `anyfs-container` provides the ergonomic `FileStorage` wrapper
+- `anyfs` provides built-in backends, middleware, and the ergonomic `FileStorage<M>` wrapper
 
 ---
 

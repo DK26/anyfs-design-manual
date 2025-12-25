@@ -47,10 +47,9 @@ You get:
 
 ## Key design points
 
-- **Three-crate structure**
+- **Two-crate structure**
   - `anyfs-backend`: trait contract
-  - `anyfs`: backends + middleware
-  - `anyfs-container`: ergonomic wrapper
+  - `anyfs`: backends + middleware + ergonomic wrapper
 
 - **Middleware pattern** (like Axum/Tower)
   - Each middleware has one job
@@ -66,8 +65,7 @@ You get:
 ## Quick example
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Layer-based composition
 let backend = SqliteBackend::open("tenant.db")?

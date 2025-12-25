@@ -1,4 +1,4 @@
-# FileStorage<M> (anyfs-container)
+# FileStorage<M> (anyfs)
 
 **Type-safe ergonomic wrapper for std::fs-aligned API**
 
@@ -21,8 +21,7 @@ All policy (limits, feature gates, logging) is handled by middleware, not FileSt
 ## Creating a Container
 
 ```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, FileStorage};
 
 // Simple: just ergonomics
 let mut fs = FileStorage::new(MemoryBackend::new());
@@ -31,8 +30,7 @@ let mut fs = FileStorage::new(MemoryBackend::new());
 With middleware (layer-based):
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::new()
@@ -51,8 +49,7 @@ let mut fs = FileStorage::new(backend);
 The type parameter `M` (default: `()`) enables compile-time container differentiation:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend};
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 
 // Define marker types for your domains
 struct Sandbox;
@@ -130,7 +127,7 @@ FileStorage is **purely ergonomic**. If you need policy, compose middleware.
 
 ```rust
 use std::marker::PhantomData;
-use anyfs_backend::Fs;
+use anyfs_backend::Fs;  // FileStorage is in anyfs, but uses Fs from anyfs-backend
 
 /// Ergonomic filesystem wrapper with optional type marker.
 /// Backend is type-erased to `Box<dyn Fs>` for a clean API.
@@ -159,6 +156,8 @@ impl<M> FileStorage<M> {
 
 **Note:** `FileStorage` uses `Box<dyn Fs>` which provides Layer 1 operations (read, write, dirs). If you need `FsFull`, `FsFuse`, or `FsPosix` operations, use the backend directly without type erasure.
 
+`FileStorage<M>` is part of the `anyfs` crate, not a separate crate.
+
 ---
 
 ## Direct Backend Access
@@ -173,15 +172,4 @@ let mut backend = Quota::new(MemoryBackend::new())
 
 // Use Fs trait methods directly
 backend.write("/file.txt", b"data")?;
-```
-
-For FUSE mounting (requires `FsFuse`):
-
-```rust
-use anyfs::{SqliteBackend, FsFuse};
-use anyfs_fuse::FuseMount;
-
-let backend = SqliteBackend::open("data.db")?;
-// backend implements FsFuse, so we can mount it
-FuseMount::mount(backend, "/mnt/myfs")?;
 ```

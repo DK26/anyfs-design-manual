@@ -9,7 +9,6 @@
 ```toml
 [dependencies]
 anyfs = "0.1"
-anyfs-container = "0.1"  # Optional
 ```
 
 With backends and optional features:
@@ -23,8 +22,7 @@ anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 ## Creating a Backend Stack
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, Quota, Restrictions, Tracing};
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
 
 // Simple
 let fs = FileStorage::new(MemoryBackend::new());
@@ -56,7 +54,7 @@ let backend = SqliteBackend::open("data.db")?
     .layer(TracingLayer::new());
 
 // BackendStack builder (fluent API)
-use anyfs_container::BackendStack;
+use anyfs::BackendStack;
 
 let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .limited(|l| l.max_total_size(100 * 1024 * 1024))
@@ -474,7 +472,7 @@ match result {
 | `CacheLayer` | Layer for Cache |
 | `OverlayLayer` | Layer for Overlay |
 
-### From `anyfs-container`
+**Ergonomic Wrappers (in `anyfs`):**
 
 | Type | Description |
 |------|-------------|

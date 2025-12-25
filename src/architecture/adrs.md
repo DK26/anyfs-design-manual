@@ -9,7 +9,7 @@ This file captures the decisions for the current AnyFS design.
 | ADR | Title | Status |
 |-----|-------|--------|
 | ADR-001 | Path-based `VfsBackend` trait | Accepted |
-| ADR-002 | Three-crate structure | Accepted |
+| ADR-002 | Two-crate structure | Accepted |
 | ADR-003 | `impl AsRef<Path>` for all path parameters | Accepted |
 | ADR-004 | Tower-style middleware pattern | Accepted |
 | ADR-005 | `std::fs`-aligned method names | Accepted |
@@ -40,20 +40,19 @@ This file captures the decisions for the current AnyFS design.
 
 ---
 
-## ADR-002: Three-crate structure
+## ADR-002: Two-crate structure
 
 **Decision:**
 
 | Crate | Purpose |
 |-------|---------|
-| `anyfs-backend` | Minimal contract: `VfsBackend` trait, `Layer` trait, `VfsBackendExt`, types |
-| `anyfs` | Backends + middleware (Quota, Restrictions, Tracing) |
-| `anyfs-container` | Ergonomic wrapper: `FilesContainer<B>`, `BackendStack` builder |
+| `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types |
+| `anyfs` | Backends + middleware + ergonomics (`FileStorage<M>`, `BackendStack`) |
 
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
 - Middleware is composable and lives with backends in `anyfs`.
-- `FilesContainer` is purely ergonomic - no policy logic.
+- `FileStorage` is purely ergonomic - no policy logic - included in `anyfs` for convenience.
 
 ---
 
@@ -239,7 +238,7 @@ pub trait Layer<B: VfsBackend> {
 **Why:**
 - Standardized composition pattern familiar to Tower/Axum users.
 - IDE autocomplete for available layers.
-- Enables `BackendStack` fluent builder in anyfs-container.
+- Enables `BackendStack` fluent builder in anyfs.
 - Each middleware provides a corresponding `*Layer` type.
 
 **Example:**

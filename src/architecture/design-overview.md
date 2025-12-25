@@ -89,12 +89,12 @@ The traits are low-level interfaces that any backend can implement - memory, SQL
 **Example: Secure AI Agent Sandbox**
 
 ```rust
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 struct AiSandbox;  // Marker type
 
 // Application composes secure defaults
-let sandbox: FileStorage<_, AiSandbox> = FileStorage::with_marker(
+let sandbox: FileStorage<AiSandbox> = FileStorage::with_marker(
     PathFilter::new(
         Restrictions::new(
             Quota::new(MemoryBackend::new())
@@ -117,18 +117,15 @@ The backend is permissive. The application adds restrictions appropriate for its
 | Crate | Purpose | Contains |
 |-------|---------|----------|
 | `anyfs-backend` | Minimal contract | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt` |
-| `anyfs` | Backends + middleware | Built-in backends, all middleware layers |
-| `anyfs-container` | Ergonomic wrapper | `FileStorage<M>`, `BackendStack` builder |
+| `anyfs` | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<M>`, `BackendStack` builder |
 
 ### Dependency Graph
 
 ```
 anyfs-backend (trait + types)
      ^
-     |-- anyfs (backends + middleware)
-     |     ^-- vrootfs feature may use strict-path
-     |
-     +-- anyfs-container (ergonomic wrapper)
+     |-- anyfs (backends + middleware + ergonomics)
+           ^-- vrootfs feature may use strict-path
 ```
 
 ---
@@ -625,15 +622,14 @@ let backend = Overlay::new(base, upper);
 
 ---
 
-## FileStorage<M> (in `anyfs-container`)
+## FileStorage<M> (in `anyfs`)
 
 `FileStorage<M>` is a **thin ergonomic wrapper** with an optional **marker type** for compile-time safety. It type-erases the backend for a clean API. All policy is handled by middleware.
 
 ### Basic Usage
 
 ```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, FileStorage};
 
 let mut fs = FileStorage::new(MemoryBackend::new());
 
@@ -647,8 +643,7 @@ let content = fs.read("/documents/hello.txt")?;
 The second type parameter `M` (default: `()`) enables compile-time container differentiation:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend};
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 
 // Define marker types for your domains
 struct Sandbox;
@@ -754,8 +749,7 @@ Middleware composes by wrapping. Order matters - innermost applies first.
 ### Manual Composition
 
 ```rust
-use anyfs::{SqliteBackend, Quota, Restrictions, Tracing};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
 
 // Build from inside out:
 let backend = SqliteBackend::open("data.db")?;
@@ -790,7 +784,7 @@ let backend = SqliteBackend::open("data.db")?
 For complex stacks, use `BackendStack` for a fluent API:
 
 ```rust
-use anyfs_container::BackendStack;
+use anyfs::BackendStack;
 
 let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .limited(|l| l

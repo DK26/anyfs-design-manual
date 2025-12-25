@@ -11,7 +11,6 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 anyfs = "0.1"
-anyfs-container = "0.1"  # Optional: for ergonomic wrapper
 ```
 
 For additional backends:
@@ -33,8 +32,7 @@ Available features:
 ### Hello World
 
 ```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut fs = FileStorage::new(MemoryBackend::new());
@@ -50,8 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### With Quotas
 
 ```rust
-use anyfs::{SqliteBackend, Quota};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, Quota, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = Quota::new(SqliteBackend::open_or_create("data.db")?)
@@ -70,8 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### With Restrictions
 
 ```rust
-use anyfs::{MemoryBackend, Restrictions};
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, Restrictions, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Block specific operations for untrusted code
@@ -92,8 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Full Stack (Layer-based)
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
-use anyfs_container::FileStorage;
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = SqliteBackend::open_or_create("data.db")?
@@ -242,8 +237,7 @@ match fs.write("/file.txt", &large_data) {
 ## Testing
 
 ```rust
-use anyfs::MemoryBackend;
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, FileStorage};
 
 #[test]
 fn test_write_and_read() {
@@ -259,8 +253,7 @@ fn test_write_and_read() {
 With limits:
 
 ```rust
-use anyfs::{MemoryBackend, Quota};
-use anyfs_container::FileStorage;
+use anyfs::{MemoryBackend, Quota, FileStorage};
 
 #[test]
 fn test_quota_exceeded() {

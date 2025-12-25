@@ -217,7 +217,7 @@ This is "follow and verify containment" - symlinks are followed by the OS, but e
 
 ```rust
 use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let sandbox = Tracing::new(
     RateLimit::new(
@@ -244,7 +244,7 @@ let mut fs = FileStorage::new(sandbox);
 
 ```rust
 use anyfs::{SqliteBackend, Quota};
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<...> {
     let db_path = format!("tenants/{}.db", tenant_id);
@@ -261,7 +261,7 @@ fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<...> 
 
 ```rust
 use anyfs::{SqliteBackend, ReadOnly};
-use anyfs_container::FileStorage;
+use anyfs::FileStorage;
 
 let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
