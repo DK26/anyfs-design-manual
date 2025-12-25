@@ -2,7 +2,7 @@
 
 This plan describes a phased rollout of the AnyFS ecosystem:
 
-- `anyfs-backend`: Core trait (`VfsBackend`, `Layer`) + types
+- `anyfs-backend`: Layered traits (`Vfs`, `VfsFull`, `VfsFuse`, `VfsPosix`) + `Layer` + types
 - `anyfs`: Built-in backends + middleware (feature-gated)
 - `anyfs-container`: `FileStorage<M>` ergonomic wrapper
 
@@ -183,7 +183,7 @@ pub trait VfsPosix: VfsFuse + VfsHandles + VfsLock + VfsXattr {}
 
 ### Path Resolution Utility
 
-- `resolve_path(backend, path, follow_symlinks)` - works on any `VfsBackend`
+- `resolve_path(backend, path, follow_symlinks)` - works on any `Vfs`
   - Walks path component by component using `metadata()` and `read_link()`
   - Handles `..` correctly (requires knowing what each component resolves to)
   - Detects circular symlinks (max depth or visited set)
@@ -222,7 +222,7 @@ Each backend implements the traits it supports:
 - `Cache<B>` + `CacheLayer` - LRU read cache
 - `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
 
-**Exit criteria:** Each backend implements `VfsBackend` and passes conformance suite. Each middleware wraps any `VfsBackend`.
+**Exit criteria:** Each backend implements the appropriate trait level (`Vfs`, `VfsFull`, `VfsFuse`) and passes conformance suite. Each middleware wraps backends implementing the same traits.
 
 ---
 
@@ -231,7 +231,7 @@ Each backend implements the traits it supports:
 **Goal:** Provide user-facing ergonomic wrapper.
 
 - `FileStorage<M>` - Thin wrapper with `std::fs`-aligned API
-  - Type-erased backend (`Box<dyn VfsBackend>`) for clean API
+  - Type-erased backend (`Box<dyn Vfs>`) for clean API
   - Optional marker type `M` for compile-time container differentiation
 - Accepts `impl AsRef<Path>` for convenience
 - Delegates all operations to wrapped backend
@@ -525,20 +525,23 @@ Adapter crate for bidirectional compatibility with the [`vfs`](https://github.co
 - No `truncate`, `statfs`, or `read_range`
 - No middleware composition pattern
 
-**Our trait is a superset** - we support everything they do, plus more.
+**Our layered traits are a superset** - `Vfs` covers everything `vfs::FileSystem` does, plus our extended traits add more.
 
 **Adapters:**
 
 ```rust
 // Wrap a vfs::FileSystem to use as AnyFS backend
-// Missing features (symlinks, permissions, etc.) return VfsError::NotSupported
+// Only implements Vfs (Layer 1) - no links, permissions, etc.
 pub struct VfsCompat<F: vfs::FileSystem>(F);
-impl<F: vfs::FileSystem> VfsBackend for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> VfsRead for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> VfsWrite for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> VfsDir for VfsCompat<F> { ... }
+// VfsCompat<F> implements Vfs via blanket impl
 
 // Wrap an AnyFS backend to use as vfs::FileSystem
-// Only exposes the subset that vfs supports
-pub struct AnyFsCompat<B: VfsBackend>(B);
-impl<B: VfsBackend> vfs::FileSystem for AnyFsCompat<B> { ... }
+// Any backend implementing Vfs works
+pub struct AnyFsCompat<B: Vfs>(B);
+impl<B: Vfs> vfs::FileSystem for AnyFsCompat<B> { ... }
 ```
 
 **Use cases:**
@@ -548,7 +551,7 @@ impl<B: VfsBackend> vfs::FileSystem for AnyFsCompat<B> { ... }
 
 ### Cloud Storage & Remote Access
 
-The `VfsBackend` abstraction enables building cloud storage services with multiple access patterns.
+The layered trait design enables building cloud storage services - each adapter requires only the traits it needs.
 
 **Architecture:**
 
@@ -556,13 +559,13 @@ The `VfsBackend` abstraction enables building cloud storage services with multip
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          YOUR SERVER                                │
 │  ┌───────────────────────────────────────────────────────────────┐  │
-│  │  Quota<Tracing<SqliteBackend>>  (or any backend stack)        │  │
+│  │  Quota<Tracing<SqliteBackend>>  (implements VfsFuse)          │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │         ▲              ▲              ▲              ▲              │
 │         │              │              │              │              │
 │    ┌────┴────┐   ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐       │
 │    │ S3 API  │   │ gRPC/REST │  │    NFS    │  │  WebDAV   │       │
-│    │ adapter │   │  adapter  │  │   server  │  │  server   │       │
+│    │ (Vfs)   │   │  (Vfs)    │  │ (VfsFuse) │  │  (VfsFull)│       │
 │    └────┬────┘   └─────┬─────┘  └─────┬─────┘  └─────┬─────┘       │
 └─────────┼──────────────┼──────────────┼──────────────┼─────────────┘
           │              │              │              │
@@ -572,19 +575,19 @@ The `VfsBackend` abstraction enables building cloud storage services with multip
 
 **Future crates for remote access:**
 
-| Crate | Purpose |
-|-------|---------|
-| `anyfs-s3-server` | Expose VfsBackend as S3-compatible API |
-| `anyfs-sftp-server` | SFTP server - shell-like file access |
-| `anyfs-ssh-shell` | SSH server with sandboxed home directories |
-| `anyfs-remote` | `RemoteBackend` client for remote VfsBackend access |
-| `anyfs-grpc` | gRPC protocol adapter for VfsBackend |
-| `anyfs-webdav` | WebDAV server adapter |
-| `anyfs-nfs` | NFS server adapter |
+| Crate | Required Trait | Purpose |
+|-------|----------------|---------|
+| `anyfs-s3-server` | `Vfs` | Expose as S3-compatible API (objects = files) |
+| `anyfs-sftp-server` | `VfsFull` | SFTP server with permissions/links |
+| `anyfs-ssh-shell` | `VfsFuse` | SSH server with FUSE-mounted home directories |
+| `anyfs-remote` | `Vfs` | `RemoteBackend` client (implements `Vfs`) |
+| `anyfs-grpc` | `Vfs` | gRPC protocol adapter |
+| `anyfs-webdav` | `VfsFull` | WebDAV server (needs permissions) |
+| `anyfs-nfs` | `VfsFuse` | NFS server (needs inodes) |
 
 #### `anyfs-s3-server` - S3-Compatible Object Storage
 
-Expose any `VfsBackend` as an S3-compatible API. Users access your storage with standard AWS SDKs.
+Expose any `Vfs` backend as an S3-compatible API. Users access your storage with standard AWS SDKs.
 
 ```rust
 use anyfs::{SqliteBackend, Quota, Tracing};
@@ -617,7 +620,7 @@ aws s3 cp s3://user-files/document.pdf ./local.pdf --endpoint-url http://yourser
 
 #### `anyfs-remote` - Remote Backend Client
 
-A `VfsBackend` implementation that connects to a remote server. Works with `FileStorage` or `anyfs-fuse`.
+A `Vfs` implementation that connects to a remote server. Works with `FileStorage` or `anyfs-fuse`.
 
 ```rust
 use anyfs_remote::RemoteBackend;
@@ -651,7 +654,7 @@ FuseMount::mount(remote, "/mnt/cloud")?;
 
 #### `anyfs-grpc` - gRPC Protocol
 
-Efficient binary protocol for VfsBackend remote access.
+Efficient binary protocol for remote `Vfs` access.
 
 **Server side:**
 
@@ -681,7 +684,7 @@ use anyfs::{SqliteBackend, Quota, PathFilter, Tracing};
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
-fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> impl VfsBackend {
+fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> impl Vfs {
     let db_path = format!("/data/tenants/{}.db", tenant_id);
 
     Quota::new(
@@ -708,7 +711,7 @@ S3Server::new_multi_tenant(|request| {
 
 #### `anyfs-sftp-server` - SFTP Access with Shell Commands
 
-Expose VfsBackend as an SFTP server. Users connect with standard SSH/SFTP clients and navigate with familiar shell commands.
+Expose a `VfsFull` backend as an SFTP server. Users connect with standard SSH/SFTP clients and navigate with familiar shell commands.
 
 **Architecture:**
 
@@ -739,7 +742,7 @@ use anyfs::{SqliteBackend, Quota, Tracing};
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
-fn get_user_storage(username: &str) -> impl VfsBackend {
+fn get_user_storage(username: &str) -> impl VfsFull {
     let db_path = format!("/data/users/{}.db", username);
 
     Quota::new(
@@ -780,7 +783,7 @@ All operations happen on the user's isolated SQLite database on your server.
 
 #### `anyfs-ssh-shell` - Full Shell Access with Sandboxed Home
 
-Give users a real SSH shell where their home directory is backed by VfsBackend.
+Give users a real SSH shell where their home directory is backed by `VfsFuse`.
 
 **Server implementation:**
 
@@ -830,7 +833,7 @@ alice@server:~$ du -sh .
 150M    .
 
 # Everything they do is actually stored in /data/users/alice.db on the server!
-# They can use vim, gcc, python - all working on their isolated VfsBackend
+# They can use vim, gcc, python - all working on their isolated VfsFuse backend
 ```
 
 #### Isolated Shell Hosting Use Cases

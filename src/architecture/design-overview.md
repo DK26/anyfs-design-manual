@@ -42,7 +42,8 @@ Anyone can:
 │    Overlay<B1,B2>   - Layered FS        │
 │                                         │
 ├─────────────────────────────────────────┤
-│  VfsBackend                             │  ← Pure storage + fs semantics
+│  Backend (implements Vfs, VfsFull,      │  ← Pure storage + fs semantics
+│           VfsFuse, or VfsPosix)         │
 │  (Memory, SQLite, VRootFs, custom...)   │
 └─────────────────────────────────────────┘
 ```
@@ -51,7 +52,7 @@ Anyone can:
 
 | Layer | Responsibility |
 |-------|----------------|
-| `VfsBackend` | Storage + filesystem semantics |
+| Backend (`Vfs`+) | Storage + filesystem semantics |
 | `Quota<B>` | Resource limits (size, count, depth) |
 | `Restrictions<B>` | Opt-in operation restrictions |
 | `PathFilter<B>` | Path-based access control |
@@ -63,9 +64,9 @@ Anyone can:
 
 ## Design Principle: Predictable Defaults, Opt-in Security
 
-**`VfsBackend` mimics `std::fs` with predictable, permissive defaults.**
+**The `Vfs` traits mimic `std::fs` with predictable, permissive defaults.**
 
-The trait is a low-level interface that any backend can implement - memory, SQLite, real filesystem, network storage, etc. To maintain consistent behavior across all backends:
+The traits are low-level interfaces that any backend can implement - memory, SQLite, real filesystem, network storage, etc. To maintain consistent behavior across all backends:
 
 - All operations work by default (`symlink()`, `hard_link()`, `set_permissions()`)
 - No security restrictions at the trait level
@@ -74,14 +75,14 @@ The trait is a low-level interface that any backend can implement - memory, SQLi
 **Why not secure-by-default at this layer?**
 
 1. **Predictability**: A backend should behave like a filesystem. Surprising restrictions break expectations.
-2. **Backend-agnostic**: The trait doesn't know if it's wrapping a sandboxed memory store or a real filesystem. Restrictions that make sense for one may not for another.
+2. **Backend-agnostic**: The traits don't know if they're wrapping a sandboxed memory store or a real filesystem. Restrictions that make sense for one may not for another.
 3. **Composition**: Security is achieved by layering middleware, not by baking it into the storage layer.
 
 **Security is the responsibility of higher-level APIs:**
 
 | Layer | Security Responsibility |
 |-------|------------------------|
-| `VfsBackend` | None - pure filesystem semantics |
+| Backend (`Vfs`+) | None - pure filesystem semantics |
 | Middleware (`Restrictions`, `PathFilter`, etc.) | Opt-in restrictions |
 | `FileStorage` or application code | Configure appropriate middleware |
 
@@ -115,7 +116,7 @@ The backend is permissive. The application adds restrictions appropriate for its
 
 | Crate | Purpose | Contains |
 |-------|---------|----------|
-| `anyfs-backend` | Minimal contract | `VfsBackend` trait, `Layer` trait, types, `VfsBackendExt` |
+| `anyfs-backend` | Minimal contract | Layered traits (`Vfs`, `VfsFull`, `VfsFuse`, `VfsPosix`), `Layer` trait, types, `VfsBackendExt` |
 | `anyfs` | Backends + middleware | Built-in backends, all middleware layers |
 | `anyfs-container` | Ergonomic wrapper | `FileStorage<M>`, `BackendStack` builder |
 
@@ -457,7 +458,7 @@ pub struct StatFs {
 
 ## Middleware (in `anyfs`)
 
-Each middleware is itself a `VfsBackend` that wraps another backend. This enables composition.
+Each middleware implements the same traits as its inner backend. This enables composition while preserving capabilities.
 
 ### Quota<B>
 
@@ -688,20 +689,20 @@ process_sandbox(&userdata);  // Compile error! Type mismatch
 use std::marker::PhantomData;
 
 /// Ergonomic filesystem wrapper with optional type marker.
-/// Backend is type-erased for a clean API.
+/// Backend is type-erased to `Box<dyn Vfs>` for a clean API.
 pub struct FileStorage<M = ()> {
-    backend: Box<dyn VfsBackend>,
+    backend: Box<dyn Vfs>,
     _marker: PhantomData<M>,
 }
 
 impl<M> FileStorage<M> {
     /// Create a new FileStorage (no marker).
-    pub fn new(backend: impl VfsBackend + 'static) -> FileStorage {
+    pub fn new(backend: impl Vfs + 'static) -> FileStorage {
         FileStorage { backend: Box::new(backend), _marker: PhantomData }
     }
 
     /// Create a new FileStorage with a specific marker type.
-    pub fn with_marker<N>(backend: impl VfsBackend + 'static) -> FileStorage<N> {
+    pub fn with_marker<N>(backend: impl Vfs + 'static) -> FileStorage<N> {
         FileStorage { backend: Box::new(backend), _marker: PhantomData }
     }
 
@@ -712,6 +713,8 @@ impl<M> FileStorage<M> {
 }
 ```
 
+**Note:** `FileStorage` uses `Box<dyn Vfs>` which provides Layer 1 operations. If you need `VfsFull`, `VfsFuse`, or `VfsPosix` operations, use the backend directly without type erasure.
+
 ---
 
 ## Layer Trait (in `anyfs-backend`)
@@ -720,8 +723,8 @@ The `Layer` trait (inspired by Tower) standardizes middleware composition:
 
 ```rust
 /// A layer that wraps a backend to add functionality.
-pub trait Layer<B: VfsBackend> {
-    type Backend: VfsBackend;
+pub trait Layer<B: Vfs> {
+    type Backend: Vfs;
     fn layer(self, backend: B) -> Self::Backend;
 }
 ```
@@ -732,13 +735,15 @@ Each middleware provides a corresponding `Layer` implementation:
 // QuotaLayer, TracingLayer, RestrictionsLayer, etc.
 pub struct QuotaLayer { /* config */ }
 
-impl<B: VfsBackend> Layer<B> for QuotaLayer {
+impl<B: Vfs> Layer<B> for QuotaLayer {
     type Backend = Quota<B>;
     fn layer(self, backend: B) -> Self::Backend {
         Quota::new(backend).with_limits(self.limits)
     }
 }
 ```
+
+**Note:** Middleware that implements additional traits (like `VfsInode`) can use more specific bounds to preserve capabilities through the layer.
 
 ---
 
@@ -826,7 +831,7 @@ fs.write(PathBuf::from("/file.txt"), data)?;
 
 ## Path Resolution
 
-Path resolution (walking directory structure, following symlinks) operates on the **`VfsBackend` abstraction**, not reimplemented per-backend.
+Path resolution (walking directory structure, following symlinks) operates on the **`Vfs` abstraction**, not reimplemented per-backend.
 
 ### Why Abstract Path Resolution?
 
@@ -834,15 +839,15 @@ We simulate inodes - that's the whole point of virtualizing a filesystem. Path r
 
 - `/foo/../bar` cannot be resolved lexically - `foo` might be a symlink to `/other/place`, making `..` resolve to `/other`
 - Resolution requires following the actual directory structure (inodes)
-- The `VfsBackend` trait has the needed methods: `metadata()`, `read_link()`, `read_dir()`
+- The `Vfs` traits have the needed methods: `metadata()`, `read_link()`, `read_dir()`
 
 ### Resolution Utility (in `anyfs`)
 
 ```rust
 /// Resolve a path, optionally following symlinks.
-/// Works on any VfsBackend.
+/// Works on any Vfs + VfsLink backend.
 pub fn resolve_path(
-    backend: &impl VfsBackend,
+    backend: &(impl Vfs + VfsLink),
     path: impl AsRef<Path>,
     follow_symlinks: bool,
 ) -> Result<PathBuf, VfsError> {
@@ -864,29 +869,22 @@ pub fn resolve_path(
 
 ### Opt-out Mechanism
 
-Virtual backends need resolution by default. Real filesystem backends opt out:
+Virtual backends need resolution by default. Real filesystem backends opt out via a marker trait or associated constant:
 
 ```rust
-pub trait VfsBackend: Send {
-    /// Whether this backend needs virtual path resolution.
-    /// Returns `false` for backends where the OS handles resolution.
-    const NEEDS_PATH_RESOLUTION: bool = true;
+/// Marker trait for backends that handle their own path resolution.
+/// VRootFsBackend implements this because the OS handles resolution.
+pub trait SelfResolving {}
 
-    // ... existing methods
-}
-
-impl VfsBackend for VRootFsBackend {
-    const NEEDS_PATH_RESOLUTION: bool = false;
-    // ...
-}
+impl SelfResolving for VRootFsBackend {}
 ```
 
-`FileStorage` (or a dedicated wrapper) applies resolution automatically for backends that need it:
+`FileStorage` (or a dedicated wrapper) applies resolution automatically for backends that don't implement `SelfResolving`:
 
 ```rust
 impl<M> FileStorage<M> {
-    pub fn new(backend: impl VfsBackend + 'static) -> FileStorage {
-        // Resolution applied automatically if backend needs it
+    pub fn new(backend: impl Vfs + 'static) -> FileStorage {
+        // Resolution applied automatically if backend doesn't implement SelfResolving
     }
 }
 ```
@@ -935,13 +933,13 @@ let sandbox = MemoryBackend::new()
 
 ## Extension Traits (in `anyfs-backend`)
 
-The `VfsBackendExt` trait provides convenience methods without modifying `VfsBackend`:
+The `VfsBackendExt` trait provides convenience methods for any `Vfs` backend:
 
 ```rust
 use serde::{Serialize, de::DeserializeOwned};
 
-/// Extension methods for VfsBackend (auto-implemented for all backends).
-pub trait VfsBackendExt: VfsBackend {
+/// Extension methods for Vfs (auto-implemented for all backends).
+pub trait VfsBackendExt: Vfs {
     /// Read and deserialize JSON.
     fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, VfsError> {
         let bytes = self.read(path)?;
@@ -965,8 +963,8 @@ pub trait VfsBackendExt: VfsBackend {
     }
 }
 
-// Blanket implementation for all backends
-impl<B: VfsBackend> VfsBackendExt for B {}
+// Blanket implementation for all Vfs backends
+impl<B: Vfs> VfsBackendExt for B {}
 ```
 
 Users can define their own extension traits for domain-specific operations.
