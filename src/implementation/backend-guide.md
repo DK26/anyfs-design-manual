@@ -332,7 +332,7 @@ Return appropriate `VfsError` variants:
 | Quota enforcement | `Quota<B>` middleware |
 | Feature gating | `Restrictions<B>` middleware |
 | Logging | `Tracing<B>` middleware |
-| Ergonomic API | `FilesContainer<B>` wrapper |
+| Ergonomic API | `FileStorage<M>` wrapper |
 
 **Backends focus on storage.** Keep them simple.
 
@@ -453,6 +453,205 @@ Custom middleware only requires `anyfs-backend` as a dependency - same as backen
 [dependencies]
 anyfs-backend = "0.1"
 ```
+
+### The Pattern (5 Minutes to Understand)
+
+Middleware is just a struct that:
+1. Wraps another `VfsBackend`
+2. Implements `VfsBackend` itself
+3. Intercepts some methods, delegates others
+
+```rust
+//  ┌─────────────────────────────────────┐
+//  │  Your Middleware                    │
+//  │  ┌─────────────────────────────────┐│
+//  │  │  Inner Backend (any VfsBackend) ││
+//  │  └─────────────────────────────────┘│
+//  └─────────────────────────────────────┘
+//
+//  Request → Middleware (intercept/modify) → Inner Backend
+//  Response ← Middleware (intercept/modify) ← Inner Backend
+```
+
+### Simplest Possible Middleware: Operation Counter
+
+This middleware counts how many operations are performed:
+
+```rust
+use anyfs_backend::{VfsBackend, VfsError, Metadata, DirEntry, Permissions, StatFs};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
+
+/// Counts all operations performed on the backend.
+pub struct Counter<B> {
+    inner: B,
+    pub count: AtomicU64,
+}
+
+impl<B> Counter<B> {
+    pub fn new(inner: B) -> Self {
+        Self { inner, count: AtomicU64::new(0) }
+    }
+
+    pub fn operations(&self) -> u64 {
+        self.count.load(Ordering::Relaxed)
+    }
+}
+
+impl<B: VfsBackend> VfsBackend for Counter<B> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+        self.count.fetch_add(1, Ordering::Relaxed);  // Count it
+        self.inner.read(path)                         // Delegate
+    }
+
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+        self.count.fetch_add(1, Ordering::Relaxed);  // Count it
+        self.inner.write(path, data)                  // Delegate
+    }
+
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+        self.count.fetch_add(1, Ordering::Relaxed);
+        self.inner.exists(path)
+    }
+
+    // ... repeat for all 29 methods (most just count + delegate)
+}
+```
+
+**Usage:**
+
+```rust
+let backend = Counter::new(MemoryBackend::new());
+backend.write("/file.txt", b"hello")?;
+backend.read("/file.txt")?;
+backend.read("/file.txt")?;
+
+println!("Operations: {}", backend.operations());  // 3
+```
+
+That's it. That's the entire pattern.
+
+### Adding a Layer (for .layer() syntax)
+
+To enable the fluent `.layer()` syntax, add a Layer struct:
+
+```rust
+use anyfs_backend::Layer;
+
+pub struct CounterLayer;
+
+impl<B: VfsBackend> Layer<B> for CounterLayer {
+    type Backend = Counter<B>;
+
+    fn layer(self, backend: B) -> Counter<B> {
+        Counter::new(backend)
+    }
+}
+```
+
+**Usage with .layer():**
+
+```rust
+let backend = MemoryBackend::new()
+    .layer(CounterLayer);
+```
+
+### Real Example: ReadOnly Middleware
+
+A practical middleware that blocks all write operations:
+
+```rust
+pub struct ReadOnly<B> {
+    inner: B,
+}
+
+impl<B> ReadOnly<B> {
+    pub fn new(inner: B) -> Self {
+        Self { inner }
+    }
+}
+
+impl<B: VfsBackend> VfsBackend for ReadOnly<B> {
+    // Read operations: just delegate
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+        self.inner.read(path)
+    }
+
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+        self.inner.exists(path)
+    }
+
+    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, VfsError> {
+        self.inner.metadata(path)
+    }
+
+    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Vec<DirEntry>, VfsError> {
+        self.inner.read_dir(path)
+    }
+
+    // Write operations: block them all
+    fn write(&mut self, _path: impl AsRef<Path>, _data: &[u8]) -> Result<(), VfsError> {
+        Err(VfsError::ReadOnly { operation: "write" })
+    }
+
+    fn remove_file(&mut self, _path: impl AsRef<Path>) -> Result<(), VfsError> {
+        Err(VfsError::ReadOnly { operation: "remove_file" })
+    }
+
+    fn create_dir(&mut self, _path: impl AsRef<Path>) -> Result<(), VfsError> {
+        Err(VfsError::ReadOnly { operation: "create_dir" })
+    }
+
+    // ... block all other write methods
+}
+```
+
+**Usage:**
+
+```rust
+let mut backend = ReadOnly::new(MemoryBackend::new());
+
+backend.read("/file.txt");       // OK (if file exists)
+backend.write("/file.txt", b""); // Error: ReadOnly
+```
+
+### Middleware Decision Table
+
+| What You Want | Intercept | Delegate | Example |
+|---------------|-----------|----------|---------|
+| Count operations | All methods (before) | All methods | `Counter` |
+| Block writes | Write methods | Read methods | `ReadOnly` |
+| Transform data | `read`/`write` | Everything else | `Encryption` |
+| Check permissions | All methods (before) | All methods | `PathFilter` |
+| Log operations | All methods (before) | All methods | `Tracing` |
+| Enforce limits | Write methods (check size) | Read methods | `Quota` |
+
+### Macro for Boilerplate (Optional)
+
+If you don't want to manually delegate all 29 methods, you can use a macro:
+
+```rust
+macro_rules! delegate {
+    ($self:ident, $method:ident, $($arg:ident),*) => {
+        $self.inner.$method($($arg),*)
+    };
+}
+
+impl<B: VfsBackend> VfsBackend for MyMiddleware<B> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+        // Your logic here
+        delegate!(self, read, path)
+    }
+
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+        delegate!(self, exists, path)
+    }
+
+    // ... etc
+}
+```
+
+Or provide a `delegate_all!` macro in `anyfs-backend` that generates all the passthrough implementations.
 
 ### Complete Example: Encryption Middleware
 
