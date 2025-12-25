@@ -478,5 +478,6 @@ match result {
 
 | Type | Description |
 |------|-------------|
-| `FileStorage<M>` | Ergonomic wrapper (type-erased backend) |
+| `FileStorage<B, M>` | Zero-cost ergonomic wrapper (generic backend, optional marker) |
 | `BackendStack` | Fluent builder for middleware stacks |
+| `.boxed()` | Opt-in type erasure for `FileStorage` |

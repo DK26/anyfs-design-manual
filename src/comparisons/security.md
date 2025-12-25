@@ -217,8 +217,7 @@ This is "follow and verify containment" - symlinks are followed by the OS, but e
 ### AI Agent Sandbox
 
 ```rust
-use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
-use anyfs::FileStorage;
+use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing, FileStorage};
 
 let sandbox = Tracing::new(
     RateLimit::new(
@@ -244,10 +243,9 @@ let mut fs = FileStorage::new(sandbox);
 ### Multi-Tenant Isolation
 
 ```rust
-use anyfs::{SqliteBackend, Quota};
-use anyfs::FileStorage;
+use anyfs::{SqliteBackend, Quota, FileStorage};
 
-fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<...> {
+fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<impl Fs> {
     let db_path = format!("tenants/{}.db", tenant_id);
     let backend = Quota::new(SqliteBackend::open(&db_path).unwrap())
         .with_max_total_size(quota_bytes);
@@ -261,8 +259,7 @@ fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<...> 
 ### Read-Only Browsing
 
 ```rust
-use anyfs::{SqliteBackend, ReadOnly};
-use anyfs::FileStorage;
+use anyfs::{SqliteBackend, ReadOnly, FileStorage};
 
 let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)

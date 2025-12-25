@@ -93,8 +93,8 @@ use anyfs::FileStorage;
 
 struct AiSandbox;  // Marker type
 
-// Application composes secure defaults
-let sandbox: FileStorage<AiSandbox> = FileStorage::with_marker(
+// Application composes secure defaults (marker in type annotation)
+let sandbox: FileStorage<_, AiSandbox> = FileStorage::new(
     PathFilter::new(
         Restrictions::new(
             Quota::new(MemoryBackend::new())
@@ -622,15 +622,20 @@ let backend = Overlay::new(base, upper);
 
 ---
 
-## FileStorage<M> (in `anyfs`)
+## FileStorage<B, M> (in `anyfs`)
 
-`FileStorage<M>` is a **thin ergonomic wrapper** with an optional **marker type** for compile-time safety. It type-erases the backend for a clean API. All policy is handled by middleware.
+`FileStorage<B, M>` is a **zero-cost ergonomic wrapper** with:
+- **`B`** - Backend type (generic, no boxing)
+- **`M`** - Optional marker type for compile-time safety
+
+**Axum-style design:** Zero-cost by default, type erasure opt-in via `.boxed()`.
 
 ### Basic Usage
 
 ```rust
 use anyfs::{MemoryBackend, FileStorage};
 
+// Type is inferred - no need to write it out
 let mut fs = FileStorage::new(MemoryBackend::new());
 
 fs.create_dir_all("/documents")?;
@@ -640,7 +645,7 @@ let content = fs.read("/documents/hello.txt")?;
 
 ### Marker Types (Type-Safe Containers)
 
-The second type parameter `M` (default: `()`) enables compile-time container differentiation:
+Use `_` to infer backend while specifying marker:
 
 ```rust
 use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
@@ -648,18 +653,17 @@ use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 // Define marker types for your domains
 struct Sandbox;
 struct UserData;
-struct TempFiles;
 
-// Create typed containers - backend type is erased!
-let sandbox: FileStorage<Sandbox> = FileStorage::with_marker(MemoryBackend::new());
-let userdata: FileStorage<UserData> = FileStorage::with_marker(SqliteBackend::open("data.db")?);
+// Specify marker, infer backend with _
+let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
 
 // Type-safe function signatures prevent mixing containers
-fn process_sandbox(fs: &FileStorage<Sandbox>) {
+fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) {
     // Can only accept Sandbox-marked containers
 }
 
-fn save_user_file(fs: &mut FileStorage<UserData>, name: &str, data: &[u8]) {
+fn save_user_file(fs: &mut FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
     // Can only accept UserData-marked containers
 }
 
@@ -668,47 +672,67 @@ process_sandbox(&sandbox);   // OK
 process_sandbox(&userdata);  // Compile error! Type mismatch
 ```
 
-### When to Use Markers
+### Self-Documenting Types
 
-| Scenario | Use Markers? | Why |
-|----------|--------------|-----|
-| Single container | No | `FileStorage` is sufficient |
-| Multiple containers, same type | **Yes** | Prevent accidental mixing |
-| Multi-tenant systems | **Yes** | Compile-time tenant isolation |
-| Sandbox + user data | **Yes** | Never write user data to sandbox |
-| Testing | Maybe | Tag test vs production containers |
+Both type parameters are meaningful:
+
+```rust
+FileStorage<SqliteBackend, TenantA>   // SQLite storage for TenantA
+FileStorage<MemoryBackend, Sandbox>   // In-memory sandbox
+FileStorage<StdFsBackend, Production> // Real filesystem, production
+```
+
+### Type Aliases for Clean Code
+
+```rust
+// Define your standard secure stack
+type SecureBackend = Tracing<Restrictions<Quota<SqliteBackend>>>;
+
+// Type aliases for common combinations
+type SandboxFs = FileStorage<MemoryBackend, Sandbox>;
+type UserDataFs = FileStorage<SecureBackend, UserData>;
+
+// Clean function signatures
+fn run_agent(fs: &mut SandboxFs) { ... }
+```
 
 ### FileStorage Implementation
 
 ```rust
 use std::marker::PhantomData;
 
-/// Ergonomic filesystem wrapper with optional type marker.
-/// Backend is type-erased to `Box<dyn Fs>` for a clean API.
-pub struct FileStorage<M = ()> {
-    backend: Box<dyn Fs>,
+/// Zero-cost ergonomic wrapper.
+/// Generic over backend (B) and marker (M).
+pub struct FileStorage<B, M = ()> {
+    backend: B,
     _marker: PhantomData<M>,
 }
 
-impl<M> FileStorage<M> {
-    /// Create a new FileStorage (no marker).
-    pub fn new(backend: impl Fs + 'static) -> FileStorage {
-        FileStorage { backend: Box::new(backend), _marker: PhantomData }
+impl<B: Fs, M> FileStorage<B, M> {
+    /// Marker type is specified via type annotation:
+    /// `let fs: FileStorage<_, MyMarker> = FileStorage::new(backend);`
+    pub fn new(backend: B) -> Self {
+        FileStorage { backend, _marker: PhantomData }
     }
 
-    /// Create a new FileStorage with a specific marker type.
-    pub fn with_marker<N>(backend: impl Fs + 'static) -> FileStorage<N> {
-        FileStorage { backend: Box::new(backend), _marker: PhantomData }
-    }
-
-    /// Change the marker type (zero-cost, compile-time only).
-    pub fn retype<N>(self) -> FileStorage<N> {
-        FileStorage { backend: self.backend, _marker: PhantomData }
+    /// Type-erase the backend (opt-in boxing).
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, M> {
+        FileStorage { backend: Box::new(self.backend), _marker: PhantomData }
     }
 }
 ```
 
-**Note:** `FileStorage` uses `Box<dyn Fs>` which provides Layer 1 operations. If you need `FsFull`, `FsFuse`, or `FsPosix` operations, use the backend directly without type erasure.
+### Type Erasure (Opt-in)
+
+When you need uniform types (e.g., collections), use `.boxed()`:
+
+```rust
+// Type-erased for uniform storage
+let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
+    FileStorage::new(MemoryBackend::new()).boxed(),
+    FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
+];
+```
 
 ---
 

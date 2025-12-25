@@ -369,8 +369,9 @@ let data = fs.read("/file.txt")?;
 struct Sandbox;
 struct UserData;
 
-let sandbox: FileStorage<Sandbox> = FileStorage::with_marker(MemoryBackend::new());
-let userdata: FileStorage<UserData> = FileStorage::with_marker(SqliteBackend::open("data.db")?);
+// Specify marker in type annotation, infer backend with _
+let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
 
-fn process(fs: &FileStorage<Sandbox>) { /* only accepts Sandbox */ }
+fn process(fs: &FileStorage<impl Fs, Sandbox>) { /* only accepts Sandbox */ }
 ```
