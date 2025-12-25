@@ -93,6 +93,7 @@ Every backend and middleware must document:
 **Goal:** Define the stable backend interface and composition traits.
 
 - Define `VfsBackend` trait (25 `std::fs`-aligned methods)
+  - Include `const NEEDS_PATH_RESOLUTION: bool = true` (opt-out for real FS backends)
 - Define `Layer` trait (Tower-style middleware composition)
 - Define `VfsBackendExt` trait (extension methods)
 - Define core types (`Metadata`, `Permissions`, `FileType`, `DirEntry`, `StatFs`)
@@ -106,14 +107,26 @@ Every backend and middleware must document:
 
 **Goal:** Provide reference backends and core middleware.
 
+### Path Resolution Utility
+
+- `resolve_path(backend, path, follow_symlinks)` - works on any `VfsBackend`
+  - Walks path component by component using `metadata()` and `read_link()`
+  - Handles `..` correctly (requires knowing what each component resolves to)
+  - Detects circular symlinks (max depth or visited set)
+  - Returns canonical resolved path
+- Applied automatically by `FilesContainer` when `B::NEEDS_PATH_RESOLUTION == true`
+
 ### Backends (feature-gated)
 
 - `memory` (default): `MemoryBackend`
+  - `NEEDS_PATH_RESOLUTION = true` (uses path resolution utility)
   - `set_follow_symlinks(bool)` - control symlink resolution
 - `sqlite` (optional): `SqliteBackend`
+  - `NEEDS_PATH_RESOLUTION = true` (uses path resolution utility)
   - `set_follow_symlinks(bool)` - control symlink resolution
 - `vrootfs` (optional): `VRootFsBackend` using `strict-path` for containment
-  - Symlink resolution controlled by OS; `strict-path` prevents escapes
+  - `NEEDS_PATH_RESOLUTION = false` (OS handles resolution)
+  - `strict-path` prevents symlink escapes
 
 ### Middleware
 
@@ -159,15 +172,18 @@ Every backend and middleware must document:
 - Streaming I/O (`open_read`, `open_write`)
 - `truncate`, `sync`, `fsync`, `statfs`
 
-#### Symlink Resolution Tests (virtual backends only)
+#### Path Resolution Tests (virtual backends only)
+- `/foo/../bar` resolves correctly when `foo` is a regular directory
+- `/foo/../bar` resolves correctly when `foo` is a symlink (follows symlink, then `..`)
+- Symlink chains resolve correctly (A → B → C → target)
+- Circular symlink detection (A → B → A returns error, not infinite loop)
+- Max symlink depth enforced (prevent deep chains)
 - `set_follow_symlinks(true)`: reading symlink follows to target
-- `set_follow_symlinks(false)`: reading symlink returns link target as data
-- Symlink chains with follow enabled
-- Circular symlink detection when following
+- `set_follow_symlinks(false)`: reading symlink returns symlink metadata, not target
 
 #### Path Edge Cases (learned from `vfs` issues)
-- `/foo/../bar` normalizes to `/bar`
 - `//double//slashes//` normalizes correctly
+- Note: `/foo/../bar` requires resolution (see above), not simple normalization
 - Trailing slashes handled consistently
 - Empty path returns error (not panic)
 - Root path `/` works correctly

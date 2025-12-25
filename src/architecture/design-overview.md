@@ -479,6 +479,75 @@ fs.write(PathBuf::from("/file.txt"), data)?;
 
 ---
 
+## Path Resolution
+
+Path resolution (walking directory structure, following symlinks) operates on the **`VfsBackend` abstraction**, not reimplemented per-backend.
+
+### Why Abstract Path Resolution?
+
+We simulate inodes - that's the whole point of virtualizing a filesystem. Path resolution must work on that abstraction:
+
+- `/foo/../bar` cannot be resolved lexically - `foo` might be a symlink to `/other/place`, making `..` resolve to `/other`
+- Resolution requires following the actual directory structure (inodes)
+- The `VfsBackend` trait has the needed methods: `metadata()`, `read_link()`, `read_dir()`
+
+### Resolution Utility (in `anyfs`)
+
+```rust
+/// Resolve a path, optionally following symlinks.
+/// Works on any VfsBackend.
+pub fn resolve_path(
+    backend: &impl VfsBackend,
+    path: impl AsRef<Path>,
+    follow_symlinks: bool,
+) -> Result<PathBuf, VfsError> {
+    // Walk path component by component
+    // Use backend.metadata() to check node types
+    // Use backend.read_link() to follow symlinks (if enabled)
+    // Detect circular symlinks
+    // Return fully resolved canonical path
+}
+```
+
+### When Resolution Is Needed
+
+| Backend | Needs Our Resolution? | Why |
+|---------|----------------------|-----|
+| `MemoryBackend` | Yes | Storage (HashMap) has no FS semantics |
+| `SqliteBackend` | Yes | Storage (SQL tables) has no FS semantics |
+| `VRootFsBackend` | No | OS handles resolution; `strict-path` prevents escapes |
+
+### Opt-out Mechanism
+
+Virtual backends need resolution by default. Real filesystem backends opt out:
+
+```rust
+pub trait VfsBackend: Send {
+    /// Whether this backend needs virtual path resolution.
+    /// Returns `false` for backends where the OS handles resolution.
+    const NEEDS_PATH_RESOLUTION: bool = true;
+
+    // ... existing methods
+}
+
+impl VfsBackend for VRootFsBackend {
+    const NEEDS_PATH_RESOLUTION: bool = false;
+    // ...
+}
+```
+
+`FilesContainer` (or a dedicated wrapper) applies resolution automatically for backends that need it:
+
+```rust
+impl<B: VfsBackend> FilesContainer<B> {
+    pub fn new(backend: B) -> Self {
+        // Resolution applied automatically if B::NEEDS_PATH_RESOLUTION
+    }
+}
+```
+
+---
+
 ## Security Model
 
 Security is achieved through composition:
