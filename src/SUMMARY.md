@@ -28,7 +28,7 @@
 
 # Traits & APIs
 
-- [VfsBackend Trait (anyfs-backend)](./traits/vfs-trait.md)
+- [Layered Traits (anyfs-backend)](./traits/layered-traits.md)
 - [FileStorage<M> (anyfs-container)](./traits/files-container.md)
 
 ---
@@ -36,6 +36,7 @@
 # Guides
 
 - [Which Crate Should I Use?](./guides/which-layer.md)
+- [Implementation Patterns (LLM Context)](./guides/llm-context.md)
 
 ---
 
