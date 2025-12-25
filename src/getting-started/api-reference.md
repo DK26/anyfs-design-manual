@@ -127,7 +127,7 @@ PathFilter::new(backend)
 ReadOnly::new(backend)
 
 // All read operations pass through
-// All write operations return VfsError::ReadOnly
+// All write operations return FsError::ReadOnly
 ```
 
 ---
@@ -188,12 +188,12 @@ let overlay = Overlay::new(base, upper);
 
 ---
 
-## VfsBackendExt Methods
+## FsExt Methods
 
 Extension methods available on all backends:
 
 ```rust
-use anyfs_backend::VfsBackendExt;
+use anyfs_backend::FsExt;
 
 // JSON support
 let config: Config = fs.read_json("/config.json")?;
@@ -271,9 +271,9 @@ fs.fsync("/path")?;                      // Flush writes for one file
 
 ---
 
-## Inode Operations (`VfsInode` trait)
+## Inode Operations (`FsInode` trait)
 
-Backends implementing `VfsInode` track inodes internally for hardlink support and FUSE mounting:
+Backends implementing `FsInode` track inodes internally for hardlink support and FUSE mounting:
 
 ```rust
 // Convert between paths and inodes
@@ -307,40 +307,40 @@ assert_eq!(ino1, ino2);  // Same inode!
 ## Error Handling
 
 ```rust
-use anyfs_backend::VfsError;
+use anyfs_backend::FsError;
 
 match result {
     // Path errors
-    Err(VfsError::NotFound { path, operation }) => {
+    Err(FsError::NotFound { path, operation }) => {
         // e.g., path="/file.txt", operation="read"
     }
-    Err(VfsError::AlreadyExists { path, operation }) => ...
-    Err(VfsError::NotADirectory { path }) => ...
-    Err(VfsError::NotAFile { path }) => ...
-    Err(VfsError::DirectoryNotEmpty { path }) => ...
+    Err(FsError::AlreadyExists { path, operation }) => ...
+    Err(FsError::NotADirectory { path }) => ...
+    Err(FsError::NotAFile { path }) => ...
+    Err(FsError::DirectoryNotEmpty { path }) => ...
 
     // Quota middleware errors
-    Err(VfsError::QuotaExceeded { limit, requested, usage }) => ...
-    Err(VfsError::FileSizeExceeded { path, size, limit }) => ...
+    Err(FsError::QuotaExceeded { limit, requested, usage }) => ...
+    Err(FsError::FileSizeExceeded { path, size, limit }) => ...
 
     // Restrictions middleware errors
-    Err(VfsError::FeatureNotEnabled { feature, operation }) => ...
+    Err(FsError::FeatureNotEnabled { feature, operation }) => ...
 
     // PathFilter middleware errors
-    Err(VfsError::AccessDenied { path, reason }) => ...
+    Err(FsError::AccessDenied { path, reason }) => ...
 
     // ReadOnly middleware errors
-    Err(VfsError::ReadOnly { operation }) => ...
+    Err(FsError::ReadOnly { operation }) => ...
 
     // RateLimit middleware errors
-    Err(VfsError::RateLimitExceeded { limit, window_secs }) => ...
+    Err(FsError::RateLimitExceeded { limit, window_secs }) => ...
 
-    // VfsBackendExt errors
-    Err(VfsError::Serialization(msg)) => ...
-    Err(VfsError::Deserialization(msg)) => ...
+    // FsExt errors
+    Err(FsError::Serialization(msg)) => ...
+    Err(FsError::Deserialization(msg)) => ...
 
     // Optional feature not supported
-    Err(VfsError::NotSupported { operation }) => ...
+    Err(FsError::NotSupported { operation }) => ...
 
     Err(e) => ...
 }
@@ -398,49 +398,49 @@ match result {
 
 | Trait | Description |
 |-------|-------------|
-| `VfsRead` | Read operations: `read`, `exists`, `metadata`, `open_read` |
-| `VfsWrite` | Write operations: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate` |
-| `VfsDir` | Directory operations: `read_dir`, `create_dir*`, `remove_dir*` |
+| `FsRead` | Read operations: `read`, `exists`, `metadata`, `open_read` |
+| `FsWrite` | Write operations: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate` |
+| `FsDir` | Directory operations: `read_dir`, `create_dir*`, `remove_dir*` |
 
 **Extended Traits (Layer 2):**
 
 | Trait | Description |
 |-------|-------------|
-| `VfsLink` | Link operations: `symlink`, `hard_link`, `read_link` |
-| `VfsPermissions` | Permission operations: `set_permissions` |
-| `VfsSync` | Sync operations: `sync`, `fsync` |
-| `VfsStats` | Stats operations: `statfs` |
+| `FsLink` | Link operations: `symlink`, `hard_link`, `read_link` |
+| `FsPermissions` | Permission operations: `set_permissions` |
+| `FsSync` | Sync operations: `sync`, `fsync` |
+| `FsStats` | Stats operations: `statfs` |
 
 **Inode Trait (Layer 3):**
 
 | Trait | Description |
 |-------|-------------|
-| `VfsInode` | Inode operations: `path_to_inode`, `inode_to_path`, `lookup`, `metadata_by_inode` |
+| `FsInode` | Inode operations: `path_to_inode`, `inode_to_path`, `lookup`, `metadata_by_inode` |
 
 **POSIX Traits (Layer 4):**
 
 | Trait | Description |
 |-------|-------------|
-| `VfsHandles` | Handle operations: `open`, `read_at`, `write_at`, `close` |
-| `VfsLock` | Lock operations: `lock`, `try_lock`, `unlock` |
-| `VfsXattr` | Extended attribute operations: `get_xattr`, `set_xattr`, `list_xattr` |
+| `FsHandles` | Handle operations: `open`, `read_at`, `write_at`, `close` |
+| `FsLock` | Lock operations: `lock`, `try_lock`, `unlock` |
+| `FsXattr` | Extended attribute operations: `get_xattr`, `set_xattr`, `list_xattr` |
 
 **Convenience Supertraits:**
 
 | Trait | Combines |
 |-------|----------|
-| `Vfs` | `VfsRead` + `VfsWrite` + `VfsDir` (90% of use cases) |
-| `VfsFull` | `Vfs` + `VfsLink` + `VfsPermissions` + `VfsSync` + `VfsStats` |
-| `VfsFuse` | `VfsFull` + `VfsInode` (FUSE-mountable) |
-| `VfsPosix` | `VfsFuse` + `VfsHandles` + `VfsLock` + `VfsXattr` (full POSIX) |
+| `Fs` | `FsRead` + `FsWrite` + `FsDir` (90% of use cases) |
+| `FsFull` | `Fs` + `FsLink` + `FsPermissions` + `FsSync` + `FsStats` |
+| `FsFuse` | `FsFull` + `FsInode` (FUSE-mountable) |
+| `FsPosix` | `FsFuse` + `FsHandles` + `FsLock` + `FsXattr` (full POSIX) |
 
 **Other Types:**
 
 | Type | Description |
 |------|-------------|
 | `Layer` | Middleware composition trait |
-| `VfsBackendExt` | Extension methods trait (JSON, type checks) |
-| `VfsError` | Error type (with context) |
+| `FsExt` | Extension methods trait (JSON, type checks) |
+| `FsError` | Error type (with context) |
 | `ROOT_INODE` | Constant: root directory inode (= 1) |
 | `FileType` | `File`, `Directory`, `Symlink` |
 | `Metadata` | File/dir metadata (inode, nlink, size, times, permissions) |

@@ -26,7 +26,7 @@ You get:
 │    Restrictions<B>               │  ← Security
 │    Tracing<B>                    │  ← Audit
 ├─────────────────────────────────────────┤
-│  VfsBackend                             │  ← Storage
+│  Fs                             │  ← Storage
 └─────────────────────────────────────────┘
 ```
 
@@ -41,7 +41,7 @@ You get:
 | Security | Restrictions disables dangerous features by default |
 | Resource control | Quota enforces quotas |
 | Audit compliance | Tracing records all operations |
-| Custom storage | Implement VfsBackend for any medium |
+| Custom storage | Implement Fs for any medium |
 
 ---
 

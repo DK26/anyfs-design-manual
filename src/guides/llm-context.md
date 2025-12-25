@@ -7,15 +7,15 @@
 ## Trait Hierarchy (Pick Your Level)
 
 ```
-VfsPosix  ← Full POSIX (handles, locks, xattr)
+FsPosix  ← Full POSIX (handles, locks, xattr)
     ↑
-VfsFuse   ← FUSE-mountable (+ inodes)
+FsFuse   ← FUSE-mountable (+ inodes)
     ↑
-VfsFull   ← std::fs features (+ links, permissions, sync, stats)
+FsFull   ← std::fs features (+ links, permissions, sync, stats)
     ↑
-  Vfs     ← Basic filesystem (90% of use cases)
+   Fs    ← Basic filesystem (90% of use cases)
     ↑
-VfsRead + VfsWrite + VfsDir  ← Core traits
+FsRead + FsWrite + FsDir  ← Core traits
 ```
 
 **Rule:** Implement the lowest level you need. Higher levels include all below.
@@ -24,138 +24,138 @@ VfsRead + VfsWrite + VfsDir  ← Core traits
 
 ## Pattern 1: Implement a Backend
 
-### Minimum: Implement `Vfs` (3 traits)
+### Minimum: Implement `Fs` (3 traits)
 
 ```rust
-use anyfs_backend::{VfsRead, VfsWrite, VfsDir, VfsError, Metadata, DirEntry, FileType, Permissions};
+use anyfs_backend::{FsRead, FsWrite, FsDir, FsError, Metadata, DirEntry, FileType, Permissions};
 use std::path::Path;
 
 pub struct MyBackend { /* your storage */ }
 
-impl VfsRead for MyBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+impl FsRead for MyBackend {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
         todo!("return file contents")
     }
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, VfsError> {
-        String::from_utf8(self.read(path)?).map_err(|e| VfsError::Backend(e.to_string()))
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError> {
+        String::from_utf8(self.read(path)?).map_err(|e| FsError::Backend(e.to_string()))
     }
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, VfsError> {
+    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
         todo!("return slice of file")
     }
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
         todo!("check if path exists")
     }
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, VfsError> {
+    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
         todo!("return Metadata { inode, nlink, file_type, size, permissions, created, modified, accessed }")
     }
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Read + Send>, VfsError> {
+    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Read + Send>, FsError> {
         Ok(Box::new(std::io::Cursor::new(self.read(path)?)))
     }
 }
 
-impl VfsWrite for MyBackend {
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+impl FsWrite for MyBackend {
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
         todo!("create or overwrite file")
     }
-    fn append(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+    fn append(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
         todo!("append to file")
     }
-    fn remove_file(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn remove_file(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("delete file")
     }
-    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("move/rename")
     }
-    fn copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("copy file")
     }
-    fn truncate(&mut self, path: impl AsRef<Path>, size: u64) -> Result<(), VfsError> {
+    fn truncate(&mut self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError> {
         todo!("resize file")
     }
-    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Write + Send>, VfsError> {
+    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Write + Send>, FsError> {
         todo!("return writer")
     }
 }
 
-impl VfsDir for MyBackend {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Vec<DirEntry>, VfsError> {
+impl FsDir for MyBackend {
+    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Vec<DirEntry>, FsError> {
         todo!("return Vec<DirEntry { name, inode, file_type }>")
     }
-    fn create_dir(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn create_dir(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("create single directory")
     }
-    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("create directory and parents")
     }
-    fn remove_dir(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn remove_dir(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("remove empty directory")
     }
-    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("remove directory recursively")
     }
 }
-// MyBackend now implements Vfs automatically!
+// MyBackend now implements Fs automatically!
 ```
 
-### Add Links/Permissions: Implement `VfsFull` (add 4 traits)
+### Add Links/Permissions: Implement `FsFull` (add 4 traits)
 
 ```rust
-impl VfsLink for MyBackend {
-    fn symlink(&mut self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), VfsError> {
+impl FsLink for MyBackend {
+    fn symlink(&mut self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("create symlink pointing to target")
     }
-    fn hard_link(&mut self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn hard_link(&mut self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("create hard link (same inode)")
     }
-    fn read_link(&self, path: impl AsRef<Path>) -> Result<std::path::PathBuf, VfsError> {
+    fn read_link(&self, path: impl AsRef<Path>) -> Result<std::path::PathBuf, FsError> {
         todo!("return symlink target")
     }
-    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, VfsError> {
+    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
         todo!("metadata without following symlink")
     }
 }
 
-impl VfsPermissions for MyBackend {
-    fn set_permissions(&mut self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), VfsError> {
+impl FsPermissions for MyBackend {
+    fn set_permissions(&mut self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError> {
         todo!("set file permissions")
     }
 }
 
-impl VfsSync for MyBackend {
-    fn sync(&mut self) -> Result<(), VfsError> {
+impl FsSync for MyBackend {
+    fn sync(&mut self) -> Result<(), FsError> {
         todo!("flush all writes to storage")
     }
-    fn fsync(&mut self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+    fn fsync(&mut self, path: impl AsRef<Path>) -> Result<(), FsError> {
         todo!("flush writes for one file")
     }
 }
 
-impl VfsStats for MyBackend {
-    fn statfs(&self) -> Result<anyfs_backend::StatFs, VfsError> {
+impl FsStats for MyBackend {
+    fn statfs(&self) -> Result<anyfs_backend::StatFs, FsError> {
         todo!("return StatFs { total_bytes, available_bytes, ... }")
     }
 }
-// MyBackend now implements VfsFull!
+// MyBackend now implements FsFull!
 ```
 
-### Add FUSE Support: Implement `VfsFuse` (add 1 trait)
+### Add FUSE Support: Implement `FsFuse` (add 1 trait)
 
 ```rust
-impl VfsInode for MyBackend {
-    fn path_to_inode(&self, path: impl AsRef<Path>) -> Result<u64, VfsError> {
+impl FsInode for MyBackend {
+    fn path_to_inode(&self, path: impl AsRef<Path>) -> Result<u64, FsError> {
         todo!("return unique inode for path")
     }
-    fn inode_to_path(&self, inode: u64) -> Result<std::path::PathBuf, VfsError> {
+    fn inode_to_path(&self, inode: u64) -> Result<std::path::PathBuf, FsError> {
         todo!("return path for inode")
     }
-    fn lookup(&self, parent_inode: u64, name: &std::ffi::OsStr) -> Result<u64, VfsError> {
+    fn lookup(&self, parent_inode: u64, name: &std::ffi::OsStr) -> Result<u64, FsError> {
         todo!("find child inode by name")
     }
-    fn metadata_by_inode(&self, inode: u64) -> Result<Metadata, VfsError> {
+    fn metadata_by_inode(&self, inode: u64) -> Result<Metadata, FsError> {
         todo!("get metadata by inode (fast path)")
     }
 }
-// MyBackend now implements VfsFuse!
+// MyBackend now implements FsFuse!
 ```
 
 ---
@@ -167,7 +167,7 @@ impl VfsInode for MyBackend {
 ### Template
 
 ```rust
-use anyfs_backend::{VfsRead, VfsWrite, VfsDir, VfsError, Layer};
+use anyfs_backend::{FsRead, FsWrite, FsDir, FsError, Layer};
 
 pub struct MyMiddleware<B> {
     inner: B,
@@ -181,8 +181,8 @@ impl<B> MyMiddleware<B> {
 }
 
 // Implement each trait, delegating or intercepting as needed
-impl<B: VfsRead> VfsRead for MyMiddleware<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+impl<B: FsRead> FsRead for MyMiddleware<B> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
         // INTERCEPT: add your logic
         let data = self.inner.read(path)?;  // DELEGATE
         // INTERCEPT: modify result
@@ -190,24 +190,24 @@ impl<B: VfsRead> VfsRead for MyMiddleware<B> {
     }
 
     // For passthrough methods, just delegate:
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, VfsError> {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
         self.inner.exists(path)
     }
-    // ... implement all VfsRead methods
+    // ... implement all FsRead methods
 }
 
-impl<B: VfsWrite> VfsWrite for MyMiddleware<B> {
-    // ... implement all VfsWrite methods
+impl<B: FsWrite> FsWrite for MyMiddleware<B> {
+    // ... implement all FsWrite methods
 }
 
-impl<B: VfsDir> VfsDir for MyMiddleware<B> {
-    // ... implement all VfsDir methods
+impl<B: FsDir> FsDir for MyMiddleware<B> {
+    // ... implement all FsDir methods
 }
 
 // Optional: Layer for .layer() syntax
 pub struct MyMiddlewareLayer { /* config */ }
 
-impl<B: Vfs> Layer<B> for MyMiddlewareLayer {
+impl<B: Fs> Layer<B> for MyMiddlewareLayer {
     type Backend = MyMiddleware<B>;
     fn layer(self, backend: B) -> Self::Backend {
         MyMiddleware::new(backend)
@@ -229,12 +229,12 @@ impl<B: Vfs> Layer<B> for MyMiddlewareLayer {
 ### Example: ReadOnly Middleware
 
 ```rust
-impl<B: VfsWrite> VfsWrite for ReadOnly<B> {
-    fn write(&mut self, _: impl AsRef<Path>, _: &[u8]) -> Result<(), VfsError> {
-        Err(VfsError::ReadOnly { operation: "write" })
+impl<B: FsWrite> FsWrite for ReadOnly<B> {
+    fn write(&mut self, _: impl AsRef<Path>, _: &[u8]) -> Result<(), FsError> {
+        Err(FsError::ReadOnly { operation: "write" })
     }
-    fn remove_file(&mut self, _: impl AsRef<Path>) -> Result<(), VfsError> {
-        Err(VfsError::ReadOnly { operation: "remove_file" })
+    fn remove_file(&mut self, _: impl AsRef<Path>) -> Result<(), FsError> {
+        Err(FsError::ReadOnly { operation: "remove_file" })
     }
     // ... all write methods return ReadOnly error
 }
@@ -243,15 +243,15 @@ impl<B: VfsWrite> VfsWrite for ReadOnly<B> {
 ### Example: Encryption Middleware
 
 ```rust
-impl<B: VfsRead> VfsRead for Encrypted<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+impl<B: FsRead> FsRead for Encrypted<B> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
         let encrypted = self.inner.read(path)?;
         Ok(self.decrypt(&encrypted))
     }
 }
 
-impl<B: VfsWrite> VfsWrite for Encrypted<B> {
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+impl<B: FsWrite> FsWrite for Encrypted<B> {
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
         let encrypted = self.encrypt(data);
         self.inner.write(path, &encrypted)
     }
@@ -268,15 +268,15 @@ impl<B: VfsWrite> VfsWrite for Encrypted<B> {
 // Wrap external crate's filesystem to use as AnyFS backend
 pub struct ExternalCompat<F>(F);
 
-impl<F: external::FileSystem> VfsRead for ExternalCompat<F> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
-        self.0.read_file(path).map_err(|e| VfsError::Backend(e.to_string()))
+impl<F: external::FileSystem> FsRead for ExternalCompat<F> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+        self.0.read_file(path).map_err(|e| FsError::Backend(e.to_string()))
     }
     // Map each method, converting errors
 }
 
-impl<F: external::FileSystem> VfsWrite for ExternalCompat<F> { /* ... */ }
-impl<F: external::FileSystem> VfsDir for ExternalCompat<F> { /* ... */ }
+impl<F: external::FileSystem> FsWrite for ExternalCompat<F> { /* ... */ }
+impl<F: external::FileSystem> FsDir for ExternalCompat<F> { /* ... */ }
 // Only implement traits the external crate supports
 ```
 
@@ -284,9 +284,9 @@ impl<F: external::FileSystem> VfsDir for ExternalCompat<F> { /* ... */ }
 
 ```rust
 // Wrap AnyFS backend to use with external crate
-pub struct AnyFsCompat<B: Vfs>(B);
+pub struct AnyFsCompat<B: Fs>(B);
 
-impl<B: Vfs> external::FileSystem for AnyFsCompat<B> {
+impl<B: Fs> external::FileSystem for AnyFsCompat<B> {
     fn read_file(&self, path: &Path) -> external::Result<Vec<u8>> {
         self.0.read(path).map_err(|e| external::Error::from(e.to_string()))
     }
@@ -298,20 +298,20 @@ impl<B: Vfs> external::FileSystem for AnyFsCompat<B> {
 
 ## Error Handling
 
-**Rule:** Always return `VfsError`, never panic.
+**Rule:** Always return `FsError`, never panic.
 
 ```rust
 // Common error returns
-VfsError::NotFound { path, operation }      // Path doesn't exist
-VfsError::AlreadyExists { path, operation } // Path already exists
-VfsError::NotAFile { path }                 // Expected file, got directory
-VfsError::NotADirectory { path }            // Expected directory, got file
-VfsError::DirectoryNotEmpty { path }        // Can't remove non-empty dir
-VfsError::ReadOnly { operation }            // Write blocked by ReadOnly middleware
-VfsError::AccessDenied { path, reason }     // Blocked by PathFilter
-VfsError::QuotaExceeded { limit, requested, usage }
-VfsError::NotSupported { operation }        // Backend doesn't support this
-VfsError::Backend(String)                   // Backend-specific error
+FsError::NotFound { path, operation }      // Path doesn't exist
+FsError::AlreadyExists { path, operation } // Path already exists
+FsError::NotAFile { path }                 // Expected file, got directory
+FsError::NotADirectory { path }            // Expected directory, got file
+FsError::DirectoryNotEmpty { path }        // Can't remove non-empty dir
+FsError::ReadOnly { operation }            // Write blocked by ReadOnly middleware
+FsError::AccessDenied { path, reason }     // Blocked by PathFilter
+FsError::QuotaExceeded { limit, requested, usage }
+FsError::NotSupported { operation }        // Backend doesn't support this
+FsError::Backend(String)                   // Backend-specific error
 ```
 
 ---
@@ -320,14 +320,14 @@ VfsError::Backend(String)                   // Backend-specific error
 
 | You want to... | Implement |
 |----------------|-----------|
-| Basic file operations | `VfsRead` + `VfsWrite` + `VfsDir` (= `Vfs`) |
-| + Symlinks/hardlinks | + `VfsLink` |
-| + Permissions | + `VfsPermissions` |
-| + Durability (sync) | + `VfsSync` |
-| + Filesystem stats | + `VfsStats` |
-| All of above | `Vfs` + `VfsLink` + `VfsPermissions` + `VfsSync` + `VfsStats` (= `VfsFull`) |
-| + FUSE mounting | + `VfsInode` (= `VfsFuse`) |
-| + File handles/locks | + `VfsHandles` + `VfsLock` + `VfsXattr` (= `VfsPosix`) |
+| Basic file operations | `FsRead` + `FsWrite` + `FsDir` (= `Fs`) |
+| + Symlinks/hardlinks | + `FsLink` |
+| + Permissions | + `FsPermissions` |
+| + Durability (sync) | + `FsSync` |
+| + Filesystem stats | + `FsStats` |
+| All of above | `Fs` + `FsLink` + `FsPermissions` + `FsSync` + `FsStats` (= `FsFull`) |
+| + FUSE mounting | + `FsInode` (= `FsFuse`) |
+| + File handles/locks | + `FsHandles` + `FsLock` + `FsXattr` (= `FsPosix`) |
 
 ---
 
@@ -336,7 +336,7 @@ VfsError::Backend(String)                   // Backend-specific error
 ### Create a backend stack
 
 ```rust
-use anyfs::{MemoryBackend, Quota, PathFilter, Tracing};
+use anyfs::{MemoryBackend, Quota, PathFilter, Tracing, Fs};
 
 let backend = MemoryBackend::new();
 let limited = Quota::new(backend).with_max_total_size(100 * 1024 * 1024);

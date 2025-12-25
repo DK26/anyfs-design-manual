@@ -66,17 +66,17 @@ let mut fs = FileStorage::new(backend);
 ### Custom backend implementation
 
 ```rust
-use anyfs_backend::{VfsBackend, VfsError, Metadata, DirEntry};
+use anyfs_backend::{Fs, FsError, Metadata, DirEntry};
 use std::path::Path;
 
 pub struct MyBackend;
 
-impl VfsBackend for MyBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+impl Fs for MyBackend {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
         todo!()
     }
 
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError> {
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
         todo!()
     }
 
@@ -87,15 +87,15 @@ impl VfsBackend for MyBackend {
 ### Custom middleware implementation
 
 ```rust
-use anyfs_backend::{VfsBackend, Layer, VfsError};
+use anyfs_backend::{Fs, Layer, FsError};
 use std::path::Path;
 
-pub struct MyMiddleware<B: VfsBackend> {
+pub struct MyMiddleware<B: Fs> {
     inner: B,
 }
 
-impl<B: VfsBackend> VfsBackend for MyMiddleware<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
+impl<B: Fs> Fs for MyMiddleware<B> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
         // Intercept, transform, or delegate
         self.inner.read(path)
     }
@@ -104,7 +104,7 @@ impl<B: VfsBackend> VfsBackend for MyMiddleware<B> {
 
 pub struct MyMiddlewareLayer;
 
-impl<B: VfsBackend> Layer<B> for MyMiddlewareLayer {
+impl<B: Fs> Layer<B> for MyMiddlewareLayer {
     type Backend = MyMiddleware<B>;
     fn layer(self, backend: B) -> Self::Backend {
         MyMiddleware { inner: backend }

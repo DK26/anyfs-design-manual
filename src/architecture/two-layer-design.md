@@ -18,7 +18,7 @@ AnyFS uses a layered architecture that separates concerns:
 │    Tracing → PathFilter → Restrictions  │
 │    → Quota → Backend                    │
 ├─────────────────────────────────────────┤
-│  VfsBackend                             │  ← Pure storage
+│  Fs                             │  ← Pure storage
 │  (Memory, SQLite, VRootFs, custom)      │
 └─────────────────────────────────────────┘
 ```
@@ -63,7 +63,7 @@ let fs = FilesContainer::new(backend);
 For `VRootFsBackend` (real filesystem), path containment uses `strict-path::VirtualRoot` internally:
 
 ```rust
-impl VfsBackend for VRootFsBackend {
+impl Fs for VRootFsBackend {
     fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError> {
         // VirtualRoot ensures paths can't escape
         let safe_path = self.root.join(path)?;

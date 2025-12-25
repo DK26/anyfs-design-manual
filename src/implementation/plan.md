@@ -2,7 +2,7 @@
 
 This plan describes a phased rollout of the AnyFS ecosystem:
 
-- `anyfs-backend`: Layered traits (`Vfs`, `VfsFull`, `VfsFuse`, `VfsPosix`) + `Layer` + types
+- `anyfs-backend`: Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`) + `Layer` + types
 - `anyfs`: Built-in backends + middleware (feature-gated)
 - `anyfs-container`: `FileStorage<M>` ergonomic wrapper
 
@@ -14,10 +14,10 @@ These guidelines apply to ALL implementation work. Derived from analysis of issu
 
 ### 1. No Panic Policy
 
-**NEVER panic in library code.** Always return `Result<T, VfsError>`.
+**NEVER panic in library code.** Always return `Result<T, FsError>`.
 
 - Audit all `.unwrap()` and `.expect()` calls - replace with `?` or proper error handling
-- Use `ok_or_else(|| VfsError::...)` instead of `.unwrap()`
+- Use `ok_or_else(|| FsError::...)` instead of `.unwrap()`
 - Edge cases must return errors, not panic
 - Test in constrained environments (WASM) to catch hidden panics
 
@@ -27,7 +27,7 @@ let entry = self.entries.get(&path).unwrap();
 
 // GOOD
 let entry = self.entries.get(&path)
-    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    .ok_or_else(|| FsError::NotFound { path: path.to_path_buf() })?;
 ```
 
 ### 2. Thread Safety Requirements
@@ -51,14 +51,14 @@ Normalize paths in ONE place (FilesContainer or dedicated normalizer):
 
 ### 4. Error Type Design
 
-`VfsError` must be:
+`FsError` must be:
 - Easy to pattern match
 - Include context (path, operation)
 - Derive `thiserror` for good messages
 
 ```rust
 #[derive(Debug, thiserror::Error)]
-pub enum VfsError {
+pub enum FsError {
     #[error("not found: {path}")]
     NotFound { path: PathBuf },
 
@@ -95,81 +95,81 @@ Every backend and middleware must document:
 ### Layered Trait Architecture
 
 ```
-                    VfsPosix
+                    FsPosix
                        │
         ┌──────────────┼──────────────┐
         │              │              │
-   VfsHandles      VfsLock       VfsXattr
+   FsHandles      FsLock       FsXattr
         │              │              │
         └──────────────┼──────────────┘
                        │
-                    VfsFuse
+                    FsFuse
                        │
-                   VfsInode
+                   FsInode
                        │
-                    VfsFull
+                    FsFull
                        │
         ┌──────┬───────┼───────┬──────┐
         │      │       │       │      │
-   VfsLink  VfsPerm  VfsSync VfsStats │
+   FsLink  FsPerm  FsSync FsStats │
         │      │       │       │      │
         └──────┴───────┼───────┴──────┘
                        │
-                      Vfs  ← Most users only need this
+                       Fs  ← Most users only need this
                        │
            ┌───────────┼───────────┐
            │           │           │
-        VfsRead    VfsWrite     VfsDir
+        FsRead    FsWrite     FsDir
 ```
 
 ### Core Traits (Layer 1 - Required)
 
-- **`VfsRead`**: `read`, `read_to_string`, `read_range`, `exists`, `metadata`, `open_read`
-- **`VfsWrite`**: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate`, `open_write`
-- **`VfsDir`**: `read_dir`, `create_dir`, `create_dir_all`, `remove_dir`, `remove_dir_all`
+- **`FsRead`**: `read`, `read_to_string`, `read_range`, `exists`, `metadata`, `open_read`
+- **`FsWrite`**: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate`, `open_write`
+- **`FsDir`**: `read_dir`, `create_dir`, `create_dir_all`, `remove_dir`, `remove_dir_all`
 
 ### Extended Traits (Layer 2 - Optional)
 
-- **`VfsLink`**: `symlink`, `hard_link`, `read_link`, `symlink_metadata`
-- **`VfsPermissions`**: `set_permissions`
-- **`VfsSync`**: `sync`, `fsync`
-- **`VfsStats`**: `statfs`
+- **`FsLink`**: `symlink`, `hard_link`, `read_link`, `symlink_metadata`
+- **`FsPermissions`**: `set_permissions`
+- **`FsSync`**: `sync`, `fsync`
+- **`FsStats`**: `statfs`
 
 ### Inode Trait (Layer 3 - For FUSE)
 
-- **`VfsInode`**: `path_to_inode`, `inode_to_path`, `lookup`, `metadata_by_inode`
+- **`FsInode`**: `path_to_inode`, `inode_to_path`, `lookup`, `metadata_by_inode`
   - Default implementations use path hashing/fallback
   - Override for hardlink support and FUSE efficiency
 
 ### POSIX Traits (Layer 4 - Full POSIX)
 
-- **`VfsHandles`**: `open`, `read_at`, `write_at`, `close`
-- **`VfsLock`**: `lock`, `try_lock`, `unlock`
-- **`VfsXattr`**: `get_xattr`, `set_xattr`, `remove_xattr`, `list_xattr`
+- **`FsHandles`**: `open`, `read_at`, `write_at`, `close`
+- **`FsLock`**: `lock`, `try_lock`, `unlock`
+- **`FsXattr`**: `get_xattr`, `set_xattr`, `remove_xattr`, `list_xattr`
 
 ### Convenience Supertraits
 
 ```rust
 /// Basic filesystem - covers 90% of use cases
-pub trait Vfs: VfsRead + VfsWrite + VfsDir {}
-impl<T: VfsRead + VfsWrite + VfsDir> Vfs for T {}
+pub trait Fs: FsRead + FsWrite + FsDir {}
+impl<T: FsRead + FsWrite + FsDir> Fs for T {}
 
 /// Full filesystem with all std::fs features
-pub trait VfsFull: Vfs + VfsLink + VfsPermissions + VfsSync + VfsStats {}
+pub trait FsFull: Fs + FsLink + FsPermissions + FsSync + FsStats {}
 
 /// FUSE-mountable filesystem
-pub trait VfsFuse: VfsFull + VfsInode {}
+pub trait FsFuse: FsFull + FsInode {}
 
 /// Full POSIX filesystem
-pub trait VfsPosix: VfsFuse + VfsHandles + VfsLock + VfsXattr {}
+pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 ```
 
 ### Other Definitions
 
 - Define `Layer` trait (Tower-style middleware composition)
-- Define `VfsBackendExt` trait (extension methods for JSON, type checks)
+- Define `FsExt` trait (extension methods for JSON, type checks)
 - Define core types (`Metadata`, `Permissions`, `FileType`, `DirEntry`, `StatFs`)
-- Define `VfsError` with contextual variants (see guidelines above)
+- Define `FsError` with contextual variants (see guidelines above)
 - Define `ROOT_INODE = 1` constant
 - Include `const NEEDS_PATH_RESOLUTION: bool = true` (opt-out for real FS backends)
 
@@ -183,7 +183,7 @@ pub trait VfsPosix: VfsFuse + VfsHandles + VfsLock + VfsXattr {}
 
 ### Path Resolution Utility
 
-- `resolve_path(backend, path, follow_symlinks)` - works on any `Vfs`
+- `resolve_path(backend, path, follow_symlinks)` - works on any `Fs`
   - Walks path component by component using `metadata()` and `read_link()`
   - Handles `..` correctly (requires knowing what each component resolves to)
   - Detects circular symlinks (max depth or visited set)
@@ -195,17 +195,17 @@ pub trait VfsPosix: VfsFuse + VfsHandles + VfsLock + VfsXattr {}
 Each backend implements the traits it supports:
 
 - `memory` (default): `MemoryBackend`
-  - Implements: `Vfs` + `VfsLink` + `VfsPermissions` + `VfsSync` + `VfsStats` + `VfsInode` = `VfsFuse`
+  - Implements: `Fs` + `FsLink` + `FsPermissions` + `FsSync` + `FsStats` + `FsInode` = `FsFuse`
   - `NEEDS_PATH_RESOLUTION = true` (uses path resolution utility)
   - Inode source: internal node IDs (incrementing counter)
   - `set_follow_symlinks(bool)` - control symlink resolution
 - `sqlite` (optional): `SqliteBackend`
-  - Implements: `VfsFuse` (all traits through Layer 3)
+  - Implements: `FsFuse` (all traits through Layer 3)
   - `NEEDS_PATH_RESOLUTION = true` (uses path resolution utility)
   - Inode source: SQLite row IDs (`INTEGER PRIMARY KEY`)
   - `set_follow_symlinks(bool)` - control symlink resolution
 - `vrootfs` (optional): `VRootFsBackend` using `strict-path` for containment
-  - Implements: `VfsPosix` (all traits including Layer 4)
+  - Implements: `FsPosix` (all traits including Layer 4)
   - `NEEDS_PATH_RESOLUTION = false` (OS handles resolution)
   - Inode source: OS inode numbers (`std::fs::Metadata::ino()`)
   - `strict-path` prevents symlink escapes
@@ -222,7 +222,7 @@ Each backend implements the traits it supports:
 - `Cache<B>` + `CacheLayer` - LRU read cache
 - `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
 
-**Exit criteria:** Each backend implements the appropriate trait level (`Vfs`, `VfsFull`, `VfsFuse`) and passes conformance suite. Each middleware wraps backends implementing the same traits.
+**Exit criteria:** Each backend implements the appropriate trait level (`Fs`, `FsFull`, `FsFuse`) and passes conformance suite. Each middleware wraps backends implementing the same traits.
 
 ---
 
@@ -231,7 +231,7 @@ Each backend implements the traits it supports:
 **Goal:** Provide user-facing ergonomic wrapper.
 
 - `FileStorage<M>` - Thin wrapper with `std::fs`-aligned API
-  - Type-erased backend (`Box<dyn Vfs>`) for clean API
+  - Type-erased backend (`Box<dyn Fs>`) for clean API
   - Optional marker type `M` for compile-time container differentiation
 - Accepts `impl AsRef<Path>` for convenience
 - Delegates all operations to wrapped backend
@@ -250,24 +250,24 @@ Each backend implements the traits it supports:
 
 Conformance tests are organized by trait layer:
 
-#### Layer 1: `Vfs` (Core) - All backends MUST pass
-- **VfsRead**: `read`/`read_to_string`/`read_range`/`exists`/`metadata`/`open_read`
-- **VfsWrite**: `write`/`append`/`remove_file`/`rename`/`copy`/`truncate`/`open_write`
-- **VfsDir**: `read_dir`/`create_dir*`/`remove_dir*`
+#### Layer 1: `Fs` (Core) - All backends MUST pass
+- **FsRead**: `read`/`read_to_string`/`read_range`/`exists`/`metadata`/`open_read`
+- **FsWrite**: `write`/`append`/`remove_file`/`rename`/`copy`/`truncate`/`open_write`
+- **FsDir**: `read_dir`/`create_dir*`/`remove_dir*`
 
-#### Layer 2: `VfsFull` (Extended) - Backends that support these features
-- **VfsLink**: `symlink`/`hard_link`/`read_link`/`symlink_metadata`
-- **VfsPermissions**: `set_permissions`
-- **VfsSync**: `sync`/`fsync`
-- **VfsStats**: `statfs`
+#### Layer 2: `FsFull` (Extended) - Backends that support these features
+- **FsLink**: `symlink`/`hard_link`/`read_link`/`symlink_metadata`
+- **FsPermissions**: `set_permissions`
+- **FsSync**: `sync`/`fsync`
+- **FsStats**: `statfs`
 
-#### Layer 3: `VfsFuse` (Inode) - Backends that support FUSE mounting
-- **VfsInode**: `path_to_inode`/`inode_to_path`/`lookup`/`metadata_by_inode`
+#### Layer 3: `FsFuse` (Inode) - Backends that support FUSE mounting
+- **FsInode**: `path_to_inode`/`inode_to_path`/`lookup`/`metadata_by_inode`
 
-#### Layer 4: `VfsPosix` (Full POSIX) - Backends that support full POSIX
-- **VfsHandles**: `open`/`read_at`/`write_at`/`close`
-- **VfsLock**: `lock`/`try_lock`/`unlock`
-- **VfsXattr**: `get_xattr`/`set_xattr`/`remove_xattr`/`list_xattr`
+#### Layer 4: `FsPosix` (Full POSIX) - Backends that support full POSIX
+- **FsHandles**: `open`/`read_at`/`write_at`/`close`
+- **FsLock**: `lock`/`try_lock`/`unlock`
+- **FsXattr**: `get_xattr`/`set_xattr`/`remove_xattr`/`list_xattr`
 
 #### Path Resolution Tests (virtual backends only)
 - `/foo/../bar` resolves correctly when `foo` is a regular directory
@@ -324,7 +324,7 @@ Conformance tests are organized by trait layer:
 fn no_panic_on_missing_file() {
     let backend = create_backend();
     let result = backend.read("/nonexistent");
-    assert!(matches!(result, Err(VfsError::NotFound { .. })));
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
 }
 
 #[test]
@@ -333,7 +333,7 @@ fn no_panic_on_invalid_operation() {
     backend.write("/file.txt", b"data").unwrap();
     // Try to read directory on a file
     let result = backend.read_dir("/file.txt");
-    assert!(matches!(result, Err(VfsError::NotADirectory { .. })));
+    assert!(matches!(result, Err(FsError::NotADirectory { .. })));
 }
 ```
 
@@ -405,7 +405,7 @@ Required CI checks:
 
 ## Future work (post-MVP)
 
-- Async API (`AsyncVfs`, `AsyncVfsFull`, etc.)
+- Async API (`AsyncVfs`, `AsyncFsFull`, etc.)
 - Import/export helpers (host path <-> container)
 - Encryption middleware
 - Compression middleware
@@ -414,17 +414,17 @@ Required CI checks:
 
 ### `anyfs-fuse` - Mount as Real Filesystem
 
-Adapter to expose any `VfsFuse` backend as a FUSE mount point.
+Adapter to expose any `FsFuse` backend as a FUSE mount point.
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer, VfsFuse};
+use anyfs::{MemoryBackend, QuotaLayer, FsFuse};
 use anyfs_fuse::FuseMount;
 
 // RAM drive with 1GB quota
 let backend = MemoryBackend::new()
     .layer(QuotaLayer::new().max_total_size(1024 * 1024 * 1024));
 
-// Backend must implement VfsFuse (includes VfsInode)
+// Backend must implement FsFuse (includes FsInode)
 let mount = FuseMount::mount(backend, "/mnt/ramdisk")?;
 
 // Now it's a real mount point:
@@ -445,7 +445,7 @@ let mount = FuseMount::mount(backend, "/mnt/ramdisk")?;
 `anyfs-fuse` provides a unified API across platforms:
 
 ```rust
-impl<B: VfsFuse> FuseMount<B> {
+impl<B: FsFuse> FuseMount<B> {
     #[cfg(unix)]
     pub fn mount(backend: B, path: &Path) -> Result<Self, ...> {
         // Uses fuser crate
@@ -503,16 +503,16 @@ let sandbox = FuseMount::mount(
 ├────────────────────────────────────────────────┤
 │  Middleware stack (Quota, PathFilter, etc.)    │
 ├────────────────────────────────────────────────┤
-│  VfsFuse (Memory, SQLite, etc.)                │
-│    └─ includes VfsInode for efficient lookups  │
+│  FsFuse (Memory, SQLite, etc.)                │
+│    └─ includes FsInode for efficient lookups  │
 │                                                │
-│  Optional: VfsPosix for locks/xattr            │
+│  Optional: FsPosix for locks/xattr            │
 └────────────────────────────────────────────────┘
 ```
 
 **Requirements:**
-- Backend must implement `VfsFuse` (includes `VfsInode` for efficient inode operations)
-- Backends implementing `VfsPosix` get full lock/xattr support
+- Backend must implement `FsFuse` (includes `FsInode` for efficient inode operations)
+- Backends implementing `FsPosix` get full lock/xattr support
 - Platform-specific FUSE provider must be installed
 
 ### `anyfs-vfs-compat` - Interop with `vfs` crate
@@ -533,9 +533,9 @@ Adapter crate for bidirectional compatibility with the [`vfs`](https://github.co
 // Wrap a vfs::FileSystem to use as AnyFS backend
 // Only implements Vfs (Layer 1) - no links, permissions, etc.
 pub struct VfsCompat<F: vfs::FileSystem>(F);
-impl<F: vfs::FileSystem> VfsRead for VfsCompat<F> { ... }
-impl<F: vfs::FileSystem> VfsWrite for VfsCompat<F> { ... }
-impl<F: vfs::FileSystem> VfsDir for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> FsRead for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> FsWrite for VfsCompat<F> { ... }
+impl<F: vfs::FileSystem> FsDir for VfsCompat<F> { ... }
 // VfsCompat<F> implements Vfs via blanket impl
 
 // Wrap an AnyFS backend to use as vfs::FileSystem
@@ -559,13 +559,13 @@ The layered trait design enables building cloud storage services - each adapter 
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          YOUR SERVER                                │
 │  ┌───────────────────────────────────────────────────────────────┐  │
-│  │  Quota<Tracing<SqliteBackend>>  (implements VfsFuse)          │  │
+│  │  Quota<Tracing<SqliteBackend>>  (implements FsFuse)          │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │         ▲              ▲              ▲              ▲              │
 │         │              │              │              │              │
 │    ┌────┴────┐   ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐       │
 │    │ S3 API  │   │ gRPC/REST │  │    NFS    │  │  WebDAV   │       │
-│    │ (Vfs)   │   │  (Vfs)    │  │ (VfsFuse) │  │  (VfsFull)│       │
+│    │ (Vfs)   │   │  (Vfs)    │  │ (FsFuse) │  │  (FsFull)│       │
 │    └────┬────┘   └─────┬─────┘  └─────┬─────┘  └─────┬─────┘       │
 └─────────┼──────────────┼──────────────┼──────────────┼─────────────┘
           │              │              │              │
@@ -578,12 +578,12 @@ The layered trait design enables building cloud storage services - each adapter 
 | Crate | Required Trait | Purpose |
 |-------|----------------|---------|
 | `anyfs-s3-server` | `Vfs` | Expose as S3-compatible API (objects = files) |
-| `anyfs-sftp-server` | `VfsFull` | SFTP server with permissions/links |
-| `anyfs-ssh-shell` | `VfsFuse` | SSH server with FUSE-mounted home directories |
+| `anyfs-sftp-server` | `FsFull` | SFTP server with permissions/links |
+| `anyfs-ssh-shell` | `FsFuse` | SSH server with FUSE-mounted home directories |
 | `anyfs-remote` | `Vfs` | `RemoteBackend` client (implements `Vfs`) |
 | `anyfs-grpc` | `Vfs` | gRPC protocol adapter |
-| `anyfs-webdav` | `VfsFull` | WebDAV server (needs permissions) |
-| `anyfs-nfs` | `VfsFuse` | NFS server (needs inodes) |
+| `anyfs-webdav` | `FsFull` | WebDAV server (needs permissions) |
+| `anyfs-nfs` | `FsFuse` | NFS server (needs inodes) |
 
 #### `anyfs-s3-server` - S3-Compatible Object Storage
 
@@ -684,7 +684,7 @@ use anyfs::{SqliteBackend, Quota, PathFilter, Tracing};
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
-fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> impl Vfs {
+fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> impl Fs {
     let db_path = format!("/data/tenants/{}.db", tenant_id);
 
     Quota::new(
@@ -711,7 +711,7 @@ S3Server::new_multi_tenant(|request| {
 
 #### `anyfs-sftp-server` - SFTP Access with Shell Commands
 
-Expose a `VfsFull` backend as an SFTP server. Users connect with standard SSH/SFTP clients and navigate with familiar shell commands.
+Expose a `FsFull` backend as an SFTP server. Users connect with standard SSH/SFTP clients and navigate with familiar shell commands.
 
 **Architecture:**
 
@@ -742,7 +742,7 @@ use anyfs::{SqliteBackend, Quota, Tracing};
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
-fn get_user_storage(username: &str) -> impl VfsFull {
+fn get_user_storage(username: &str) -> impl FsFull {
     let db_path = format!("/data/users/{}.db", username);
 
     Quota::new(
@@ -783,7 +783,7 @@ All operations happen on the user's isolated SQLite database on your server.
 
 #### `anyfs-ssh-shell` - Full Shell Access with Sandboxed Home
 
-Give users a real SSH shell where their home directory is backed by `VfsFuse`.
+Give users a real SSH shell where their home directory is backed by `FsFuse`.
 
 **Server implementation:**
 
@@ -833,7 +833,7 @@ alice@server:~$ du -sh .
 150M    .
 
 # Everything they do is actually stored in /data/users/alice.db on the server!
-# They can use vim, gcc, python - all working on their isolated VfsFuse backend
+# They can use vim, gcc, python - all working on their isolated FsFuse backend
 ```
 
 #### Isolated Shell Hosting Use Cases
@@ -871,7 +871,7 @@ This plan incorporates lessons from issues in similar projects:
 | vfs #47 | `create_dir_all` race | Concurrent stress tests |
 | vfs #8, #23 | Panics instead of errors | No-panic policy |
 | vfs #24, #42 | Path inconsistencies | Path edge case tests |
-| vfs #33 | Hard to match errors | Ergonomic `VfsError` design |
+| vfs #33 | Hard to match errors | Ergonomic `FsError` design |
 | vfs #68 | WASM panics | WASM compatibility tests |
 | vfs #66 | `'static` confusion | Minimal trait bounds |
 | agentfs #130 | Slow file deletion | Performance documentation |

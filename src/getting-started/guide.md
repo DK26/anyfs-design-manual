@@ -206,7 +206,7 @@ let backend = Restrictions::new(MemoryBackend::new())
     .deny_hard_links()    // Block hard_link() calls
     .deny_permissions();  // Block set_permissions() calls
 
-// Blocked operations return VfsError::FeatureNotEnabled
+// Blocked operations return FsError::FeatureNotEnabled
 ```
 
 ### Tracing — Instrumentation
@@ -223,15 +223,15 @@ let backend = Tracing::new(MemoryBackend::new())
 ## Error Handling
 
 ```rust
-use anyfs_backend::VfsError;
+use anyfs_backend::FsError;
 
 match fs.write("/file.txt", &large_data) {
     Ok(()) => println!("Written"),
 
-    Err(VfsError::NotFound(p)) => println!("Not found: {}", p),
-    Err(VfsError::AlreadyExists(p)) => println!("Exists: {}", p),
-    Err(VfsError::QuotaExceeded) => println!("Quota exceeded"),
-    Err(VfsError::FeatureNotEnabled(f)) => println!("Feature disabled: {}", f),
+    Err(FsError::NotFound(p)) => println!("Not found: {}", p),
+    Err(FsError::AlreadyExists(p)) => println!("Exists: {}", p),
+    Err(FsError::QuotaExceeded) => println!("Quota exceeded"),
+    Err(FsError::FeatureNotEnabled(f)) => println!("Feature disabled: {}", f),
 
     Err(e) => println!("Error: {}", e),
 }

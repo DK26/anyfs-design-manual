@@ -12,9 +12,9 @@ anyfs-backend/              # Crate 1: trait + types
   Cargo.toml
   src/
     lib.rs
-    backend.rs              # VfsBackend trait
+    backend.rs              # Fs trait
     types.rs                # Metadata, DirEntry, Permissions, StatFs
-    error.rs                # VfsError
+    error.rs                # FsError
 
 anyfs/                      # Crate 2: backends + middleware
   Cargo.toml
@@ -63,10 +63,10 @@ FilesContainer<B>
     wraps -> Tracing<B>
         wraps -> Restrictions<B>
             wraps -> Quota<B>
-                wraps -> SqliteBackend (or any VfsBackend)
+                wraps -> SqliteBackend (or any Fs)
 ```
 
-Each layer implements `VfsBackend`, enabling composition.
+Each layer implements `Fs`, enabling composition.
 
 ---
 

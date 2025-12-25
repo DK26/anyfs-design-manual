@@ -26,7 +26,7 @@ You get:
 │    Restrictions<B>                      │  ← Security
 │    Tracing<B>                           │  ← Audit
 ├─────────────────────────────────────────┤
-│  VfsBackend                             │  ← Storage
+│  Fs                             │  ← Storage
 │  (Memory, SQLite, VRootFs, custom...)   │
 └─────────────────────────────────────────┘
 ```
@@ -39,7 +39,7 @@ You get:
 
 | Crate             | Purpose                                      |
 | ----------------- | -------------------------------------------- |
-| `anyfs-backend`   | Minimal contract: `VfsBackend` trait + types |
+| `anyfs-backend`   | Minimal contract: `Fs` trait + types |
 | `anyfs`           | Backends + middleware                        |
 | `anyfs-container` | Ergonomic `FileStorage<M>` wrapper           |
 

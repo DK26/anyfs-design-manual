@@ -8,7 +8,7 @@
 
 `FileStorage<M>` is a **thin wrapper** that provides a familiar std::fs-aligned API with an optional **marker type** for compile-time safety.
 
-The backend is type-erased (`Box<dyn Vfs>`) for a clean API.
+The backend is type-erased (`Box<dyn Fs>`) for a clean API.
 
 **It does TWO things:**
 1. Ergonomics (std::fs-aligned API)
@@ -130,23 +130,23 @@ FileStorage is **purely ergonomic**. If you need policy, compose middleware.
 
 ```rust
 use std::marker::PhantomData;
-use anyfs_backend::Vfs;
+use anyfs_backend::Fs;
 
 /// Ergonomic filesystem wrapper with optional type marker.
-/// Backend is type-erased to `Box<dyn Vfs>` for a clean API.
+/// Backend is type-erased to `Box<dyn Fs>` for a clean API.
 pub struct FileStorage<M = ()> {
-    backend: Box<dyn Vfs>,
+    backend: Box<dyn Fs>,
     _marker: PhantomData<M>,
 }
 
 impl<M> FileStorage<M> {
     /// Create a new FileStorage (no marker).
-    pub fn new(backend: impl Vfs + 'static) -> FileStorage {
+    pub fn new(backend: impl Fs + 'static) -> FileStorage {
         FileStorage { backend: Box::new(backend), _marker: PhantomData }
     }
 
     /// Create a new FileStorage with a specific marker type.
-    pub fn with_marker<N>(backend: impl Vfs + 'static) -> FileStorage<N> {
+    pub fn with_marker<N>(backend: impl Fs + 'static) -> FileStorage<N> {
         FileStorage { backend: Box::new(backend), _marker: PhantomData }
     }
 
@@ -157,31 +157,31 @@ impl<M> FileStorage<M> {
 }
 ```
 
-**Note:** `FileStorage` uses `Box<dyn Vfs>` which provides Layer 1 operations (read, write, dirs). If you need `VfsFull`, `VfsFuse`, or `VfsPosix` operations, use the backend directly without type erasure.
+**Note:** `FileStorage` uses `Box<dyn Fs>` which provides Layer 1 operations (read, write, dirs). If you need `FsFull`, `FsFuse`, or `FsPosix` operations, use the backend directly without type erasure.
 
 ---
 
 ## Direct Backend Access
 
-If you don't need ergonomics, want zero-cost abstractions, or need higher-level traits (`VfsFull`, `VfsFuse`), use backends directly:
+If you don't need ergonomics, want zero-cost abstractions, or need higher-level traits (`FsFull`, `FsFuse`), use backends directly:
 
 ```rust
-use anyfs::{MemoryBackend, Quota, Vfs};
+use anyfs::{MemoryBackend, Quota, Fs};
 
 let mut backend = Quota::new(MemoryBackend::new())
     .with_max_total_size(100 * 1024 * 1024);
 
-// Use Vfs trait methods directly
+// Use Fs trait methods directly
 backend.write("/file.txt", b"data")?;
 ```
 
-For FUSE mounting (requires `VfsFuse`):
+For FUSE mounting (requires `FsFuse`):
 
 ```rust
-use anyfs::{SqliteBackend, VfsFuse};
+use anyfs::{SqliteBackend, FsFuse};
 use anyfs_fuse::FuseMount;
 
 let backend = SqliteBackend::open("data.db")?;
-// backend implements VfsFuse, so we can mount it
+// backend implements FsFuse, so we can mount it
 FuseMount::mount(backend, "/mnt/myfs")?;
 ```
