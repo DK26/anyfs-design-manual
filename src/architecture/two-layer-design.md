@@ -15,7 +15,7 @@ AnyFS uses a layered architecture that separates concerns:
 │  FilesContainer                         │  ← Ergonomics only
 ├─────────────────────────────────────────┤
 │  Middleware Stack (composable):         │  ← Policy enforcement
-│    Tracing → PathFilter → FeatureGuard  │
+│    Tracing → PathFilter → Restrictions  │
 │    → Quota → Backend                    │
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Pure storage
@@ -46,7 +46,7 @@ All layers use `impl AsRef<Path>` for consistency with `std::fs`.
 ```rust
 // Middleware enforces policy
 let backend = PathFilter::new(
-    FeatureGuard::new(
+    Restrictions::new(
         Quota::new(MemoryBackend::new())
     )
 )

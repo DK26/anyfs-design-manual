@@ -27,11 +27,11 @@ let mut fs = FilesContainer::new(MemoryBackend::new());
 With middleware:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard};
+use anyfs::{SqliteBackend, Quota, Restrictions};
 use anyfs_container::FilesContainer;
 
 // Compose middleware, then wrap in FilesContainer
-let backend = FeatureGuard::new(
+let backend = Restrictions::new(
     Quota::new(SqliteBackend::open("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )
@@ -71,7 +71,7 @@ FilesContainer mirrors std::fs naming:
 | Concern | Use Instead |
 |---------|-------------|
 | Quota enforcement | `Quota<B>` |
-| Feature gating | `FeatureGuard<B>` |
+| Feature gating | `Restrictions<B>` |
 | Audit logging | `Tracing<B>` |
 | Path containment | Backend-specific (VRootFsBackend) |
 
@@ -86,7 +86,7 @@ For Axum-style composition:
 ```rust
 let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().deny_hard_links());  // Block hard_link() calls
+    .layer(RestrictionsLayer::new().deny_hard_links());  // Block hard_link() calls
 ```
 
 ---

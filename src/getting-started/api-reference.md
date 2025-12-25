@@ -23,7 +23,7 @@ anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 ## Creating a Backend Stack
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, Quota, FeatureGuard, Tracing};
+use anyfs::{MemoryBackend, SqliteBackend, Quota, Restrictions, Tracing};
 use anyfs_container::FilesContainer;
 
 // Simple
@@ -39,7 +39,7 @@ let fs = FilesContainer::new(
 // Full stack (manual composition)
 let fs = FilesContainer::new(
     Tracing::new(
-        FeatureGuard::new(
+        Restrictions::new(
             Quota::new(SqliteBackend::open("data.db")?)
                 .with_max_total_size(100 * 1024 * 1024)
         )
@@ -48,11 +48,11 @@ let fs = FilesContainer::new(
 );
 
 // Layer-based composition
-use anyfs::{QuotaLayer, FeatureGuardLayer, TracingLayer};
+use anyfs::{QuotaLayer, RestrictionsLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().deny_permissions())
+    .layer(RestrictionsLayer::new().deny_permissions())
     .layer(TracingLayer::new());
 
 // BackendStack builder (fluent API)
@@ -60,7 +60,7 @@ use anyfs_container::BackendStack;
 
 let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .limited(|l| l.max_total_size(100 * 1024 * 1024))
-    .feature_gated(|g| g.deny_hard_links().deny_permissions())
+    .restricted(|g| g.deny_hard_links().deny_permissions())
     .traced()
     .into_container();
 ```
@@ -85,10 +85,10 @@ backend.remaining()    // -> Remaining { bytes, can_write, ... }
 
 ---
 
-## FeatureGuard Methods
+## Restrictions Methods
 
 ```rust
-FeatureGuard::new(backend)    // All disabled by default
+Restrictions::new(backend)    // All disabled by default
     .with_symlinks()                  // Enable symlink ops
     .with_max_symlink_resolution(40)  // Max hops
     .with_hard_links()                // Enable hard links
@@ -245,12 +245,12 @@ fs.remove_dir_all("/path")?;             // Recursive
 fs.rename("/from", "/to")?;
 fs.copy("/from", "/to")?;
 
-// Links (requires FeatureGuard)
+// Links (requires Restrictions)
 fs.symlink("/target", "/link")?;
 fs.hard_link("/original", "/link")?;
 fs.read_link("/link")?;                  // -> PathBuf
 
-// Permissions (requires FeatureGuard)
+// Permissions (requires Restrictions)
 fs.set_permissions("/path", perms)?;
 
 // File size
@@ -282,7 +282,7 @@ match result {
     Err(VfsError::QuotaExceeded { limit, requested, usage }) => ...
     Err(VfsError::FileSizeExceeded { path, size, limit }) => ...
 
-    // FeatureGuard middleware errors
+    // Restrictions middleware errors
     Err(VfsError::FeatureNotEnabled { feature, operation }) => ...
 
     // PathFilter middleware errors
@@ -319,7 +319,7 @@ match result {
 | Type | Purpose |
 |------|---------|
 | `Quota<B>` | Quota enforcement |
-| `FeatureGuard<B>` | Least privilege |
+| `Restrictions<B>` | Least privilege |
 | `PathFilter<B>` | Path-based access control |
 | `ReadOnly<B>` | Prevent write operations |
 | `RateLimit<B>` | Operation throttling |
@@ -335,7 +335,7 @@ match result {
 | Layer | Creates |
 |-------|---------|
 | `QuotaLayer` | `Quota<B>` |
-| `FeatureGuardLayer` | `FeatureGuard<B>` |
+| `RestrictionsLayer` | `Restrictions<B>` |
 | `PathFilterLayer` | `PathFilter<B>` |
 | `ReadOnlyLayer` | `ReadOnly<B>` |
 | `RateLimitLayer` | `RateLimit<B>` |
@@ -370,7 +370,7 @@ match result {
 | `SqliteBackend` | SQLite backend |
 | `VRootFsBackend` | Host FS backend |
 | `Quota<B>` | Quota middleware |
-| `FeatureGuard<B>` | Feature gate middleware |
+| `Restrictions<B>` | Feature gate middleware |
 | `PathFilter<B>` | Path access control middleware |
 | `ReadOnly<B>` | Read-only middleware |
 | `RateLimit<B>` | Rate limiting middleware |
@@ -379,7 +379,7 @@ match result {
 | `Cache<B>` | Caching middleware |
 | `Overlay<B1,B2>` | Union filesystem middleware |
 | `QuotaLayer` | Layer for Quota |
-| `FeatureGuardLayer` | Layer for FeatureGuard |
+| `RestrictionsLayer` | Layer for Restrictions |
 | `PathFilterLayer` | Layer for PathFilter |
 | `ReadOnlyLayer` | Layer for ReadOnly |
 | `RateLimitLayer` | Layer for RateLimit |

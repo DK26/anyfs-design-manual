@@ -69,13 +69,13 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 Tower-style middleware + pluggable backends:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing};
 use anyfs_container::FilesContainer;
 
 // Compose middleware stack
 let backend = Tracing::new(
     PathFilter::new(
-        FeatureGuard::new(
+        Restrictions::new(
             Quota::new(SqliteBackend::open("data.db")?)
                 .with_max_total_size(100 * 1024 * 1024)
         )
@@ -122,7 +122,7 @@ AnyFS middleware can **intercept, transform, and control** operations:
 |------------|------------|--------|
 | `Quota` | Writes | Reject if over limit |
 | `PathFilter` | All ops | Block denied paths |
-| `FeatureGuard` | Configurable operations | Block via `.deny_*()` methods |
+| `Restrictions` | Configurable operations | Block via `.deny_*()` methods |
 | `RateLimit` | All ops | Throttle per second |
 | `ReadOnly` | Writes | Block all writes |
 | `Tracing` | All ops | Log with tracing crate |

@@ -26,7 +26,7 @@ Anyone can:
 │                                         │
 │  Policy:                                │
 │    Quota<B>         - Resource limits   │
-│    FeatureGuard<B>  - Least privilege   │
+│    Restrictions<B>  - Least privilege   │
 │    PathFilter<B>    - Sandbox paths     │
 │    ReadOnly<B>      - Prevent writes    │
 │    RateLimit<B>     - Ops/sec limit     │
@@ -53,7 +53,7 @@ Anyone can:
 |-------|----------------|
 | `VfsBackend` | Storage + filesystem semantics |
 | `Quota<B>` | Resource limits (size, count, depth) |
-| `FeatureGuard<B>` | Opt-in operation restrictions |
+| `Restrictions<B>` | Opt-in operation restrictions |
 | `PathFilter<B>` | Path-based access control |
 | `ReadOnly<B>` | Prevent all write operations |
 | `RateLimit<B>` | Limit operations per second |
@@ -82,7 +82,7 @@ The trait is a low-level interface that any backend can implement - memory, SQLi
 | Layer | Security Responsibility |
 |-------|------------------------|
 | `VfsBackend` | None - pure filesystem semantics |
-| Middleware (`FeatureGuard`, `PathFilter`, etc.) | Opt-in restrictions |
+| Middleware (`Restrictions`, `PathFilter`, etc.) | Opt-in restrictions |
 | `FilesContainer` or application code | Configure appropriate middleware |
 
 **Example: Secure AI Agent Sandbox**
@@ -91,7 +91,7 @@ The trait is a low-level interface that any backend can implement - memory, SQLi
 // Application composes secure defaults
 let sandbox = FilesContainer::new(
     PathFilter::new(
-        FeatureGuard::new(
+        Restrictions::new(
             Quota::new(MemoryBackend::new())
                 .with_max_total_size(50 * 1024 * 1024)
         )
@@ -206,14 +206,14 @@ let usage = backend.usage();
 let remaining = backend.remaining();
 ```
 
-### FeatureGuard<B>
+### Restrictions<B>
 
 Enforces least-privilege by disabling features by default.
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGuard};
+use anyfs::{MemoryBackend, Restrictions};
 
-let backend = FeatureGuard::new(MemoryBackend::new())
+let backend = Restrictions::new(MemoryBackend::new())
     .with_symlinks()                          // Enable symlink operations
     .with_max_symlink_resolution(40)          // Max symlink hops
     .with_hard_links()                        // Enable hard links
@@ -384,7 +384,7 @@ pub trait Layer<B: VfsBackend> {
 Each middleware provides a corresponding `Layer` implementation:
 
 ```rust
-// QuotaLayer, TracingLayer, FeatureGuardLayer, etc.
+// QuotaLayer, TracingLayer, RestrictionsLayer, etc.
 pub struct QuotaLayer { /* config */ }
 
 impl<B: VfsBackend> Layer<B> for QuotaLayer {
@@ -404,7 +404,7 @@ Middleware composes by wrapping. Order matters - innermost applies first.
 ### Manual Composition
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard, Tracing};
+use anyfs::{SqliteBackend, Quota, Restrictions, Tracing};
 use anyfs_container::FilesContainer;
 
 // Build from inside out:
@@ -413,7 +413,7 @@ let backend = SqliteBackend::open("data.db")?;
 let limited = Quota::new(backend)
     .with_max_total_size(100 * 1024 * 1024);
 
-let gated = FeatureGuard::new(limited)
+let gated = Restrictions::new(limited)
     .with_symlinks();
 
 let traced = Tracing::new(gated);
@@ -426,11 +426,11 @@ let mut fs = FilesContainer::new(traced);
 Use the `Layer` trait for Axum-style composition:
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().deny_permissions())  // Block set_permissions()
+    .layer(RestrictionsLayer::new().deny_permissions())  // Block set_permissions()
     .layer(TracingLayer::new());
 ```
 
@@ -445,7 +445,7 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .limited(|l| l
         .max_total_size(100 * 1024 * 1024)
         .max_file_size(10 * 1024 * 1024))
-    .feature_gated(|g| g
+    .restricted(|g| g
         .deny_hard_links()      // Block hard_link() calls
         .deny_permissions())    // Block set_permissions() calls
     .traced()
@@ -487,7 +487,7 @@ Security is achieved through composition:
 | Path containment | `PathFilter` + VRootFsBackend |
 | Resource exhaustion | `Quota` enforces quotas |
 | Rate limiting | `RateLimit` prevents abuse |
-| Feature restriction | `FeatureGuard` disables dangerous features |
+| Feature restriction | `Restrictions` disables dangerous features |
 | Read-only access | `ReadOnly` prevents writes |
 | Audit trail | `Tracing` instruments operations |
 | Tenant isolation | Separate backend instances |
@@ -498,7 +498,7 @@ Security is achieved through composition:
 ### AI Agent Sandbox Example
 
 ```rust
-use anyfs::{MemoryBackend, Quota, PathFilter, RateLimit, FeatureGuard, Tracing};
+use anyfs::{MemoryBackend, Quota, PathFilter, RateLimit, Restrictions, Tracing};
 
 // Build a secure sandbox for an AI agent
 let sandbox = MemoryBackend::new()
@@ -509,7 +509,7 @@ let sandbox = MemoryBackend::new()
         .allow("/workspace/**")
         .deny("**/.env")
         .deny("**/secrets/**"))
-    .layer(FeatureGuardLayer::new())        // No symlinks, no hardlinks
+    .layer(RestrictionsLayer::new())        // No symlinks, no hardlinks
     .layer(RateLimitLayer::new()
         .max_ops(1000)
         .per_second())
@@ -626,7 +626,7 @@ pub enum VfsError {
         limit: u64,
     },
 
-    /// Feature not enabled (from FeatureGuard).
+    /// Feature not enabled (from Restrictions).
     FeatureNotEnabled {
         feature: &'static str,  // "symlinks", "hard_links", "permissions"
         operation: &'static str,

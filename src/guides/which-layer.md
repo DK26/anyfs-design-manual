@@ -30,14 +30,14 @@ fs.write("/data/file.txt", b"hello")?;
 ### With middleware (quotas, sandboxing, tracing)
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard, PathFilter, Tracing};
+use anyfs::{SqliteBackend, Quota, Restrictions, PathFilter, Tracing};
 use anyfs_container::FilesContainer;
 
 let backend = SqliteBackend::open("tenant.db")?;
 
 let stack = Tracing::new(
     PathFilter::new(
-        FeatureGuard::new(
+        Restrictions::new(
             Quota::new(backend)
                 .with_max_total_size(100 * 1024 * 1024)
         )
@@ -52,12 +52,12 @@ let mut fs = FilesContainer::new(stack);
 ### Using Layer trait (alternative syntax)
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
+use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 use anyfs_container::FilesContainer;
 
 let backend = SqliteBackend::open("tenant.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new())
+    .layer(RestrictionsLayer::new())
     .layer(TracingLayer::new());
 
 let mut fs = FilesContainer::new(backend);

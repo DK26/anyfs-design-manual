@@ -154,7 +154,7 @@ let entry = self.entries.get(&path)
 
 ### AnyFS Response
 
-- **Symlinks are opt-in** via `FeatureGuard` middleware
+- **Symlinks are opt-in** via `Restrictions` middleware
 - **Default deny is correct** - most use cases don't need symlinks
 - **When enabled, bound resolution depth** (default: 40 hops)
 - **`strict-path` prevents symlink escapes** in `VRootFsBackend`
@@ -355,7 +355,7 @@ Our design decisions already prevent these problems:
 | No middleware pattern | Tower-style composable middleware |
 | No quota enforcement | `Quota<B>` middleware |
 | No read-only mode | `ReadOnly<B>` middleware |
-| Symlink complexity | `FeatureGuard<B>` (opt-in) |
+| Symlink complexity | `Restrictions<B>` (opt-in) |
 | Path escape via symlinks | `strict-path` canonicalization |
 | FUSE complexity | Pure library, no mount |
 | SQLite-only | Multiple backends |

@@ -28,7 +28,7 @@ AnyFS is a **filesystem abstraction with composable middleware**. It separates s
 | Middleware pattern | No | Yes (Tower-style) |
 | Quotas/limits | No | Yes (Quota middleware) |
 | Path sandboxing | Backend-dependent | Yes (PathFilter middleware) |
-| Feature gating | No | Yes (FeatureGuard middleware) |
+| Feature gating | No | Yes (Restrictions middleware) |
 | SQLite backend | No | Yes (built-in) |
 | Path containment | Prefix-based (AltrootFS) | Canonicalization-based (`strict-path`) |
 | Third-party extensibility | Implement trait | Implement trait + Layer |

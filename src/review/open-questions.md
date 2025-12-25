@@ -113,7 +113,7 @@ pub struct Capabilities {
 
 - For virtual backends: We control symlink following
 - For VRootFsBackend: Rely on `strict-path` to prevent escapes
-- Document that `FeatureGuard` symlink control only applies to virtual backends
+- Document that `Restrictions` symlink control only applies to virtual backends
 
 | Pros | Cons |
 |------|------|
@@ -177,7 +177,7 @@ The design is straightforward:
 
 3. **VRootFsBackend cannot control symlink following** - the OS handles resolution. `strict-path` prevents escapes but cannot disable following entirely.
 
-4. **Everything works by default** - all operations (`symlink()`, `hard_link()`, `set_permissions()`) work out of the box. Use `FeatureGuard` middleware to opt-in to restrictions when needed.
+4. **Everything works by default** - all operations (`symlink()`, `hard_link()`, `set_permissions()`) work out of the box. Use `Restrictions` middleware to opt-in to restrictions when needed.
 
 ### Summary
 

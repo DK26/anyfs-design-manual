@@ -27,7 +27,7 @@ anyfs/                      # Crate 2: backends + middleware
     middleware/
       quota.rs              # Quota<B>
       tracing.rs            # Tracing<B>
-      feature_guard.rs      # FeatureGuard<B>
+      feature_guard.rs      # Restrictions<B>
 
 anyfs-container/            # Crate 3: ergonomic wrapper
   Cargo.toml
@@ -61,7 +61,7 @@ anyfs-backend (trait + types)
 ```
 FilesContainer<B>
     wraps -> Tracing<B>
-        wraps -> FeatureGuard<B>
+        wraps -> Restrictions<B>
             wraps -> Quota<B>
                 wraps -> SqliteBackend (or any VfsBackend)
 ```

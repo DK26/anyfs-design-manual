@@ -70,11 +70,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### With Feature Guards
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGuard};
+use anyfs::{MemoryBackend, Restrictions};
 use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let backend = FeatureGuard::new(MemoryBackend::new())
+    let backend = Restrictions::new(MemoryBackend::new())
         .with_symlinks()      // Enable symlinks
         .with_hard_links();   // Enable hard links
 
@@ -90,12 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Full Stack (Limits + Feature Gates)
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard};
+use anyfs::{SqliteBackend, Quota, Restrictions};
 use anyfs_container::FilesContainer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compose: storage -> limits -> feature gates
-    let backend = FeatureGuard::new(
+    let backend = Restrictions::new(
         Quota::new(SqliteBackend::open_or_create("data.db")?)
             .with_max_total_size(100 * 1024 * 1024)
     )
@@ -191,13 +191,13 @@ if !remaining.can_write {
 }
 ```
 
-### FeatureGuard — Security
+### Restrictions — Security
 
 ```rust
-use anyfs::{MemoryBackend, FeatureGuard};
+use anyfs::{MemoryBackend, Restrictions};
 
 // All features disabled by default
-let backend = FeatureGuard::new(MemoryBackend::new())
+let backend = Restrictions::new(MemoryBackend::new())
     .with_symlinks()                  // Enable symlink operations
     .with_max_symlink_resolution(40)  // Max hops (default: 40)
     .with_hard_links()                // Enable hard links
@@ -298,7 +298,7 @@ let fs = FilesContainer::new(
 
 // Full security
 let fs = FilesContainer::new(
-    FeatureGuard::new(
+    Restrictions::new(
         Quota::new(SqliteBackend::open("data.db")?)
     )
     .with_symlinks()

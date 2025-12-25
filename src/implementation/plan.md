@@ -118,7 +118,7 @@ Every backend and middleware must document:
 ### Middleware
 
 - `Quota<B>` + `QuotaLayer` - Resource limits
-- `FeatureGuard<B>` + `FeatureGuardLayer` - Opt-in restrictions (`.deny_symlinks()`, `.deny_hard_links()`, etc.)
+- `Restrictions<B>` + `RestrictionsLayer` - Opt-in restrictions (`.deny_symlinks()`, `.deny_hard_links()`, etc.)
 - `PathFilter<B>` + `PathFilterLayer` - Path-based access control
 - `ReadOnly<B>` + `ReadOnlyLayer` - Block writes
 - `RateLimit<B>` + `RateLimitLayer` - Operation throttling
@@ -196,7 +196,7 @@ Every backend and middleware must document:
 ### Middleware tests
 
 - `Quota`: Limit enforcement, usage tracking, streaming writes
-- `FeatureGuard`: Operation blocking via `.deny_*()` methods, error messages
+- `Restrictions`: Operation blocking via `.deny_*()` methods, error messages
 - `PathFilter`: Glob pattern matching, deny-by-default
 - `RateLimit`: Throttling behavior, burst handling
 - `ReadOnly`: All write operations blocked

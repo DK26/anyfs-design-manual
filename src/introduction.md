@@ -23,7 +23,7 @@ You get:
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
 │    Quota<B>                             │  ← Quotas
-│    FeatureGuard<B>                      │  ← Security
+│    Restrictions<B>                      │  ← Security
 │    Tracing<B>                           │  ← Audit
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Storage
@@ -48,11 +48,11 @@ You get:
 ## Quick Example
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard};
+use anyfs::{SqliteBackend, Quota, Restrictions};
 use anyfs_container::FilesContainer;
 
 // Compose: storage -> limits -> security
-let backend = FeatureGuard::new(
+let backend = Restrictions::new(
     Quota::new(SqliteBackend::open("data.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )

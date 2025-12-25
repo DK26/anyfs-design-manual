@@ -14,7 +14,7 @@ This file captures the decisions for the current AnyFS design.
 | ADR-004 | Tower-style middleware pattern | Accepted |
 | ADR-005 | `std::fs`-aligned method names | Accepted |
 | ADR-006 | Quota for quota enforcement | Accepted |
-| ADR-007 | FeatureGuard for least-privilege | Accepted |
+| ADR-007 | Restrictions for least-privilege | Accepted |
 | ADR-008 | FilesContainer as thin ergonomic wrapper | Accepted |
 | ADR-009 | Built-in backends are feature-gated | Accepted |
 | ADR-010 | Sync-first, async-ready design | Accepted |
@@ -47,7 +47,7 @@ This file captures the decisions for the current AnyFS design.
 | Crate | Purpose |
 |-------|---------|
 | `anyfs-backend` | Minimal contract: `VfsBackend` trait, `Layer` trait, `VfsBackendExt`, types |
-| `anyfs` | Backends + middleware (Quota, FeatureGuard, Tracing) |
+| `anyfs` | Backends + middleware (Quota, Restrictions, Tracing) |
 | `anyfs-container` | Ergonomic wrapper: `FilesContainer<B>`, `BackendStack` builder |
 
 **Why:**
@@ -82,7 +82,7 @@ This file captures the decisions for the current AnyFS design.
 **Example:**
 ```rust
 let backend = Tracing::new(
-    FeatureGuard::new(
+    Restrictions::new(
         Quota::new(SqliteBackend::open("data.db")?)
     )
 );
@@ -121,11 +121,11 @@ let backend = Tracing::new(
 
 ---
 
-## ADR-007: FeatureGuard for opt-in restrictions
+## ADR-007: Restrictions for opt-in restrictions
 
-**Decision:** By default, all operations work. `FeatureGuard<B>` middleware provides opt-in restrictions.
+**Decision:** By default, all operations work. `Restrictions<B>` middleware provides opt-in restrictions.
 
-**Default behavior (no FeatureGuard):**
+**Default behavior (no Restrictions):**
 - All operations work: `symlink()`, `hard_link()`, `set_permissions()`
 
 **Opt-in restrictions:**
@@ -140,7 +140,7 @@ When blocked, operations return `VfsError::FeatureNotEnabled`.
 **Why:**
 - Simple default: everything works out of the box.
 - Security is opt-in via middleware composition.
-- Clear separation: FeatureGuard blocks operations, backend settings control behavior.
+- Clear separation: Restrictions blocks operations, backend settings control behavior.
 
 ---
 
@@ -155,7 +155,7 @@ When blocked, operations return `VfsError::FeatureNotEnabled`.
 
 **What it does NOT do:**
 - Quota enforcement (use Quota)
-- Feature gating (use FeatureGuard)
+- Feature gating (use Restrictions)
 - Instrumentation (use Tracing)
 - Any other policy
 
@@ -402,7 +402,7 @@ let readonly_fs = ReadOnly::new(backend);
 **Why:**
 - Safe browsing of container contents without modification risk.
 - Useful for debugging, inspection, auditing.
-- Simpler than configuring FeatureGuard for read-only use case.
+- Simpler than configuring Restrictions for read-only use case.
 
 ---
 

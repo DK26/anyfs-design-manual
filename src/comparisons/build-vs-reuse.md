@@ -86,12 +86,12 @@ AnyFS fills the gap by separating concerns:
 The middleware pattern (like Tower/Axum) enables composition:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, PathFilter, FeatureGuard, Tracing};
+use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing};
 use anyfs_container::FilesContainer;
 
 let backend = Tracing::new(
     PathFilter::new(
-        FeatureGuard::new(
+        Restrictions::new(
             Quota::new(SqliteBackend::open("tenant.db")?)
                 .with_max_total_size(100 * 1024 * 1024)
         )

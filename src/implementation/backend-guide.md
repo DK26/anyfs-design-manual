@@ -214,7 +214,7 @@ Return appropriate `VfsError` variants:
 | Concern | Where It Lives |
 |---------|----------------|
 | Quota enforcement | `Quota<B>` middleware |
-| Feature gating | `FeatureGuard<B>` middleware |
+| Feature gating | `Restrictions<B>` middleware |
 | Logging | `Tracing<B>` middleware |
 | Ergonomic API | `FilesContainer<B>` wrapper |
 

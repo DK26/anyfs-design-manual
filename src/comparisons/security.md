@@ -41,12 +41,12 @@ AnyFS is designed with security as a primary concern. Security policies are enfo
 Security policies are composable middleware layers:
 
 ```rust
-use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
+use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
 
 let secure_backend = Tracing::new(           // Audit trail
     RateLimit::new(                          // Throttle operations
         PathFilter::new(                     // Sandbox paths
-            FeatureGuard::new(               // Block dangerous features
+            Restrictions::new(               // Block dangerous features
                 Quota::new(MemoryBackend::new())  // Limit resources
                     .with_max_total_size(100 * 1024 * 1024)
             )
@@ -77,12 +77,12 @@ PathFilter::new(backend)
 - No rule = denied (deny by default)
 - `read_dir` filters denied entries from results
 
-### 3. Feature Gating (FeatureGuard)
+### 3. Feature Gating (Restrictions)
 
-By default, all operations work. Use `FeatureGuard` middleware to **opt-in to restrictions**:
+By default, all operations work. Use `Restrictions` middleware to **opt-in to restrictions**:
 
 ```rust
-FeatureGuard::new(backend)
+Restrictions::new(backend)
     .deny_hard_links()         // Block hard_link() calls
     .deny_permissions()        // Block set_permissions() calls
     .deny_symlinks()           // Block symlink() calls
@@ -216,13 +216,13 @@ This is "follow and verify containment" - symlinks are followed by the OS, but e
 ### AI Agent Sandbox
 
 ```rust
-use anyfs::{MemoryBackend, Quota, PathFilter, FeatureGuard, RateLimit, Tracing};
+use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
 use anyfs_container::FilesContainer;
 
 let sandbox = Tracing::new(
     RateLimit::new(
         PathFilter::new(
-            FeatureGuard::new(
+            Restrictions::new(
                 Quota::new(MemoryBackend::new())
                     .with_max_total_size(50 * 1024 * 1024)
                     .with_max_file_size(5 * 1024 * 1024)
@@ -278,7 +278,7 @@ let readonly_fs = FilesContainer::new(
 
 - [ ] Use `PathFilter` to sandbox untrusted code
 - [ ] Use `Quota` to prevent resource exhaustion
-- [ ] Use `FeatureGuard` (default) to disable dangerous features
+- [ ] Use `Restrictions` (default) to disable dangerous features
 - [ ] Use `RateLimit` for untrusted/shared environments
 - [ ] Use `Tracing` for audit trails
 - [ ] Use separate backends for separate tenants

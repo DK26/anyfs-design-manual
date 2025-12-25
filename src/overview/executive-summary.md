@@ -23,7 +23,7 @@ You get:
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
 │    Quota<B>                    │  ← Quotas
-│    FeatureGuard<B>               │  ← Security
+│    Restrictions<B>               │  ← Security
 │    Tracing<B>                    │  ← Audit
 ├─────────────────────────────────────────┤
 │  VfsBackend                             │  ← Storage
@@ -38,7 +38,7 @@ You get:
 |---------|-----------------|
 | Multi-tenant isolation | Separate backend instances per tenant |
 | Portability | SQLite backend: tenant data = single `.db` file |
-| Security | FeatureGuard disables dangerous features by default |
+| Security | Restrictions disables dangerous features by default |
 | Resource control | Quota enforces quotas |
 | Audit compliance | Tracing records all operations |
 | Custom storage | Implement VfsBackend for any medium |
@@ -66,11 +66,11 @@ You get:
 ## Quick example
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FeatureGuard};
+use anyfs::{SqliteBackend, Quota, Restrictions};
 use anyfs_container::FilesContainer;
 
 // Compose: storage + limits + security
-let backend = FeatureGuard::new(
+let backend = Restrictions::new(
     Quota::new(SqliteBackend::open("tenant.db")?)
         .with_max_total_size(100 * 1024 * 1024)
 )
