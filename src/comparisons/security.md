@@ -79,21 +79,21 @@ PathFilter::new(backend)
 
 ### 3. Feature Gating (FeatureGuard)
 
-Certain operations can be blocked by policy:
+By default, all operations work. Use `FeatureGuard` middleware to **opt-in to restrictions**:
 
 ```rust
 FeatureGuard::new(backend)
-    // Hard links disabled by default
-    // Permission changes disabled by default
-    .with_hard_links()         // Opt-in if needed
-    .with_permissions()        // Opt-in if needed
+    .deny_hard_links()         // Block hard_link() calls
+    .deny_permissions()        // Block set_permissions() calls
+    .deny_symlinks()           // Block symlink() calls
 ```
 
-**Guarantees:**
-- Hard links, permission changes blocked unless enabled
-- Blocks `symlink()` and `hard_link()` creation by default
+**Use cases:**
+- Sandboxing untrusted code (block permission changes)
+- Archive extraction (block symlink/hardlink creation)
+- Read-only-ish environments (block permission mutations)
 
-**Note:** `FeatureGuard` controls which *operations* are allowed, not how paths are resolved. See "Symlink Security" below for path resolution.
+**Note:** This controls operation **availability**. For symlink **following** behavior, see "Symlink Security" below.
 
 ### 4. Resource Limits (Quota)
 
@@ -161,30 +161,34 @@ For `VRootFsBackend` (real filesystem), `strict-path::VirtualRoot` provides equi
 
 **The security concern with symlinks is *following* them, not *creating* them.**
 
-A symlink is just data. Creating `/sandbox/link -> /etc/passwd` is harmless. The danger is when reading `/sandbox/link` follows the symlink and reads `/etc/passwd` instead.
+Symlinks are just data. Creating `/sandbox/link -> /etc/passwd` is harmless. The danger is when reading `/sandbox/link` follows the symlink and accesses `/etc/passwd`.
 
-| Backend Type | Who Controls Symlink Following? | Escape Protection |
-|--------------|--------------------------------|-------------------|
-| `MemoryBackend` | **We do** (symlinks are stored data) | Full control |
-| `SqliteBackend` | **We do** (symlinks are stored data) | Full control |
-| `VRootFsBackend` | **The OS does** | `strict-path` canonicalization |
+| Backend Type | Symlink Creation | Symlink Following |
+|--------------|------------------|-------------------|
+| `MemoryBackend` | Always supported | **We control** via `set_follow_symlinks()` |
+| `SqliteBackend` | Always supported | **We control** via `set_follow_symlinks()` |
+| `VRootFsBackend` | Always supported | **OS controls** - `strict-path` prevents escapes |
 
 #### Virtual Backends (Memory, SQLite)
 
-Virtual backends can offer a `follow_symlinks` option:
+Virtual backends always support symlinks. They also provide control over symlink following:
 
 ```rust
-let mut mem = MemoryBackend::new();
-mem.set_follow_symlinks(false);  // Symlinks become opaque data
+let mut backend = MemoryBackend::new();
+backend.set_follow_symlinks(false);  // Don't follow symlinks during path resolution
 ```
 
-When disabled, reading a symlink returns the link target as data, not the file it points to.
+When following is disabled:
+- `read("/link")` on a symlink returns `VfsError::IsSymlink` (or reads link as opaque data)
+- Path resolution treats symlinks as terminal nodes
+
+**This is the actual security feature** - controlling whether symlinks are resolved.
 
 #### Real Filesystem Backend (VRootFsBackend)
 
-For real filesystems, the OS controls symlink resolution. We cannot tell `std::fs::read()` to not follow symlinks.
+VRootFsBackend calls OS functions (`std::fs::read()`, etc.) which follow symlinks automatically. **We cannot control this** - the OS does the symlink resolution, not us.
 
-**However, `strict-path::VirtualRoot` provides escape protection:**
+`strict-path::VirtualRoot` prevents **escapes**:
 
 ```
 User requests: /sandbox/link
@@ -193,17 +197,17 @@ strict-path: canonicalize(/sandbox/link) = /etc/passwd
 strict-path: /etc/passwd is NOT within /sandbox → DENIED
 ```
 
-This is "follow and check containment" rather than "don't follow at all."
+This is "follow and verify containment" - symlinks are followed by the OS, but escapes are blocked by strict-path.
 
-#### What This Means in Practice
+**Limitation:** Symlinks within the jail are followed. We cannot disable this without implementing custom path resolution (TOCTOU risk) or platform-specific hacks.
 
-| Use Case | Virtual Backend | VRootFsBackend |
-|----------|-----------------|----------------|
-| Jail escape via symlink | Preventable (don't follow) | Prevented (strict-path) |
-| Symlink within jail to unexpected location | Preventable (don't follow) | Allowed (OS follows, stays in jail) |
-| Archive extraction safety | Full control | Escape-protected only |
+#### Summary
 
-For most security use cases, "follow and check containment" (VRootFsBackend) is sufficient. Only specialized cases (archive extraction with strict symlink policy) need "don't follow at all" (virtual backends only).
+| Concern | Virtual Backend | VRootFsBackend |
+|---------|-----------------|----------------|
+| Symlink creation | Always allowed (just data) | Always allowed (just data) |
+| Symlink following | `set_follow_symlinks(bool)` | OS controls (strict-path prevents escapes) |
+| Jail escape via symlink | `set_follow_symlinks(false)` | Prevented by strict-path |
 
 ---
 

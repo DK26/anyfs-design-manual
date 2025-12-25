@@ -43,8 +43,7 @@ let fs = FilesContainer::new(
             Quota::new(SqliteBackend::open("data.db")?)
                 .with_max_total_size(100 * 1024 * 1024)
         )
-        .with_symlinks()
-        .with_hard_links()
+        .deny_permissions()  // Block set_permissions() calls
     )
 );
 
@@ -53,7 +52,7 @@ use anyfs::{QuotaLayer, FeatureGuardLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().allow_symlinks())  // Allows symlink() operation
+    .layer(FeatureGuardLayer::new().deny_permissions())
     .layer(TracingLayer::new());
 
 // BackendStack builder (fluent API)
@@ -61,12 +60,10 @@ use anyfs_container::BackendStack;
 
 let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .limited(|l| l.max_total_size(100 * 1024 * 1024))
-    .feature_gated(|g| g.allow_symlinks())  // Allows symlink() operation
+    .feature_gated(|g| g.deny_hard_links().deny_permissions())
     .traced()
     .into_container();
 ```
-
-> **Note:** `allow_symlinks()` permits calling the `symlink()` method. For virtual backends, use `backend.set_follow_symlinks(bool)` to control whether symlinks are followed during path resolution.
 
 ---
 

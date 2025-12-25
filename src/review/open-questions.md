@@ -163,40 +163,40 @@ strict-path: /escape is NOT within /root → DENIED
 
 This is secure against escape, but it's "follow and check" not "don't follow".
 
-### v1 Decision: Option 4 (Accept the Limitation)
+### v1 Decision: Accept the Limitation
 
-After analysis, **Option 4** is the pragmatic choice for v1:
+The design is straightforward:
 
-1. **Remove misleading "allow symlinks" from FeatureGuard** - `FeatureGuard` controls *operations* (can you call `symlink()`?), not path resolution behavior.
+1. **Virtual backends always support symlinks** - creating symlinks is just storing data.
 
-2. **Add `set_follow_symlinks(bool)` to virtual backends only:**
+2. **Virtual backends provide `set_follow_symlinks(bool)`** - the actual security control:
    ```rust
-   impl MemoryBackend {
-       pub fn set_follow_symlinks(&mut self, follow: bool);
-   }
-   impl SqliteBackend {
-       pub fn set_follow_symlinks(&mut self, follow: bool);
-   }
+   let mut backend = MemoryBackend::new();
+   backend.set_follow_symlinks(false);  // Symlinks not resolved during path operations
    ```
 
-3. **Document the difference clearly** in security docs (done - see `security.md` section 8).
+3. **VRootFsBackend cannot control symlink following** - the OS handles resolution. `strict-path` prevents escapes but cannot disable following entirely.
 
-4. **Accept that VRootFsBackend works differently** - `strict-path` provides escape protection, which is sufficient for most security use cases.
+4. **Everything works by default** - all operations (`symlink()`, `hard_link()`, `set_permissions()`) work out of the box. Use `FeatureGuard` middleware to opt-in to restrictions when needed.
 
-### Rationale
+### Summary
 
-- **Both approaches are secure against jail escapes** - just via different mechanisms
-- **Two traits adds complexity** most users won't benefit from
-- **Custom path resolution has TOCTOU vulnerabilities** - worse than accepting the limitation
-- **The narrow use case** ("no symlink following at all" on real filesystem) is rare enough to defer
+| Concern | Virtual Backends | VRootFsBackend |
+|---------|------------------|----------------|
+| Symlink creation | Always allowed (just data) | Always allowed (just data) |
+| Symlink following | `set_follow_symlinks(bool)` | OS controls (strict-path prevents escapes) |
+| Jail escape protection | `set_follow_symlinks(false)` | strict-path containment |
 
-### Future Considerations
+### Why VRootFsBackend Cannot Control Symlink Following
 
-If demand emerges for "no symlink following" on real filesystems:
+VRootFsBackend calls OS functions (`std::fs::read()`, etc.) which follow symlinks automatically. We don't implement path resolution - the OS does.
 
-1. **Option 1 (custom path resolution)** could be added as opt-in, with documented TOCTOU tradeoffs
-2. **Option 3 (capabilities)** could be added to let middleware query backend behavior
-3. **A separate `SafeArchiveExtractor`** utility could implement the strict semantics needed for archive extraction
+**Theoretical alternatives (not recommended):**
+- Walk path manually before each operation → TOCTOU race condition
+- Use `O_NOFOLLOW` flags → Only affects final component, platform-specific
+- FUSE mount → Way too complex for a library
+
+**The honest answer:** VRootFsBackend cannot disable symlink following. `strict-path` prevents escapes, but symlinks within the jail are followed by the OS. This is a fundamental limitation of wrapping a real filesystem.
 
 ---
 

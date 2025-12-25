@@ -53,15 +53,57 @@ Anyone can:
 |-------|----------------|
 | `VfsBackend` | Storage + filesystem semantics |
 | `Quota<B>` | Resource limits (size, count, depth) |
-| `FeatureGuard<B>` | Feature whitelist (symlinks, hardlinks) |
+| `FeatureGuard<B>` | Opt-in operation restrictions |
 | `PathFilter<B>` | Path-based access control |
 | `ReadOnly<B>` | Prevent all write operations |
 | `RateLimit<B>` | Limit operations per second |
 | `Tracing<B>` | Instrumentation / audit trail |
-| `DryRun<B>` | Log operations without executing |
-| `Cache<B>` | LRU cache for reads |
-| `Overlay<B1,B2>` | Union filesystem (base + upper) |
-| `FilesContainer<B>` | Ergonomic std::fs-aligned API |
+
+---
+
+## Design Principle: Predictable Defaults, Opt-in Security
+
+**`VfsBackend` mimics `std::fs` with predictable, permissive defaults.**
+
+The trait is a low-level interface that any backend can implement - memory, SQLite, real filesystem, network storage, etc. To maintain consistent behavior across all backends:
+
+- All operations work by default (`symlink()`, `hard_link()`, `set_permissions()`)
+- No security restrictions at the trait level
+- Behavior matches what you'd expect from a real filesystem
+
+**Why not secure-by-default at this layer?**
+
+1. **Predictability**: A backend should behave like a filesystem. Surprising restrictions break expectations.
+2. **Backend-agnostic**: The trait doesn't know if it's wrapping a sandboxed memory store or a real filesystem. Restrictions that make sense for one may not for another.
+3. **Composition**: Security is achieved by layering middleware, not by baking it into the storage layer.
+
+**Security is the responsibility of higher-level APIs:**
+
+| Layer | Security Responsibility |
+|-------|------------------------|
+| `VfsBackend` | None - pure filesystem semantics |
+| Middleware (`FeatureGuard`, `PathFilter`, etc.) | Opt-in restrictions |
+| `FilesContainer` or application code | Configure appropriate middleware |
+
+**Example: Secure AI Agent Sandbox**
+
+```rust
+// Application composes secure defaults
+let sandbox = FilesContainer::new(
+    PathFilter::new(
+        FeatureGuard::new(
+            Quota::new(MemoryBackend::new())
+                .with_max_total_size(50 * 1024 * 1024)
+        )
+        .deny_hard_links()
+        .deny_permissions()
+    )
+    .allow("/workspace/**")
+    .deny("**/.env")
+);
+```
+
+The backend is permissive. The application adds restrictions appropriate for its use case.
 
 ---
 
@@ -388,7 +430,7 @@ use anyfs::{SqliteBackend, QuotaLayer, FeatureGuardLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().allow_symlinks())  // Allows symlink() operation
+    .layer(FeatureGuardLayer::new().deny_permissions())  // Block set_permissions()
     .layer(TracingLayer::new());
 ```
 
@@ -404,13 +446,11 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
         .max_total_size(100 * 1024 * 1024)
         .max_file_size(10 * 1024 * 1024))
     .feature_gated(|g| g
-        .allow_symlinks()      // Allows symlink() operation
-        .allow_hard_links())   // Allows hard_link() operation
+        .deny_hard_links()      // Block hard_link() calls
+        .deny_permissions())    // Block set_permissions() calls
     .traced()
     .into_container();
 ```
-
-> **Note:** `allow_symlinks()` permits calling the `symlink()` method (creating symlinks). For virtual backends like `SqliteBackend`, use `set_follow_symlinks()` on the backend to control whether symlinks are followed during path resolution.
 
 ---
 

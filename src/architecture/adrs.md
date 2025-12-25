@@ -121,23 +121,26 @@ let backend = Tracing::new(
 
 ---
 
-## ADR-007: FeatureGuard for least-privilege
+## ADR-007: FeatureGuard for opt-in restrictions
 
-**Decision:** Dangerous operations (symlink creation, hard links, permission mutation) are disabled by default via `FeatureGuard<B>` middleware.
+**Decision:** By default, all operations work. `FeatureGuard<B>` middleware provides opt-in restrictions.
 
-**Configuration:**
-- `.with_symlinks()` - enable `symlink()` operation (creating symlinks)
-- `.with_hard_links()` - enable `hard_link()` operation
-- `.with_permissions()` - enable `set_permissions()` operation
+**Default behavior (no FeatureGuard):**
+- All operations work: `symlink()`, `hard_link()`, `set_permissions()`
 
-When disabled, operations return `VfsError::FeatureNotEnabled`.
+**Opt-in restrictions:**
+- `.deny_symlinks()` - block `symlink()` calls
+- `.deny_hard_links()` - block `hard_link()` calls
+- `.deny_permissions()` - block `set_permissions()` calls
 
-**Note:** `FeatureGuard` controls which *operations* are allowed, not path resolution behavior. For virtual backends (Memory, SQLite), use `set_follow_symlinks()` on the backend to control whether symlinks are followed during path resolution.
+When blocked, operations return `VfsError::FeatureNotEnabled`.
+
+**Symlink following:** Controlled separately via `set_follow_symlinks(bool)` on virtual backends. VRootFsBackend delegates to OS (strict-path prevents escapes).
 
 **Why:**
-- Reduces attack surface by default.
-- Explicit opt-in for dangerous operations.
-- Separate from backend - works with any backend.
+- Simple default: everything works out of the box.
+- Security is opt-in via middleware composition.
+- Clear separation: FeatureGuard blocks operations, backend settings control behavior.
 
 ---
 

@@ -86,10 +86,8 @@ For Axum-style composition:
 ```rust
 let fs = FilesContainer::new(SqliteBackend::open("data.db")?)
     .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(FeatureGuardLayer::new().allow_symlinks());  // Allows symlink() operation
+    .layer(FeatureGuardLayer::new().deny_hard_links());  // Block hard_link() calls
 ```
-
-**Note:** `allow_symlinks()` permits calling the `symlink()` method. For virtual backends, use `set_follow_symlinks()` to control whether symlinks are followed during path resolution.
 
 ---
 

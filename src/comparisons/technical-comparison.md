@@ -122,7 +122,7 @@ AnyFS middleware can **intercept, transform, and control** operations:
 |------------|------------|--------|
 | `Quota` | Writes | Reject if over limit |
 | `PathFilter` | All ops | Block denied paths |
-| `FeatureGuard` | `symlink()`, `hard_link()`, etc. | Block disabled operations |
+| `FeatureGuard` | Configurable operations | Block via `.deny_*()` methods |
 | `RateLimit` | All ops | Throttle per second |
 | `ReadOnly` | Writes | Block all writes |
 | `Tracing` | All ops | Log with tracing crate |
