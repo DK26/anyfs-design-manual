@@ -1,11 +1,13 @@
 # Open Questions & Future Considerations
 
 **Status:** Under Discussion
-**Last Updated:** 2025-12-24
+**Last Updated:** 2025-12-28
 
 ---
 
 This document captures open questions and design considerations that may influence future development of AnyFS.
+
+> **Note:** Many items originally in this document have been resolved and implemented. See the Architecture Decision Records for final decisions.
 
 ---
 
@@ -47,13 +49,13 @@ The security feature is **controlling symlink resolution**, not symlink creation
 Walk each path component manually using `lstat` (symlink_metadata):
 
 ```rust
-fn resolve_no_follow(&self, path: &Path) -> Result<PathBuf, VfsError> {
+fn resolve_no_follow(&self, path: &Path) -> Result<PathBuf, FsError> {
     let mut current = self.root.clone();
     for component in path.components() {
         current = current.join(component);
         let meta = std::fs::symlink_metadata(&current)?;
         if meta.file_type().is_symlink() {
-            return Err(VfsError::SymlinkNotAllowed { path: current });
+            return Err(FsError::SymlinkNotAllowed { path: current });
         }
     }
     Ok(current)
@@ -71,12 +73,12 @@ fn resolve_no_follow(&self, path: &Path) -> Result<PathBuf, VfsError> {
 
 ```rust
 /// Virtual backends where we control everything
-pub trait VirtualVfsBackend: VfsBackend {
+pub trait VirtualFs: Fs {
     fn set_symlink_resolution(&mut self, enabled: bool);
 }
 
 /// Real filesystem backends where OS controls symlink resolution
-pub trait RealFsBackend: VfsBackend {
+pub trait RealFs: Fs {
     // OS controls symlinks, we just ensure containment
 }
 ```
@@ -91,7 +93,7 @@ pub trait RealFsBackend: VfsBackend {
 #### Option 3: Capability Query
 
 ```rust
-pub trait VfsBackend {
+pub trait Fs {
     fn capabilities(&self) -> Capabilities;
     // ...
 }
@@ -228,7 +230,7 @@ VRootFsBackend calls OS functions (`std::fs::read()`, etc.) which follow symlink
 - Encrypt blobs with a user-provided key
 - Use a remote object store with encryption at rest
 
-This is an implementation detail of the backend, not visible to the `FilesContainer` API.
+This is an implementation detail of the backend, not visible to the `FileStorage` API.
 
 ---
 
@@ -239,14 +241,9 @@ This is an implementation detail of the backend, not visible to the `FilesContai
 **Considerations:**
 - AgentFS (see comparison below) provides audit logging as a core feature
 - Hooks add complexity but enable powerful use cases
-- Could be implemented as a middleware pattern around FilesContainer
+- Could be implemented as a middleware pattern around FileStorage
 
-**Options:**
-1. **No hooks in v1**: Keep it simple. Users can wrap FilesContainer in their own type.
-2. **Event emitter**: FilesContainer emits events that users can subscribe to
-3. **Middleware trait**: Allow wrapping backends with cross-cutting concerns
-
-**Recommendation:** Defer to v2. Users can wrap `FilesContainer` or backends for now.
+**Resolution:** Implemented via `Tracing` middleware. Users can also wrap `FileStorage` or backends for custom hooks.
 
 ---
 
@@ -283,15 +280,15 @@ AgentFS is an **agent runtime**, not just a filesystem. It provides three integr
 ### Relationship Options
 
 **AnyFS could be used BY AgentFS:**
-- AgentFS could implement its filesystem portion using `VfsBackend`
+- AgentFS could implement its filesystem portion using `Fs` trait
 - Our middleware (Quota, PathFilter, etc.) would work with their system
 
 **AgentFS-compatible backend for AnyFS:**
-- Someone could implement `VfsBackend` using AgentFS's SQLite schema
+- Someone could implement `Fs` using AgentFS's SQLite schema
 - Would enable interop with AgentFS tooling
 
 **What we should NOT do:**
-- Add KV store to `VfsBackend` (different abstraction, scope creep)
+- Add KV store to `Fs` (different abstraction, scope creep)
 - Add tool call auditing to core trait (that's what `Tracing` middleware is for)
 
 ### When to Use Which
@@ -341,7 +338,7 @@ The [vfs crate](https://docs.rs/vfs/) provides virtual filesystem abstractions w
 
 ## FUSE Mount Support
 
-**Question:** Should AnyFS support mounting as a FUSE filesystem?
+**Status:** Resolved - Implemented in `anyfs-mount`
 
 **What is FUSE?**
 [FUSE (Filesystem in Userspace)](https://en.wikipedia.org/wiki/Filesystem_in_Userspace) allows implementing filesystems in userspace rather than kernel code. It enables:
@@ -349,28 +346,37 @@ The [vfs crate](https://docs.rs/vfs/) provides virtual filesystem abstractions w
 - Using standard Unix tools (ls, cat, etc.) on AnyFS containers
 - Integration with existing workflows
 
-**Considerations:**
-- FUSE requires platform-specific code (Linux, macOS via macFUSE)
-- Adds significant complexity
-- Performance overhead vs direct API access
-- Security implications of exposing to OS
+**Resolution:** Implemented via `anyfs-mount` crate with cross-platform support:
+- Linux: FUSE (native)
+- macOS: macFUSE
+- Windows: WinFsp
 
-**Recommendation:** Not in v1. If there's demand, we could add a `anyfs-fuse` crate that mounts a FilesContainer as a FUSE filesystem. This would be a separate, optional layer.
+See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 
 ---
 
 ## Type-System Protection for Cross-Container Operations
 
+**Status:** Resolved - Implemented via marker types
+
 **Question:** Should we use the type system to prevent accidentally mixing data between containers?
 
-**Example concern:** Reading from Container A and writing to Container B without explicit acknowledgment.
+**Resolution:** Implemented via `FileStorage<B, M>` where `M` is a marker type:
 
-**Options:**
-1. **Marker generics**: `FilesContainer<B, Marker>` where Marker distinguishes instances
-2. **Opaque handles**: File content wrapped in typed handles tied to origin container
-3. **No protection**: Trust the user to wire things correctly
+```rust
+struct Sandbox;
+struct UserData;
 
-**Recommendation:** Defer. The complexity may not be worth it for most use cases. Users who need this can implement their own type wrappers.
+let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+
+fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { /* only accepts Sandbox */ }
+
+process_sandbox(&sandbox);   // OK
+process_sandbox(&userdata);  // Compile error!
+```
+
+See [FileStorage<B, M>](../traits/files-container.md) for details.
 
 ---
 
@@ -403,7 +409,7 @@ Based on review feedback, the following naming concerns were raised:
 
 ## Async Support
 
-**Question:** Should VfsBackend be async?
+**Question:** Should `Fs` traits be async?
 
 **Decision:** Sync-first, async-ready (see ADR-010).
 
@@ -413,13 +419,13 @@ Based on review feedback, the following naming concerns were raised:
 - Rust 1.75+ has native async traits, so adding later is low-cost
 
 **Async-ready design:**
-- Trait requires `Send` - compatible with async executors
-- Return types are `Result<T, VfsError>` - works with async
+- Traits require `Send` - compatible with async executors
+- Return types are `Result<T, FsError>` - works with async
 - No hidden blocking state
 - Methods are stateless per-call
 
-**Future path:** When needed (e.g., S3/network backends), add parallel `AsyncVfsBackend` trait:
-- Separate trait, not replacing `VfsBackend`
+**Future path:** When needed (e.g., S3/network backends), add parallel `AsyncFs` trait:
+- Separate trait, not replacing `Fs`
 - Blanket impl possible via `spawn_blocking`
 - No breaking changes to existing sync API
 
@@ -432,22 +438,22 @@ Based on review feedback, the following naming concerns were raised:
 | Symlink security | Virtual backends: `set_follow_symlinks()`. VRootFsBackend: `strict-path` escapes only. |
 | Path resolution | Virtual = lexical; VRootFs = OS |
 | Compression/encryption | Backend responsibility |
-| Hooks/callbacks | Defer to v2 |
-| FUSE mount | Possible with current trait (has truncate, fsync, statfs) |
-| Type-system protection | Defer |
+| Hooks/callbacks | `Tracing` middleware |
+| FUSE mount | `anyfs-mount` crate (cross-platform) |
+| Type-system protection | `FileStorage<B, M>` marker types |
 | POSIX compatibility | Not a goal |
-| `truncate` | Added to VfsBackend |
-| `sync` / `fsync` | Added to VfsBackend |
+| `truncate` | Added to `FsWrite` |
+| `sync` / `fsync` | Added to `FsSync` |
 | Async support | Sync-first, async-ready (ADR-010) |
 | Layer trait | Tower-style composition (ADR-011) |
 | Logging | Tracing with tracing ecosystem (ADR-012) |
-| Extension methods | VfsBackendExt (ADR-013) |
+| Extension methods | `FsExt` (ADR-013) |
 | Zero-copy bytes | Optional `bytes` feature (ADR-014) |
-| Error context | Contextual VfsError (ADR-015) |
-| BackendStack builder | Fluent API in anyfs |
-| Path-based access control | PathFilter middleware (ADR-016) |
-| Read-only mode | ReadOnly middleware (ADR-017) |
-| Rate limiting | RateLimit middleware (ADR-018) |
-| Dry-run testing | DryRun middleware (ADR-019) |
-| Read caching | Cache middleware (ADR-020) |
-| Union filesystem | Overlay middleware (ADR-021) |
+| Error context | Contextual `FsError` (ADR-015) |
+| BackendStack builder | Fluent API via `.layer()` |
+| Path-based access control | `PathFilter` middleware (ADR-016) |
+| Read-only mode | `ReadOnly` middleware (ADR-017) |
+| Rate limiting | `RateLimit` middleware (ADR-018) |
+| Dry-run testing | `DryRun` middleware (ADR-019) |
+| Read caching | `Cache` middleware (ADR-020) |
+| Union filesystem | `Overlay` middleware (ADR-021) |
