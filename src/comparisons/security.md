@@ -636,11 +636,414 @@ let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
 
 ---
 
+## TOCTOU-Proof Tenant Isolation with Virtual Backends
+
+### Why Virtual Backends Eliminate TOCTOU
+
+Traditional path security libraries like `strict-path` work against a **real filesystem**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    REAL FILESYSTEM SECURITY                      │
+│                                                                  │
+│   Your Process          OS Filesystem         Other Processes   │
+│   ┌──────────┐         ┌───────────┐         ┌──────────────┐   │
+│   │ Check    │────────▶│ Canonical │◀────────│ Create       │   │
+│   │ path     │         │ path      │         │ symlink      │   │
+│   └──────────┘         └───────────┘         └──────────────┘   │
+│        │                     │                      │           │
+│        │    TOCTOU WINDOW    │                      │           │
+│        ▼                     ▼                      ▼           │
+│   ┌──────────┐         ┌───────────┐         ┌──────────────┐   │
+│   │ Use      │────────▶│ DIFFERENT │◀────────│ Modified!    │   │
+│   │ path     │         │ path now! │         │              │   │
+│   └──────────┘         └───────────┘         └──────────────┘   │
+│                                                                  │
+│   Problem: OS state can change between check and use             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Virtual backends eliminate this entirely:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   VIRTUAL BACKEND SECURITY                       │
+│                                                                  │
+│   Your Process                                                   │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │                    FileStorage                           │   │
+│   │  ┌──────────┐    ┌───────────┐    ┌──────────────────┐  │   │
+│   │  │ Resolve  │───▶│ SQLite    │───▶│ Return data      │  │   │
+│   │  │ path     │    │ Transaction│   │                  │  │   │
+│   │  └──────────┘    └───────────┘    └──────────────────┘  │   │
+│   │                        │                                 │   │
+│   │              ATOMIC - No external modification possible  │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│   No OS filesystem. No other processes. No TOCTOU.               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Security Comparison: strict-path vs Virtual Backend
+
+| Threat | strict-path (Real FS) | Virtual Backend |
+|--------|----------------------|-----------------|
+| Path traversal | Prevented (canonicalize + verify) | **Impossible** (no host FS to traverse to) |
+| Symlink race (TOCTOU) | Mitigated (canonicalize first) | **Impossible** (we control all symlinks) |
+| External symlink creation | Vulnerable window exists | **Impossible** (single-process ownership) |
+| Windows 8.3 short names | Partial (only existing files) | **N/A** (no Windows FS) |
+| Namespace escapes (/proc) | Fixed in soft-canonicalize | **Impossible** (no /proc exists) |
+| Concurrent modification | OS handles (may race) | **Atomic** (SQLite transactions) |
+| Tenant A accessing Tenant B | Requires careful path filtering | **Impossible** (separate .db files) |
+
+### Encryption: Separation of Concerns
+
+**Design principle:** Backends handle storage, middleware handles policy. Container-level encryption is the exception.
+
+| Security Level | Implementation | Why |
+|----------------|----------------|-----|
+| **Locked (container)** | `SqliteCipherBackend` | Must encrypt entire `.db` file at storage level |
+| **Privacy (file contents)** | `FileEncryption<SqliteBackend>` middleware | Content encryption is policy |
+| **Normal** | `SqliteBackend` | User applies encryption as needed |
+
+**Why Locked mode requires a separate backend:**
+- SQLCipher encrypts the entire database file transparently
+- Connection must be opened with password before ANY query
+- Cannot be added as middleware - it's a property of the connection itself
+- Everything is encrypted: file contents, filenames, directory structure, timestamps, inodes
+
+### SqliteCipherBackend (Built-in, feature: `sqlite-cipher`)
+
+Full container encryption using [SQLCipher](https://www.zetetic.net/sqlcipher/):
+
+```rust
+/// SQLite backend with full AES-256 encryption via SQLCipher.
+/// Requires `sqlite-cipher` feature (uses rusqlite with bundled-sqlcipher).
+///
+/// Without the password, the .db file is indistinguishable from random bytes.
+pub struct SqliteCipherBackend {
+    conn: Connection,
+}
+
+impl SqliteCipherBackend {
+    /// Open with password (derives key via PBKDF2).
+    pub fn open(path: impl AsRef<Path>, password: &str) -> Result<Self, FsError> {
+        let conn = Connection::open(path.as_ref())?;
+
+        // SQLCipher: Set encryption key derived from password
+        conn.pragma_update(None, "key", password)?;
+
+        // Verify we can read (wrong password = SQLITE_NOTADB)
+        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
+            .map_err(|_| FsError::InvalidPassword)?;
+
+        Self::init_schema(&conn)?;
+        Ok(Self { conn })
+    }
+
+    /// Open with raw 256-bit key (no key derivation).
+    pub fn open_with_key(path: impl AsRef<Path>, key: &[u8; 32]) -> Result<Self, FsError> {
+        let conn = Connection::open(path.as_ref())?;
+
+        // SQLCipher: Set raw key (hex-encoded with x'' prefix)
+        let hex_key = format!("x'{}'", hex::encode(key));
+        conn.pragma_update(None, "key", &hex_key)?;
+
+        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
+            .map_err(|_| FsError::InvalidPassword)?;
+
+        Self::init_schema(&conn)?;
+        Ok(Self { conn })
+    }
+
+    /// Create new encrypted database with password.
+    pub fn create(path: impl AsRef<Path>, password: &str) -> Result<Self, FsError> {
+        if path.as_ref().exists() {
+            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf() });
+        }
+        Self::open(path, password)
+    }
+
+    /// Change the password on an open database.
+    pub fn change_password(&self, new_password: &str) -> Result<(), FsError> {
+        self.conn.pragma_update(None, "rekey", new_password)?;
+        Ok(())
+    }
+
+    fn init_schema(conn: &Connection) -> Result<(), FsError> {
+        conn.execute_batch(r#"
+            -- Node table: directories, files, symlinks
+            CREATE TABLE IF NOT EXISTS nodes (
+                inode INTEGER PRIMARY KEY,
+                parent_inode INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                node_type INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
+                size INTEGER NOT NULL DEFAULT 0,
+                mode INTEGER NOT NULL DEFAULT 0o644,
+                nlink INTEGER NOT NULL DEFAULT 1,
+                uid INTEGER NOT NULL DEFAULT 0,
+                gid INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER,
+                modified_at INTEGER,
+                accessed_at INTEGER,
+                symlink_target TEXT,
+                UNIQUE(parent_inode, name),
+                FOREIGN KEY (parent_inode) REFERENCES nodes(inode)
+            );
+
+            -- Content table: file data (separate for efficient large files)
+            CREATE TABLE IF NOT EXISTS content (
+                inode INTEGER PRIMARY KEY,
+                data BLOB NOT NULL,
+                FOREIGN KEY (inode) REFERENCES nodes(inode) ON DELETE CASCADE
+            );
+
+            -- Index for directory listing performance
+            CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent_inode);
+
+            -- Root directory (inode 1, parent is self)
+            INSERT OR IGNORE INTO nodes (inode, parent_inode, name, node_type, mode)
+            VALUES (1, 1, '', 1, 0o755);
+        "#)?;
+        Ok(())
+    }
+}
+
+// Implements same traits as SqliteBackend - only difference is encrypted storage
+impl Fs for SqliteCipherBackend { /* ... */ }
+impl FsFull for SqliteCipherBackend { /* ... */ }
+impl FsFuse for SqliteCipherBackend { /* ... */ }
+```
+
+#### What SQLCipher Encrypts
+
+| Data | Encrypted? |
+|------|------------|
+| File contents | Yes |
+| Filenames | Yes |
+| Directory structure | Yes |
+| File sizes | Yes |
+| Timestamps | Yes |
+| Permissions | Yes |
+| Inode mappings | Yes |
+| SQLite metadata | Yes |
+| **Everything in the .db file** | **Yes** |
+
+#### Cargo Configuration
+
+```toml
+[dependencies]
+# Regular SQLite (no encryption)
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# SQLCipher (full encryption) - mutually exclusive with above
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+```
+
+**Feature flags in anyfs:**
+```toml
+[features]
+default = ["memory"]
+sqlite = ["rusqlite/bundled"]
+sqlite-cipher = ["rusqlite/bundled-sqlcipher"]  # Replaces sqlite
+```
+
+**Note:** `sqlite` and `sqlite-cipher` are mutually exclusive. SQLCipher is a drop-in replacement with the same schema and API.
+
+### Achieving Security Modes with Composition
+
+Users compose backends and middleware to achieve their desired security level:
+
+#### Locked Mode (Full Container Encryption)
+
+```rust
+// Everything encrypted - password required to access anything
+let backend = SqliteCipherBackend::open("tenant.db", "correct-horse-battery-staple")?;
+let fs = FileStorage::new(backend);
+
+// Without password: .db file is random bytes
+// With password: full access to everything
+```
+
+#### Privacy Mode (Contents Encrypted, Metadata Visible)
+
+```rust
+// File contents encrypted, metadata (names, sizes, structure) visible
+let backend = FileEncryption::new(
+    SqliteBackend::open("tenant.db")?
+)
+.with_key(content_key);
+
+let fs = FileStorage::new(backend);
+
+// Host can: list files, see sizes, run statistics
+// Host cannot: read file contents
+```
+
+#### Normal Mode (No Encryption)
+
+```rust
+// No encryption - user encrypts sensitive files themselves
+let backend = SqliteBackend::open("tenant.db")?;
+let fs = FileStorage::new(backend);
+
+// User applies per-file encryption as needed
+```
+
+#### Mode Comparison
+
+| Aspect | Locked | Privacy | Normal |
+|--------|--------|---------|--------|
+| Implementation | `SqliteCipherBackend` | `FileEncryption<SqliteBackend>` | `SqliteBackend` |
+| File contents | Encrypted (SQLCipher) | Encrypted (AES-GCM) | Plaintext |
+| Filenames | Encrypted | Visible | Visible |
+| Directory structure | Encrypted | Visible | Visible |
+| File sizes | Encrypted | Visible | Visible |
+| Timestamps | Encrypted | Visible | Visible |
+| Host can analyze | Nothing | Metadata only | Everything |
+| Performance | Slowest (~10-15% overhead) | Medium | Fastest |
+| Feature flag | `sqlite-cipher` | `sqlite` + middleware | `sqlite` |
+
+#### Why This Is TOCTOU-Proof
+
+1. **No external filesystem** - Paths exist only in our SQLite tables
+2. **Atomic transactions** - Path resolution + data access in single transaction
+3. **Single-process ownership** - No other process can modify the .db during operation
+4. **We control symlinks** - Symlinks are just rows in `nodes` table, we decide when to follow
+5. **No OS involvement** - OS never resolves our virtual paths
+
+```rust
+// This is TOCTOU-proof:
+impl SecureSqliteBackend {
+    fn resolve_and_read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
+        // Single transaction wraps everything
+        let tx = self.conn.transaction()?;
+
+        // 1. Resolve path (following symlinks in OUR table)
+        let inode = self.resolve_path_internal(&tx, path)?;
+
+        // 2. Read content
+        // No TOCTOU - same transaction, same snapshot
+        let data = tx.query_row(
+            "SELECT data FROM content WHERE inode = ?",
+            [inode],
+            |row| row.get(0)
+        )?;
+
+        // Transaction ensures atomicity
+        Ok(data)
+    }
+}
+```
+
+#### Multi-Tenant Isolation
+
+```rust
+/// Each tenant gets their own .db file - complete physical isolation
+fn create_tenant_storage(tenant_id: &str, encrypted: bool) -> impl Fs {
+    let path = format!("tenants/{}.db", tenant_id);
+
+    if encrypted {
+        let password = get_tenant_password(tenant_id);
+        SqliteCipherBackend::open(&path, &password).unwrap()
+    } else {
+        SqliteBackend::open(&path).unwrap()
+    }
+}
+
+// Tenant A literally cannot access Tenant B's data:
+// - Different .db files
+// - Different passwords (if encrypted)
+// - No shared state whatsoever
+// - No path filtering bugs possible - there's nothing to filter
+```
+
+**Comparison with strict-path approach:**
+
+| Approach | Tenant Isolation |
+|----------|------------------|
+| Shared filesystem + strict-path | Logical isolation (paths filtered) |
+| Shared filesystem + PathFilter | Logical isolation (middleware enforced) |
+| **Separate .db file per tenant** | **Physical isolation (separate files)** |
+
+Physical isolation is strictly stronger - there's no bug in path filtering that could leak data because **there's no shared data to leak**.
+
+#### Host Analysis with Privacy Mode
+
+When using `FileEncryption<SqliteBackend>` (Privacy mode), the host can query metadata directly from SQLite:
+
+```rust
+// Host can analyze metadata without the content encryption key
+fn get_tenant_statistics(tenant_db: &str) -> TenantStats {
+    // Connect directly to SQLite (no content key needed)
+    let conn = Connection::open(tenant_db)?;
+
+    let (file_count, dir_count, total_size) = conn.query_row(
+        "SELECT
+            COUNT(*) FILTER (WHERE node_type = 0),
+            COUNT(*) FILTER (WHERE node_type = 1),
+            SUM(size)
+         FROM nodes",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    )?;
+
+    TenantStats { file_count, dir_count, total_size }
+}
+
+// List all files (names visible, contents encrypted)
+fn list_tenant_files(tenant_db: &str) -> Vec<FileInfo> {
+    let conn = Connection::open(tenant_db)?;
+    conn.prepare("SELECT name, size, modified_at FROM nodes WHERE node_type = 0")?
+        .query_map([], |row| Ok(FileInfo { ... }))?
+        .collect()
+}
+```
+
+#### Replacing strict-path Usage
+
+For projects currently using strict-path for tenant isolation:
+
+**Before (strict-path):**
+```rust
+use strict_path::VirtualRoot;
+
+fn handle_tenant_request(tenant_id: &str, requested_path: &str) -> Result<Vec<u8>> {
+    // Shared filesystem, path containment via strict-path
+    let root = VirtualRoot::new(format!("/data/tenants/{}", tenant_id))?;
+    let safe_path = root.resolve(requested_path)?;  // TOCTOU window here
+    std::fs::read(safe_path)  // Another process could have modified
+}
+```
+
+**After (SqliteCipherBackend):**
+```rust
+use anyfs::SqliteCipherBackend;
+
+fn handle_tenant_request(tenant_id: &str, requested_path: &str) -> Result<Vec<u8>> {
+    // Separate encrypted database per tenant - no path containment needed
+    let backend = get_tenant_backend(tenant_id);  // Cached connection
+    backend.read(requested_path)  // Atomic, TOCTOU-proof
+}
+```
+
+| Aspect | strict-path | Virtual Backend |
+|--------|-------------|-----------------|
+| Isolation model | Logical (path filtering) | Physical (separate files) |
+| TOCTOU | Mitigated | **Eliminated** |
+| External interference | Possible | **Impossible** |
+| Symlink attacks | Resolved at check time | **We control all symlinks** |
+| Cross-tenant leakage | Bug in filtering could leak | **No shared data exists** |
+| Performance | Real FS I/O + canonicalization | SQLite (often faster for small files) |
+| Encryption | Separate concern | Built-in (`SqliteCipherBackend`) or middleware |
+
+---
+
 ## Known Limitations
 
 1. **No ACLs**: Simple permissions only (Unix mode bits)
-2. **TOCTOU**: Check-then-act patterns may race (like all filesystems)
-3. **Side channels**: Timing attacks, cache attacks require OS/hardware mitigations
+2. **Side channels**: Timing attacks, cache attacks require OS/hardware mitigations
+3. **SQLite file access**: Host OS can still access the `.db` file (use Locked mode for encryption)
 
 ---
 

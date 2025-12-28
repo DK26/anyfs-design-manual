@@ -214,6 +214,15 @@ Each backend implements the traits it supports:
   - FileStorage handles path resolution (symlink-aware)
   - Inode source: SQLite row IDs (`INTEGER PRIMARY KEY`)
   - `set_follow_symlinks(bool)` - control symlink following during resolution
+- `sqlite-cipher` (optional): `SqliteCipherBackend`
+  - Implements: `FsFuse` (same as SqliteBackend)
+  - Full AES-256 encryption via [SQLCipher](https://www.zetetic.net/sqlcipher/)
+  - Password-protected: `.db` file is random bytes without password
+  - Uses `rusqlite` with `bundled-sqlcipher` feature
+  - `open(path, password)` - derive key from password (PBKDF2)
+  - `open_with_key(path, key)` - use raw 256-bit key
+  - `change_password(new_password)` - re-key database
+  - **Mutually exclusive with `sqlite` feature** (different SQLite builds)
 - `stdfs` (optional): `StdFsBackend` - direct `std::fs` delegation
   - Implements: `FsPosix` (all traits including Layer 4) + `SelfResolving`
   - Implements `SelfResolving` (OS handles resolution)

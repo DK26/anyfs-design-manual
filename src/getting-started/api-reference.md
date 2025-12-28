@@ -251,10 +251,15 @@ fs.remove_dir_all("/path")?;             // Recursive
 fs.rename("/from", "/to")?;
 fs.copy("/from", "/to")?;
 
-// Links (requires Restrictions)
+// Links
 fs.symlink("/target", "/link")?;
 fs.hard_link("/original", "/link")?;
 fs.read_link("/link")?;                  // -> PathBuf
+fs.symlink_metadata("/link")?;           // Metadata of link itself, not target
+
+// Symlink following (virtual backends only)
+backend.set_follow_symlinks(false);      // Don't follow symlinks during resolution
+backend.set_follow_symlinks(true);       // Follow symlinks (default)
 
 // Permissions (requires Restrictions)
 fs.set_permissions("/path", perms)?;
@@ -391,9 +396,34 @@ match result {
 | Type | Feature | Description |
 |------|---------|-------------|
 | `MemoryBackend` | `memory` (default) | In-memory |
-| `SqliteBackend` | `sqlite` | Persistent |
+| `SqliteBackend` | `sqlite` | Persistent single-file database |
+| `SqliteCipherBackend` | `sqlite-cipher` | Encrypted SQLite (AES-256 via SQLCipher) |
 | `StdFsBackend` | `stdfs` | Direct `std::fs` (no containment) |
 | `VRootFsBackend` | `vrootfs` | Host filesystem (with containment) |
+
+**Note:** `sqlite` and `sqlite-cipher` are mutually exclusive features.
+
+---
+
+## SqliteCipherBackend Methods
+
+```rust
+use anyfs::SqliteCipherBackend;
+
+// Open with password (key derived via PBKDF2)
+let backend = SqliteCipherBackend::open("encrypted.db", "password")?;
+
+// Open with raw 256-bit key
+let backend = SqliteCipherBackend::open_with_key("encrypted.db", &key)?;
+
+// Create new encrypted database
+let backend = SqliteCipherBackend::create("new.db", "password")?;
+
+// Change password on open database
+backend.change_password("new-password")?;
+```
+
+Without the correct password, the `.db` file appears as random bytes.
 
 ---
 
