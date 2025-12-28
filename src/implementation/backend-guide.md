@@ -670,7 +670,7 @@ impl<B: FsDir> FsDir for Counter<B> {
     // ... implement FsDir methods
 }
 
-// Counter<B> now implements Vfs when B: Vfs (blanket impl)
+// Counter<B> now implements Fs when B: Fs (blanket impl)
 ```
 
 **Usage:**
@@ -897,7 +897,7 @@ impl<B: FsDir> FsDir for Encrypted<B> {
     // ... delegate other FsDir methods
 }
 
-// Encrypted<B> now implements Vfs when B: Vfs (blanket impl)
+// Encrypted<B> now implements Fs when B: Fs (blanket impl)
 
 /// Layer for creating Encrypted middleware.
 pub struct EncryptedLayer {
@@ -910,7 +910,7 @@ impl EncryptedLayer {
     }
 }
 
-impl<B: Vfs> Layer<B> for EncryptedLayer {
+impl<B: Fs> Layer<B> for EncryptedLayer {
     type Backend = Encrypted<B>;
 
     fn layer(self, backend: B) -> Self::Backend {

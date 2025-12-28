@@ -850,7 +850,7 @@ fs.write(PathBuf::from("/file.txt"), data)?;
 
 ## Path Resolution
 
-Path resolution (walking directory structure, following symlinks) operates on the **`Vfs` abstraction**, not reimplemented per-backend.
+Path resolution (walking directory structure, following symlinks) operates on the **`Fs` abstraction**, not reimplemented per-backend.
 
 ### Why Abstract Path Resolution?
 
@@ -902,7 +902,7 @@ impl SelfResolving for VRootFsBackend {}
 
 ```rust
 impl<M> FileStorage<M> {
-    pub fn new(backend: impl Vfs + 'static) -> FileStorage {
+    pub fn new(backend: impl Fs + 'static) -> FileStorage {
         // Resolution applied automatically if backend doesn't implement SelfResolving
     }
 }
@@ -952,25 +952,11 @@ let sandbox = MemoryBackend::new()
 
 ## Extension Traits (in `anyfs-backend`)
 
-The `FsExt` trait provides convenience methods for any `Vfs` backend:
+The `FsExt` trait provides convenience methods for any `Fs` backend:
 
 ```rust
-use serde::{Serialize, de::DeserializeOwned};
-
 /// Extension methods for Fs (auto-implemented for all backends).
 pub trait FsExt: Fs {
-    /// Read and deserialize JSON.
-    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError> {
-        let bytes = self.read(path)?;
-        serde_json::from_slice(&bytes).map_err(|e| FsError::Deserialization(e.to_string()))
-    }
-
-    /// Serialize and write JSON.
-    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError> {
-        let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
-        self.write(path, &bytes)
-    }
-
     /// Check if path is a file.
     fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
         self.metadata(path).map(|m| m.file_type == FileType::File)
@@ -980,10 +966,41 @@ pub trait FsExt: Fs {
     fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
         self.metadata(path).map(|m| m.file_type == FileType::Directory)
     }
+
+    // JSON methods require `serde` feature (see below)
+    #[cfg(feature = "serde")]
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError>;
+    #[cfg(feature = "serde")]
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
 }
 
 // Blanket implementation for all Fs backends
 impl<B: Fs> FsExt for B {}
+```
+
+### JSON Methods (feature: `serde`)
+
+The `read_json` and `write_json` methods require the `serde` feature:
+
+```toml
+anyfs-backend = { version = "0.1", features = ["serde"] }
+```
+
+```rust
+use serde::{Serialize, de::DeserializeOwned};
+
+#[cfg(feature = "serde")]
+impl<B: Fs> FsExt for B {
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError> {
+        let bytes = self.read(path)?;
+        serde_json::from_slice(&bytes).map_err(|e| FsError::Deserialization(e.to_string()))
+    }
+
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError> {
+        let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
+        self.write(path, &bytes)
+    }
+}
 ```
 
 Users can define their own extension traits for domain-specific operations.
@@ -1079,6 +1096,11 @@ pub enum FsError {
     RateLimitExceeded {
         limit: u32,
         window_secs: u64,
+    },
+
+    /// Operation not supported by this backend.
+    NotSupported {
+        operation: &'static str,
     },
 
     /// Serialization error (from FsExt).

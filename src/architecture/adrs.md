@@ -8,21 +8,21 @@ This file captures the decisions for the current AnyFS design.
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| ADR-001 | Path-based `VfsBackend` trait | Accepted |
+| ADR-001 | Path-based `Fs` trait | Accepted |
 | ADR-002 | Two-crate structure | Accepted |
 | ADR-003 | `impl AsRef<Path>` for all path parameters | Accepted |
 | ADR-004 | Tower-style middleware pattern | Accepted |
 | ADR-005 | `std::fs`-aligned method names | Accepted |
 | ADR-006 | Quota for quota enforcement | Accepted |
 | ADR-007 | Restrictions for least-privilege | Accepted |
-| ADR-008 | FilesContainer as thin ergonomic wrapper | Accepted |
+| ADR-008 | FileStorage as thin ergonomic wrapper | Accepted |
 | ADR-009 | Built-in backends are feature-gated | Accepted |
 | ADR-010 | Sync-first, async-ready design | Accepted |
 | ADR-011 | Layer trait for standardized composition | Accepted |
 | ADR-012 | Tracing for instrumentation | Accepted |
-| ADR-013 | VfsBackendExt for extension methods | Accepted |
+| ADR-013 | FsExt for extension methods | Accepted |
 | ADR-014 | Optional Bytes support | Accepted |
-| ADR-015 | Contextual VfsError | Accepted |
+| ADR-015 | Contextual FsError | Accepted |
 | ADR-016 | PathFilter for path-based access control | Accepted |
 | ADR-017 | ReadOnly for preventing writes | Accepted |
 | ADR-018 | RateLimit for operation throttling | Accepted |
@@ -32,7 +32,7 @@ This file captures the decisions for the current AnyFS design.
 
 ---
 
-## ADR-001: Path-based `VfsBackend` trait
+## ADR-001: Path-based `Fs` trait
 
 **Decision:** Backends implement a path-based trait aligned with `std::fs` method naming.
 
@@ -58,7 +58,7 @@ This file captures the decisions for the current AnyFS design.
 
 ## ADR-003: `impl AsRef<Path>` for all path parameters
 
-**Decision:** Both `VfsBackend` and `FilesContainer` accept `impl AsRef<Path>` for all path parameters.
+**Decision:** Both `Fs` traits and `FileStorage` accept `impl AsRef<Path>` for all path parameters.
 
 **Why:**
 - Aligned with `std::fs` API conventions.
@@ -69,7 +69,7 @@ This file captures the decisions for the current AnyFS design.
 
 ## ADR-004: Tower-style middleware pattern
 
-**Decision:** Use composable middleware (decorator pattern) for cross-cutting concerns like limits, logging, and feature gates. Each middleware implements `VfsBackend` by wrapping another `VfsBackend`.
+**Decision:** Use composable middleware (decorator pattern) for cross-cutting concerns like limits, logging, and feature gates. Each middleware implements `Fs` by wrapping another `Fs`.
 
 **Why:**
 - Complete separation of concerns - each layer has one job.
@@ -99,7 +99,7 @@ let backend = Tracing::new(
 
 ## ADR-006: Quota for quota enforcement
 
-**Decision:** Quota/limit enforcement is handled by `Quota<B>` middleware, not by backends or FilesContainer.
+**Decision:** Quota/limit enforcement is handled by `Quota<B>` middleware, not by backends or FileStorage.
 
 **Configuration:**
 - `with_max_total_size(bytes)` - total storage limit
@@ -132,7 +132,7 @@ let backend = Tracing::new(
 - `.deny_hard_links()` - block `hard_link()` calls
 - `.deny_permissions()` - block `set_permissions()` calls
 
-When blocked, operations return `VfsError::FeatureNotEnabled`.
+When blocked, operations return `FsError::FeatureNotEnabled`.
 
 **Symlink following:** Controlled separately via `set_follow_symlinks(bool)` on virtual backends. VRootFsBackend delegates to OS (strict-path prevents escapes).
 
@@ -143,9 +143,9 @@ When blocked, operations return `VfsError::FeatureNotEnabled`.
 
 ---
 
-## ADR-008: FilesContainer as thin ergonomic wrapper
+## ADR-008: FileStorage as thin ergonomic wrapper
 
-**Decision:** `FilesContainer<B>` is a thin wrapper that provides std::fs-aligned ergonomics only. It contains NO policy logic.
+**Decision:** `FileStorage<B, M>` is a thin wrapper that provides std::fs-aligned ergonomics only. It contains NO policy logic.
 
 **What it does:**
 - Provides familiar method names
@@ -179,7 +179,7 @@ When blocked, operations return `VfsError::FeatureNotEnabled`.
 
 ## ADR-010: Sync-first, async-ready design
 
-**Decision:** VfsBackend is synchronous for v1. The API is designed to allow adding `AsyncVfsBackend` later without breaking changes.
+**Decision:** `Fs` traits are synchronous for v1. The API is designed to allow adding `AsyncFs` later without breaking changes.
 
 **Rationale:**
 - All built-in backends are naturally synchronous:
@@ -190,8 +190,8 @@ When blocked, operations return `VfsError::FeatureNotEnabled`.
 - Users can wrap sync backends in `spawn_blocking` if needed
 
 **Async-ready design principles:**
-- Trait requires `Send` - compatible with async executors
-- Return types are `Result<T, VfsError>` - works with async
+- Traits require `Send` - compatible with async executors
+- Return types are `Result<T, FsError>` - works with async
 - No internal blocking assumptions
 - Methods are stateless per-call - no hidden blocking state
 
@@ -200,20 +200,20 @@ When async is needed (e.g., network-backed storage), add a parallel trait:
 
 ```rust
 // In anyfs-backend
-pub trait AsyncVfsBackend: Send + Sync {
-    async fn read(&self, path: impl AsRef<Path> + Send) -> Result<Vec<u8>, VfsError>;
-    async fn write(&mut self, path: impl AsRef<Path> + Send, data: &[u8]) -> Result<(), VfsError>;
-    // ... mirrors VfsBackend with async
+pub trait AsyncFs: Send + Sync {
+    async fn read(&self, path: impl AsRef<Path> + Send) -> Result<Vec<u8>, FsError>;
+    async fn write(&mut self, path: impl AsRef<Path> + Send, data: &[u8]) -> Result<(), FsError>;
+    // ... mirrors Fs with async
 
     // Streaming uses AsyncRead/AsyncWrite
     async fn open_read(&self, path: impl AsRef<Path> + Send)
-        -> Result<Box<dyn AsyncRead + Send + Unpin>, VfsError>;
+        -> Result<Box<dyn AsyncRead + Send + Unpin>, FsError>;
 }
 ```
 
 **Migration notes:**
-- `AsyncVfsBackend` would be a separate trait, not replacing `VfsBackend`
-- Blanket impl possible: `impl<T: VfsBackend> AsyncVfsBackend for T` using `spawn_blocking`
+- `AsyncFs` would be a separate trait, not replacing `Fs`
+- Blanket impl possible: `impl<T: Fs> AsyncFs for T` using `spawn_blocking`
 - Middleware would need async variants: `AsyncQuota<B>`, etc.
 - No breaking changes to existing sync API
 
@@ -229,8 +229,8 @@ pub trait AsyncVfsBackend: Send + Sync {
 **Decision:** Provide a `Layer` trait (inspired by Tower) that standardizes middleware composition.
 
 ```rust
-pub trait Layer<B: VfsBackend> {
-    type Backend: VfsBackend;
+pub trait Layer<B: Fs> {
+    type Backend: Fs;
     fn layer(self, backend: B) -> Self::Backend;
 }
 ```
@@ -269,26 +269,35 @@ Tracing::new(backend)
 
 ---
 
-## ADR-013: VfsBackendExt for extension methods
+## ADR-013: FsExt for extension methods
 
-**Decision:** Provide `VfsBackendExt` trait with convenience methods, auto-implemented for all backends.
+**Decision:** Provide `FsExt` trait with convenience methods, auto-implemented for all backends.
 
 ```rust
-pub trait VfsBackendExt: VfsBackend {
-    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, VfsError>;
-    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), VfsError>;
-    fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, VfsError>;
-    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, VfsError>;
+pub trait FsExt: Fs {
+    fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
+
+    // JSON methods require `serde` feature
+    #[cfg(feature = "serde")]
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError>;
+    #[cfg(feature = "serde")]
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
 }
 
-impl<B: VfsBackend> VfsBackendExt for B {}
+impl<B: Fs> FsExt for B {}
 ```
 
+**Feature gating:**
+- `is_file()` and `is_dir()` are always available.
+- `read_json()` and `write_json()` require `anyfs-backend = { features = ["serde"] }`.
+
 **Why:**
-- Adds convenience without bloating `VfsBackend` trait.
+- Adds convenience without bloating `Fs` trait.
 - Blanket impl means all backends get these methods for free.
 - Users can define their own extension traits for domain-specific operations.
 - Follows Rust convention (e.g., `IteratorExt`, `StreamExt`).
+- Serde is optional - users who don't need JSON avoid the dependency.
 
 ---
 
@@ -318,8 +327,8 @@ pub type FileContent = bytes::Bytes;
 pub type FileContent = Vec<u8>;
 
 // In trait definition
-pub trait VfsBackend: Send {
-    fn read(&self, path: impl AsRef<Path>) -> Result<FileContent, VfsError>;
+pub trait FsRead: Send {
+    fn read(&self, path: impl AsRef<Path>) -> Result<FileContent, FsError>;
     // ...
 }
 ```
@@ -328,17 +337,17 @@ pub trait VfsBackend: Send {
 
 ---
 
-## ADR-015: Contextual VfsError
+## ADR-015: Contextual FsError
 
-**Decision:** `VfsError` variants include context for better debugging.
+**Decision:** `FsError` variants include context for better debugging.
 
 ```rust
-VfsError::NotFound {
+FsError::NotFound {
     path: PathBuf,
     operation: &'static str,  // "read", "metadata", etc.
 }
 
-VfsError::QuotaExceeded {
+FsError::QuotaExceeded {
     limit: u64,
     requested: u64,
     usage: u64,
@@ -369,7 +378,7 @@ PathFilter::new(backend)
 - Rules are evaluated in order; first match wins.
 - If no rules match, access is denied (deny by default).
 - Uses glob patterns (e.g., `**` for recursive, `*` for single segment).
-- Returns `VfsError::AccessDenied` for denied paths.
+- Returns `FsError::AccessDenied` for denied paths.
 
 **Why:**
 - Essential for AI agent sandboxing - restrict to specific directories.
@@ -395,7 +404,7 @@ let readonly_fs = ReadOnly::new(backend);
 
 **Semantics:**
 - All read operations pass through to inner backend.
-- All write operations return `VfsError::ReadOnly`.
+- All write operations return `FsError::ReadOnly`.
 - Simple, no configuration needed.
 
 **Why:**
@@ -418,7 +427,7 @@ RateLimit::new(backend)
 
 **Semantics:**
 - Tracks operation count in sliding time window.
-- Returns `VfsError::RateLimitExceeded` when limit exceeded.
+- Returns `FsError::RateLimitExceeded` when limit exceeded.
 - Counter resets after window expires.
 
 **Why:**

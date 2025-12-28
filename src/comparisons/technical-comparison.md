@@ -137,12 +137,12 @@ AnyFS middleware can **intercept, transform, and control** operations:
 ## 4. Backend Trait
 
 ```rust
-pub trait VfsBackend: Send {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, VfsError>;
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), VfsError>;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, VfsError>;
-    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, VfsError>;
-    // ... 25 methods total, aligned with std::fs
+pub trait Fs: Send {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+    // ... methods aligned with std::fs
 }
 ```
 

@@ -28,7 +28,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
     middleware/
       quota.rs              # Quota<B>
       tracing.rs            # Tracing<B>
-      feature_guard.rs      # Restrictions<B>
+      restrictions.rs       # Restrictions<B>
     container.rs            # FileStorage<M>
     stack.rs                # BackendStack builder
 ```

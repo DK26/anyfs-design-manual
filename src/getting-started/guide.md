@@ -314,7 +314,7 @@ Always check for quota exceeded, feature not enabled, and other errors.
 
 ## Advanced Use Cases (Future)
 
-These use cases require `anyfs-fuse` (future crate).
+These use cases require `anyfs-mount` (future crate).
 
 ### Database-Backed Drive with Live Monitoring
 
@@ -325,7 +325,7 @@ Mount a database-backed filesystem and query it directly for real-time analytics
 │  Database (SQLite, PostgreSQL, etc.)                        │
 ├─────────────────────────────────────────────────────────────┤
 │                         │                                   │
-│    anyfs-fuse           │         Stats Dashboard           │
+│    anyfs-mount          │         Stats Dashboard           │
 │    (write + read)       │         (direct DB queries)       │
 │         │               │               │                   │
 │         ▼               │               ▼                   │

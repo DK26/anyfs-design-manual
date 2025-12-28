@@ -138,6 +138,37 @@ pub trait FsInode: Send {
 
 ## Layer 4: POSIX Traits (Full POSIX)
 
+### POSIX Types
+
+```rust
+/// Opaque file handle (inode-based for efficiency)
+pub struct Handle(pub u64);
+
+/// File open flags (mirrors POSIX)
+#[derive(Clone, Copy, Debug)]
+pub struct OpenFlags {
+    pub read: bool,
+    pub write: bool,
+    pub create: bool,
+    pub truncate: bool,
+    pub append: bool,
+}
+
+impl OpenFlags {
+    pub const READ: Self = Self { read: true, write: false, create: false, truncate: false, append: false };
+    pub const WRITE: Self = Self { read: false, write: true, create: true, truncate: true, append: false };
+    pub const READ_WRITE: Self = Self { read: true, write: true, create: false, truncate: false, append: false };
+    pub const APPEND: Self = Self { read: false, write: true, create: true, truncate: false, append: true };
+}
+
+/// File lock type (mirrors POSIX flock)
+#[derive(Clone, Copy, Debug)]
+pub enum LockType {
+    Shared,     // Multiple readers
+    Exclusive,  // Single writer
+}
+```
+
 ### FsHandles
 
 ```rust
@@ -227,7 +258,7 @@ fn create_backup(fs: &mut (impl Fs + FsLink)) -> Result<(), FsError> {
 
 // Requires FUSE-level support
 fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
-    anyfs_fuse::FuseMount::mount(fs, "/mnt/myfs")?;
+    anyfs_mount::FuseMount::mount(fs, "/mnt/myfs")?;
     Ok(())
 }
 ```
@@ -240,10 +271,17 @@ fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
 
 ```rust
 pub trait FsExt: Fs {
-    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError>;
-    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
+    /// Check if path is a file.
     fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
+
+    /// Check if path is a directory.
     fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
+
+    /// JSON methods (require `serde` feature in anyfs-backend)
+    #[cfg(feature = "serde")]
+    fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError>;
+    #[cfg(feature = "serde")]
+    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
 }
 
 // Blanket implementation

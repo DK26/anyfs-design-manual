@@ -41,7 +41,7 @@ All backends must be safe for concurrent access:
 
 ### 3. Consistent Path Handling
 
-Normalize paths in ONE place (FilesContainer or dedicated normalizer):
+Normalize paths in ONE place (FileStorage or dedicated normalizer):
 
 - Always absolute paths internally
 - Always `/` separator (even on Windows)
@@ -408,20 +408,20 @@ Required CI checks:
 
 ## Future work (post-MVP)
 
-- Async API (`AsyncVfs`, `AsyncFsFull`, etc.)
+- Async API (`AsyncFs`, `AsyncFsFull`, etc.)
 - Import/export helpers (host path <-> container)
 - Encryption middleware
 - Compression middleware
 - `no_std` support (learned from `vfs` #38)
 - Batch operations for performance (learned from `agentfs` #130)
 
-### `anyfs-fuse` - Mount as Real Filesystem
+### `anyfs-mount` - Mount as Real Filesystem
 
 Adapter to expose any `FsFuse` backend as a FUSE mount point.
 
 ```rust
 use anyfs::{MemoryBackend, QuotaLayer, FsFuse};
-use anyfs_fuse::FuseMount;
+use anyfs_mount::FuseMount;
 
 // RAM drive with 1GB quota
 let backend = MemoryBackend::new()
@@ -445,7 +445,7 @@ let mount = FuseMount::mount(backend, "/mnt/ramdisk")?;
 | FreeBSD | Native | `fuser` | (built-in) |
 | Windows | WinFsp | `winfsp-rs` | [WinFsp](https://winfsp.dev/) |
 
-`anyfs-fuse` provides a unified API across platforms:
+`anyfs-mount` provides a unified API across platforms:
 
 ```rust
 impl<B: FsFuse> FuseMount<B> {
@@ -500,7 +500,7 @@ let sandbox = FuseMount::mount(
 ┌────────────────────────────────────────────────┐
 │  /mnt/myfs (FUSE mount point)                  │
 ├────────────────────────────────────────────────┤
-│  anyfs-fuse                                    │
+│  anyfs-mount                                   │
 │    - Linux/macOS/BSD: fuser                    │
 │    - Windows: winfsp-rs                        │
 ├────────────────────────────────────────────────┤
@@ -528,23 +528,23 @@ Adapter crate for bidirectional compatibility with the [`vfs`](https://github.co
 - No `truncate`, `statfs`, or `read_range`
 - No middleware composition pattern
 
-**Our layered traits are a superset** - `Vfs` covers everything `vfs::FileSystem` does, plus our extended traits add more.
+**Our layered traits are a superset** - `Fs` covers everything `vfs::FileSystem` does, plus our extended traits add more.
 
 **Adapters:**
 
 ```rust
 // Wrap a vfs::FileSystem to use as AnyFS backend
-// Only implements Vfs (Layer 1) - no links, permissions, etc.
+// Only implements Fs (Layer 1) - no links, permissions, etc.
 pub struct VfsCompat<F: vfs::FileSystem>(F);
 impl<F: vfs::FileSystem> FsRead for VfsCompat<F> { ... }
 impl<F: vfs::FileSystem> FsWrite for VfsCompat<F> { ... }
 impl<F: vfs::FileSystem> FsDir for VfsCompat<F> { ... }
-// VfsCompat<F> implements Vfs via blanket impl
+// VfsCompat<F> implements Fs via blanket impl
 
 // Wrap an AnyFS backend to use as vfs::FileSystem
-// Any backend implementing Vfs works
-pub struct AnyFsCompat<B: Vfs>(B);
-impl<B: Vfs> vfs::FileSystem for AnyFsCompat<B> { ... }
+// Any backend implementing Fs works
+pub struct AnyFsCompat<B: Fs>(B);
+impl<B: Fs> vfs::FileSystem for AnyFsCompat<B> { ... }
 ```
 
 **Use cases:**
@@ -568,7 +568,7 @@ The layered trait design enables building cloud storage services - each adapter 
 │         │              │              │              │              │
 │    ┌────┴────┐   ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐       │
 │    │ S3 API  │   │ gRPC/REST │  │    NFS    │  │  WebDAV   │       │
-│    │ (Vfs)   │   │  (Vfs)    │  │ (FsFuse) │  │  (FsFull)│       │
+│    │  (Fs)   │   │   (Fs)    │  │ (FsFuse) │  │  (FsFull)│       │
 │    └────┬────┘   └─────┬─────┘  └─────┬─────┘  └─────┬─────┘       │
 └─────────┼──────────────┼──────────────┼──────────────┼─────────────┘
           │              │              │              │
@@ -580,17 +580,17 @@ The layered trait design enables building cloud storage services - each adapter 
 
 | Crate | Required Trait | Purpose |
 |-------|----------------|---------|
-| `anyfs-s3-server` | `Vfs` | Expose as S3-compatible API (objects = files) |
+| `anyfs-s3-server` | `Fs` | Expose as S3-compatible API (objects = files) |
 | `anyfs-sftp-server` | `FsFull` | SFTP server with permissions/links |
 | `anyfs-ssh-shell` | `FsFuse` | SSH server with FUSE-mounted home directories |
-| `anyfs-remote` | `Vfs` | `RemoteBackend` client (implements `Vfs`) |
-| `anyfs-grpc` | `Vfs` | gRPC protocol adapter |
+| `anyfs-remote` | `Fs` | `RemoteBackend` client (implements `Fs`) |
+| `anyfs-grpc` | `Fs` | gRPC protocol adapter |
 | `anyfs-webdav` | `FsFull` | WebDAV server (needs permissions) |
 | `anyfs-nfs` | `FsFuse` | NFS server (needs inodes) |
 
 #### `anyfs-s3-server` - S3-Compatible Object Storage
 
-Expose any `Vfs` backend as an S3-compatible API. Users access your storage with standard AWS SDKs.
+Expose any `Fs` backend as an S3-compatible API. Users access your storage with standard AWS SDKs.
 
 ```rust
 use anyfs::{SqliteBackend, Quota, Tracing};
@@ -623,7 +623,7 @@ aws s3 cp s3://user-files/document.pdf ./local.pdf --endpoint-url http://yourser
 
 #### `anyfs-remote` - Remote Backend Client
 
-A `Vfs` implementation that connects to a remote server. Works with `FileStorage` or `anyfs-fuse`.
+An `Fs` implementation that connects to a remote server. Works with `FileStorage` or `anyfs-mount`.
 
 ```rust
 use anyfs_remote::RemoteBackend;
@@ -657,7 +657,7 @@ FuseMount::mount(remote, "/mnt/cloud")?;
 
 #### `anyfs-grpc` - gRPC Protocol
 
-Efficient binary protocol for remote `Vfs` access.
+Efficient binary protocol for remote `Fs` access.
 
 **Server side:**
 
@@ -855,10 +855,10 @@ alice@server:~$ du -sh .
 |---------------|-------|-------------------|----------|
 | S3 API | `anyfs-s3-server` | AWS SDK (any language) | Object storage, web apps |
 | SFTP | `anyfs-sftp-server` | Any SFTP client | Shell-like file access |
-| SSH Shell | `anyfs-ssh-shell` + `anyfs-fuse` | SSH client | Full shell with sandboxed home |
+| SSH Shell | `anyfs-ssh-shell` + `anyfs-mount` | SSH client | Full shell with sandboxed home |
 | gRPC | `anyfs-grpc` | Generated client | High-performance apps |
 | REST | Custom adapter | HTTP client | Simple integrations |
-| FUSE mount | `anyfs-fuse` + `anyfs-remote` | FUSE installed | Transparent local access |
+| FUSE mount | `anyfs-mount` + `anyfs-remote` | FUSE installed | Transparent local access |
 | WebDAV | `anyfs-webdav` | WebDAV client/OS | File manager access |
 | NFS | `anyfs-nfs` | NFS client | Unix network shares |
 

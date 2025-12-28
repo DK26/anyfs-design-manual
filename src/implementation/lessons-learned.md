@@ -13,7 +13,7 @@ This chapter documents problems encountered by similar projects and how AnyFS ad
 | 1 | Panics instead of errors | No-panic policy, always return `Result` |
 | 2 | Thread safety problems | Concurrent stress tests required |
 | 3 | Inconsistent path handling | Normalize in one place, test edge cases |
-| 4 | Poor error ergonomics | `VfsError` with context fields |
+| 4 | Poor error ergonomics | `FsError` with context fields |
 | 5 | Missing documentation | Performance & thread safety docs required |
 | 6 | Platform issues | Cross-platform CI pipeline |
 
@@ -34,7 +34,7 @@ This chapter documents problems encountered by similar projects and how AnyFS ad
 
 - **Test concurrent operations explicitly** - stress test with multiple threads
 - **Document thread safety guarantees** per backend
-- **`VfsBackend: Send`** bound is intentional
+- **`Fs: Send`** bound is intentional
 - **`MemoryBackend` uses `Arc<RwLock<...>>`** for interior mutability
 
 **Required tests:**
@@ -79,7 +79,7 @@ let entry = self.entries.get(&path).unwrap();
 
 // GOOD - returns error
 let entry = self.entries.get(&path)
-    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    .ok_or_else(|| FsError::NotFound { path: path.to_path_buf() })?;
 ```
 
 **Edge cases that must return errors (not panic):**
@@ -107,7 +107,7 @@ let entry = self.entries.get(&path)
 
 ### AnyFS Response
 
-- **Normalize paths in ONE place** (FilesContainer or dedicated normalizer)
+- **Normalize paths in ONE place** (FileStorage or dedicated normalizer)
 - **Consistent semantics:** always absolute, always `/` separator
 - **Use `impl AsRef<Path>`** but normalize internally
 
@@ -137,7 +137,7 @@ let entry = self.entries.get(&path)
 ### AnyFS Response
 
 - **Avoid `'static` bounds** unless necessary
-- **Our design:** `VfsBackend: Send` (not `'static`)
+- **Our design:** `Fs: Send` (not `'static`)
 - **Document why bounds exist** when needed
 
 ---
@@ -167,17 +167,17 @@ let entry = self.entries.get(&path)
 
 | Project | Issue | Problem |
 |---------|-------|---------|
-| vfs | [#33](https://github.com/manuel-woelker/rust-vfs/issues/33) | VfsError hard to match programmatically |
+| vfs | [#33](https://github.com/manuel-woelker/rust-vfs/issues/33) | Error type hard to match programmatically |
 
 **Root cause:** Error enum wasn't designed for pattern matching.
 
 ### AnyFS Response
 
-`VfsError` includes context and is easy to match:
+`FsError` includes context and is easy to match:
 
 ```rust
 #[derive(Debug, thiserror::Error)]
-pub enum VfsError {
+pub enum FsError {
     #[error("not found: {path}")]
     NotFound { path: PathBuf },
 
@@ -232,10 +232,10 @@ pub enum VfsError {
 **Already solved:** `ReadOnly<B>` middleware blocks all writes.
 
 ```rust
-let readonly_fs = FilesContainer::new(
+let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );
-// All write operations return VfsError::ReadOnly
+// All write operations return FsError::ReadOnly
 ```
 
 This validates our middleware approach.
