@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-69e25fcb.js";
+            window.path_to_searchindex_js = "../searchindex-e1a075be.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-18c48b55.js"></script>
+        <script src="../toc-b60f0e7e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1351,6 +1351,81 @@ fn test_path_with_dotdot() {
     assert_eq!(backend.read("/foo/./bar/test.txt").unwrap(), b"data");
 }
 <span class="boring">}</span></code></pre>
+<hr>
+<h2 id="memorybackend-snapshot--restore"><a class="header" href="#memorybackend-snapshot--restore">MemoryBackend Snapshot &amp; Restore</a></h2>
+<p><code>MemoryBackend</code> supports cloning its entire state (snapshot) and serializing to bytes for persistence.</p>
+<h3 id="core-concept"><a class="header" href="#core-concept">Core Concept</a></h3>
+<p><strong>Snapshot = Clone the storage.</strong> That’s it.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// MemoryBackend implements Clone
+#[derive(Clone)]
+pub struct MemoryBackend { ... }
+
+// Snapshot is just .clone()
+let snapshot = fs.clone();
+
+// Restore is just assignment
+fs = snapshot;
+<span class="boring">}</span></code></pre>
+<h3 id="api"><a class="header" href="#api">API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl MemoryBackend {
+    /// Clone the entire filesystem state.
+    /// This is a deep copy - modifications to the clone don't affect the original.
+    pub fn clone(&amp;self) -&gt; Self { ... }  // via #[derive(Clone)]
+
+    /// Serialize to bytes for persistence/transfer.
+    pub fn to_bytes(&amp;self) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+
+    /// Deserialize from bytes.
+    pub fn from_bytes(data: &amp;[u8]) -&gt; Result&lt;Self, FsError&gt;;
+
+    /// Save to file.
+    pub fn save_to(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+
+    /// Load from file.
+    pub fn load_from(path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="usage-1"><a class="header" href="#usage-1">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut fs = MemoryBackend::new();
+fs.write("/data.txt", b"important")?;
+
+// Snapshot = clone
+let checkpoint = fs.clone();
+
+// Do risky work...
+fs.write("/data.txt", b"corrupted")?;
+
+// Rollback = replace with clone
+fs = checkpoint;
+assert_eq!(fs.read("/data.txt")?, b"important");
+<span class="boring">}</span></code></pre>
+<h3 id="persistence"><a class="header" href="#persistence">Persistence</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Save to disk
+fs.save_to("state.bin")?;
+
+// Load from disk
+let fs = MemoryBackend::load_from("state.bin")?;
+<span class="boring">}</span></code></pre>
+<h3 id="sqlitebackend"><a class="header" href="#sqlitebackend">SqliteBackend</a></h3>
+<p>SQLite already has persistence - the database file IS the snapshot. For explicit snapshots:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl SqliteBackend {
+    /// Create an in-memory copy of the database.
+    pub fn clone_to_memory(&amp;self) -&gt; Result&lt;Self, FsError&gt;;
+
+    /// Backup to another file.
+    pub fn backup_to(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
 
                     </main>
 
@@ -1360,7 +1435,7 @@ fn test_path_with_dotdot() {
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../implementation/lessons-learned.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../implementation/testing-guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -1374,7 +1449,7 @@ fn test_path_with_dotdot() {
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../implementation/lessons-learned.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../implementation/testing-guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

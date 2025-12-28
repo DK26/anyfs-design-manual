@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-69e25fcb.js";
+            window.path_to_searchindex_js = "searchindex-e1a075be.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-18c48b55.js"></script>
+        <script src="toc-b60f0e7e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2355,6 +2355,136 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 }
 <span class="boring">}</span></code></pre>
 <p>All error variants include enough context for meaningful error messages.</p>
+<hr>
+<h2 id="cross-platform-compatibility"><a class="header" href="#cross-platform-compatibility">Cross-Platform Compatibility</a></h2>
+<p>AnyFS is designed for cross-platform use. Virtual backends work everywhere; real filesystem backends have platform considerations.</p>
+<h3 id="backend-compatibility"><a class="header" href="#backend-compatibility">Backend Compatibility</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th style="text-align: center">Windows</th><th style="text-align: center">Linux</th><th style="text-align: center">macOS</th><th style="text-align: center">WASM</th></tr>
+</thead>
+<tbody>
+<tr><td><code>MemoryBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>SqliteBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅*</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td><code>StdFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+</tbody>
+</table>
+</div>
+<p>*SQLite on WASM requires <code>wasm32</code> build of rusqlite with bundled SQLite.</p>
+<h3 id="feature-compatibility"><a class="header" href="#feature-compatibility">Feature Compatibility</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">Virtual Backends</th><th style="text-align: center">VRootFsBackend</th></tr>
+</thead>
+<tbody>
+<tr><td>Basic I/O (<code>Fs</code>)</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">✅ All platforms</td></tr>
+<tr><td>Symlinks</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">Platform-dependent (see below)</td></tr>
+<tr><td>Hard links</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>Permissions</td><td style="text-align: center">✅ Stored as metadata</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>Extended attributes</td><td style="text-align: center">✅ Stored as metadata</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>FUSE mounting</td><td style="text-align: center">N/A</td><td style="text-align: center">Platform-dependent</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="platform-specific-notes"><a class="header" href="#platform-specific-notes">Platform-Specific Notes</a></h3>
+<h4 id="virtual-backends-memorybackend-sqlitebackend"><a class="header" href="#virtual-backends-memorybackend-sqlitebackend">Virtual Backends (MemoryBackend, SqliteBackend)</a></h4>
+<p><strong>Fully cross-platform.</strong> All features work identically everywhere because:</p>
+<ul>
+<li>Paths are just strings/keys - no OS path resolution</li>
+<li>Symlinks are stored data, not OS constructs</li>
+<li>Permissions are metadata, not enforced by OS</li>
+<li>No filesystem syscalls involved</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This works identically on Windows, Linux, macOS, and WASM
+let mut fs = MemoryBackend::new();
+fs.symlink("/target", "/link")?;           // Just stores the link
+fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+<span class="boring">}</span></code></pre>
+<h4 id="vrootfsbackend-real-filesystem"><a class="header" href="#vrootfsbackend-real-filesystem">VRootFsBackend (Real Filesystem)</a></h4>
+<p>Wraps the host filesystem. Platform differences apply:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Linux</th><th>macOS</th><th>Windows</th></tr>
+</thead>
+<tbody>
+<tr><td>Symlinks</td><td>✅</td><td>✅</td><td>⚠️ Requires privileges*</td></tr>
+<tr><td>Hard links</td><td>✅</td><td>✅</td><td>✅ (NTFS only)</td></tr>
+<tr><td>Permissions (mode bits)</td><td>✅</td><td>✅</td><td>⚠️ Limited mapping</td></tr>
+<tr><td>Extended attributes</td><td>✅ xattr</td><td>✅ xattr</td><td>⚠️ ADS (different API)</td></tr>
+<tr><td>Case sensitivity</td><td>✅</td><td>⚠️ Default insensitive</td><td>⚠️ Insensitive</td></tr>
+</tbody>
+</table>
+</div>
+<p>*Windows requires <code>SeCreateSymbolicLinkPrivilege</code> or Developer Mode for symlinks.</p>
+<h4 id="fuse-mounting"><a class="header" href="#fuse-mounting">FUSE Mounting</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Support</th><th>Library</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>✅ Native</td><td>libfuse</td></tr>
+<tr><td>macOS</td><td>⚠️ Third-party</td><td>macFUSE</td></tr>
+<tr><td>Windows</td><td>⚠️ Third-party</td><td>WinFsp or Dokan</td></tr>
+<tr><td>WASM</td><td>❌</td><td>N/A</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="path-handling-1"><a class="header" href="#path-handling-1">Path Handling</a></h3>
+<p>Virtual backends use <code>/</code> as separator internally, regardless of platform:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Always use forward slashes with virtual backends
+fs.write("/project/src/main.rs", code)?;  // Works everywhere
+<span class="boring">}</span></code></pre>
+<p><code>VRootFsBackend</code> translates to native paths internally:</p>
+<ul>
+<li>Linux/macOS: <code>/</code> stays <code>/</code></li>
+<li>Windows: <code>/project/file.txt</code> → <code>C:\root\project\file.txt</code></li>
+</ul>
+<h3 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Use Case</th><th>Recommended Backend</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td>Cross-platform app</td><td><code>MemoryBackend</code> or <code>SqliteBackend</code></td><td>No platform differences</td></tr>
+<tr><td>Portable storage</td><td><code>SqliteBackend</code></td><td>Single file, works everywhere</td></tr>
+<tr><td>WASM/browser</td><td><code>MemoryBackend</code> or <code>SqliteBackend</code></td><td>No filesystem access needed</td></tr>
+<tr><td>Host filesystem access</td><td><code>VRootFsBackend</code></td><td>With awareness of platform limits</td></tr>
+<tr><td>Testing</td><td><code>MemoryBackend</code></td><td>Fast, no cleanup, deterministic</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="feature-detection"><a class="header" href="#feature-detection">Feature Detection</a></h3>
+<p>Check platform capabilities at runtime if needed:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Check if symlinks are supported on the current platform.
+pub fn symlinks_available() -&gt; bool {
+    #[cfg(unix)]
+    return true;
+
+    #[cfg(windows)]
+    {
+        // Check for Developer Mode or symlink privilege
+        // ...
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>Or use <code>Restrictions</code> middleware to disable unsupported features uniformly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(windows)]
+let backend = Restrictions::new(backend).deny_symlinks();
+<span class="boring">}</span></code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="layered-design-backends--middleware--ergonomics"><a class="header" href="#layered-design-backends--middleware--ergonomics">Layered Design: Backends + Middleware + Ergonomics</a></h1>
 <p>AnyFS uses a layered architecture that separates concerns:</p>
@@ -3865,6 +3995,1320 @@ let userdata: FileStorage&lt;_, UserData&gt; = FileStorage::new(SqliteBackend::o
 fn process(fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) { /* only accepts Sandbox */ }
 <span class="boring">}</span></code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cross-platform-virtual-drive-mounting"><a class="header" href="#cross-platform-virtual-drive-mounting">Cross-Platform Virtual Drive Mounting</a></h1>
+<p><strong>Mounting AnyFS backends as real filesystem mount points</strong></p>
+<hr>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>AnyFS backends can be mounted as real filesystem drives that any application can access. This requires platform-specific adapters because each OS uses different userspace filesystem technologies.</p>
+<hr>
+<h2 id="platform-technologies"><a class="header" href="#platform-technologies">Platform Technologies</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Technology</th><th>Rust Crate</th><th>User Installation</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>FUSE</td><td><code>fuser</code></td><td>Usually pre-installed</td></tr>
+<tr><td>macOS</td><td>macFUSE</td><td><code>fuser</code></td><td><a href="https://osxfuse.github.io/">macFUSE</a></td></tr>
+<tr><td>Windows</td><td>WinFsp</td><td><code>winfsp</code></td><td><a href="https://winfsp.dev/">WinFsp</a></td></tr>
+<tr><td>Windows</td><td>Dokan</td><td><code>dokan</code></td><td><a href="https://dokan-dev.github.io/">Dokan</a></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Key insight:</strong> Linux and macOS both use FUSE (via <code>fuser</code> crate), but Windows requires a completely different API (WinFsp or Dokan).</p>
+<hr>
+<h2 id="architecture-3"><a class="header" href="#architecture-3">Architecture</a></h2>
+<h3 id="unified-mount-trait"><a class="header" href="#unified-mount-trait">Unified Mount Trait</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Platform-agnostic mount handle.
+/// Drop to unmount.
+pub struct MountHandle {
+    inner: Box&lt;dyn MountHandleInner&gt;,
+}
+
+impl MountHandle {
+    /// Mount a backend at the specified path.
+    ///
+    /// Platform requirements:
+    /// - Linux: FUSE (usually available)
+    /// - macOS: macFUSE must be installed
+    /// - Windows: WinFsp or Dokan must be installed
+    pub fn mount&lt;B: FsFuse&gt;(backend: B, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self, MountError&gt; {
+        #[cfg(unix)]
+        return fuse_mount(backend, path);
+
+        #[cfg(windows)]
+        return winfsp_mount(backend, path);
+
+        #[cfg(not(any(unix, windows)))]
+        return Err(MountError::PlatformNotSupported);
+    }
+
+    /// Check if mounting is available on this platform.
+    pub fn is_available() -&gt; bool {
+        #[cfg(target_os = "linux")]
+        return check_fuse_available();
+
+        #[cfg(target_os = "macos")]
+        return check_macfuse_available();
+
+        #[cfg(windows)]
+        return check_winfsp_available() || check_dokan_available();
+
+        #[cfg(not(any(unix, windows)))]
+        return false;
+    }
+
+    /// Unmount the filesystem.
+    pub fn unmount(self) -&gt; Result&lt;(), MountError&gt; {
+        self.inner.unmount()
+    }
+}
+
+impl Drop for MountHandle {
+    fn drop(&amp;mut self) {
+        let _ = self.inner.unmount();
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="platform-adapters"><a class="header" href="#platform-adapters">Platform Adapters</a></h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                     MountHandle (unified API)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │ FuseAdapter │  │ FuseAdapter │  │ WinFspAdapter       │ │
+│  │   (Linux)   │  │   (macOS)   │  │    (Windows)        │ │
+│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
+│         │                │                     │            │
+│         ▼                ▼                     ▼            │
+│    ┌─────────┐      ┌─────────┐         ┌──────────┐       │
+│    │  fuser  │      │  fuser  │         │  winfsp  │       │
+│    │  crate  │      │  crate  │         │  crate   │       │
+│    └────┬────┘      └────┬────┘         └────┬─────┘       │
+│         │                │                   │              │
+│         ▼                ▼                   ▼              │
+│    ┌─────────┐      ┌─────────┐         ┌──────────┐       │
+│    │  FUSE   │      │ macFUSE │         │  WinFsp  │       │
+│    │ (kernel)│      │ (kext)  │         │ (driver) │       │
+│    └─────────┘      └─────────┘         └──────────┘       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2 id="crate-structure"><a class="header" href="#crate-structure">Crate Structure</a></h2>
+<pre><code>anyfs-mount/                    # Unified mounting crate
+  Cargo.toml
+  src/
+    lib.rs                      # MountHandle, MountError
+
+    unix/
+      mod.rs                    # cfg(unix)
+      fuse_adapter.rs           # FUSE implementation via fuser
+
+    windows/
+      mod.rs                    # cfg(windows)
+      winfsp_adapter.rs         # WinFsp implementation
+      dokan_adapter.rs          # Dokan implementation (alternative)
+</code></pre>
+<h3 id="cargotoml"><a class="header" href="#cargotoml">Cargo.toml</a></h3>
+<pre><code class="language-toml">[package]
+name = "anyfs-mount"
+version = "0.1.0"
+
+[dependencies]
+anyfs-backend = { version = "0.1" }
+
+[target.'cfg(unix)'.dependencies]
+fuser = "0.14"
+
+[target.'cfg(windows)'.dependencies]
+winfsp = "0.4"
+# or: dokan = "0.3"
+
+[features]
+default = []
+dokan = ["dep:dokan"]  # Use Dokan instead of WinFsp on Windows
+</code></pre>
+<hr>
+<h2 id="fuse-adapter-linuxmacos"><a class="header" href="#fuse-adapter-linuxmacos">FUSE Adapter (Linux/macOS)</a></h2>
+<p>The FUSE adapter translates between <code>fuser::Filesystem</code> trait and our <code>FsFuse</code> trait:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use fuser::{Filesystem, Request, ReplyEntry, ReplyAttr, ReplyData, ReplyDirectory};
+use anyfs_backend::{FsFuse, FsError, Metadata, FileType};
+
+pub struct FuseAdapter&lt;B: FsFuse&gt; {
+    backend: B,
+}
+
+impl&lt;B: FsFuse&gt; Filesystem for FuseAdapter&lt;B&gt; {
+    fn lookup(&amp;mut self, _req: &amp;Request, parent: u64, name: &amp;OsStr, reply: ReplyEntry) {
+        match self.backend.lookup(parent, name) {
+            Ok(inode) =&gt; {
+                match self.backend.metadata_by_inode(inode) {
+                    Ok(meta) =&gt; reply.entry(&amp;TTL, &amp;to_fuse_attr(&amp;meta), 0),
+                    Err(e) =&gt; reply.error(to_errno(&amp;e)),
+                }
+            }
+            Err(e) =&gt; reply.error(to_errno(&amp;e)),
+        }
+    }
+
+    fn getattr(&amp;mut self, _req: &amp;Request, ino: u64, reply: ReplyAttr) {
+        match self.backend.metadata_by_inode(ino) {
+            Ok(meta) =&gt; reply.attr(&amp;TTL, &amp;to_fuse_attr(&amp;meta)),
+            Err(e) =&gt; reply.error(to_errno(&amp;e)),
+        }
+    }
+
+    fn read(&amp;mut self, _req: &amp;Request, ino: u64, _fh: u64, offset: i64, size: u32, _flags: i32, _lock: Option&lt;u64&gt;, reply: ReplyData) {
+        let path = match self.backend.inode_to_path(ino) {
+            Ok(p) =&gt; p,
+            Err(e) =&gt; return reply.error(to_errno(&amp;e)),
+        };
+
+        match self.backend.read_range(&amp;path, offset as u64, size as usize) {
+            Ok(data) =&gt; reply.data(&amp;data),
+            Err(e) =&gt; reply.error(to_errno(&amp;e)),
+        }
+    }
+
+    fn readdir(&amp;mut self, _req: &amp;Request, ino: u64, _fh: u64, offset: i64, mut reply: ReplyDirectory) {
+        let path = match self.backend.inode_to_path(ino) {
+            Ok(p) =&gt; p,
+            Err(e) =&gt; return reply.error(to_errno(&amp;e)),
+        };
+
+        match self.backend.read_dir(&amp;path) {
+            Ok(entries) =&gt; {
+                for (i, entry) in entries.iter().enumerate().skip(offset as usize) {
+                    let file_type = match entry.file_type {
+                        FileType::File =&gt; fuser::FileType::RegularFile,
+                        FileType::Directory =&gt; fuser::FileType::Directory,
+                        FileType::Symlink =&gt; fuser::FileType::Symlink,
+                    };
+
+                    if reply.add(entry.inode, (i + 1) as i64, file_type, &amp;entry.name) {
+                        break;
+                    }
+                }
+                reply.ok();
+            }
+            Err(e) =&gt; reply.error(to_errno(&amp;e)),
+        }
+    }
+
+    // ... write, create, mkdir, unlink, rmdir, rename, symlink, etc.
+}
+
+fn to_errno(e: &amp;FsError) -&gt; i32 {
+    match e {
+        FsError::NotFound { .. } =&gt; libc::ENOENT,
+        FsError::AlreadyExists { .. } =&gt; libc::EEXIST,
+        FsError::NotADirectory { .. } =&gt; libc::ENOTDIR,
+        FsError::NotAFile { .. } =&gt; libc::EISDIR,
+        FsError::DirectoryNotEmpty { .. } =&gt; libc::ENOTEMPTY,
+        FsError::AccessDenied { .. } =&gt; libc::EACCES,
+        FsError::ReadOnly { .. } =&gt; libc::EROFS,
+        FsError::QuotaExceeded { .. } =&gt; libc::ENOSPC,
+        _ =&gt; libc::EIO,
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="winfsp-adapter-windows"><a class="header" href="#winfsp-adapter-windows">WinFsp Adapter (Windows)</a></h2>
+<p>WinFsp has a different API but similar concepts:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use winfsp::filesystem::{FileSystem, FileSystemContext, FileInfo, DirInfo};
+use anyfs_backend::{FsFuse, FsError};
+
+pub struct WinFspAdapter&lt;B: FsFuse&gt; {
+    backend: B,
+}
+
+impl&lt;B: FsFuse&gt; FileSystem for WinFspAdapter&lt;B&gt; {
+    fn get_file_info(&amp;self, file_context: &amp;FileContext) -&gt; Result&lt;FileInfo, NTSTATUS&gt; {
+        let meta = self.backend.metadata(&amp;file_context.path)
+            .map_err(to_ntstatus)?;
+        Ok(to_file_info(&amp;meta))
+    }
+
+    fn read(&amp;self, file_context: &amp;FileContext, buffer: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, NTSTATUS&gt; {
+        let data = self.backend.read_range(&amp;file_context.path, offset, buffer.len())
+            .map_err(to_ntstatus)?;
+        buffer[..data.len()].copy_from_slice(&amp;data);
+        Ok(data.len())
+    }
+
+    fn read_directory(&amp;self, file_context: &amp;FileContext, marker: Option&lt;&amp;str&gt;, callback: impl FnMut(DirInfo)) -&gt; Result&lt;(), NTSTATUS&gt; {
+        let entries = self.backend.read_dir(&amp;file_context.path)
+            .map_err(to_ntstatus)?;
+
+        for entry in entries {
+            callback(to_dir_info(&amp;entry));
+        }
+        Ok(())
+    }
+
+    // ... write, create, delete, rename, etc.
+}
+
+fn to_ntstatus(e: FsError) -&gt; NTSTATUS {
+    match e {
+        FsError::NotFound { .. } =&gt; STATUS_OBJECT_NAME_NOT_FOUND,
+        FsError::AlreadyExists { .. } =&gt; STATUS_OBJECT_NAME_COLLISION,
+        FsError::AccessDenied { .. } =&gt; STATUS_ACCESS_DENIED,
+        FsError::ReadOnly { .. } =&gt; STATUS_MEDIA_WRITE_PROTECTED,
+        _ =&gt; STATUS_INTERNAL_ERROR,
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="basic-mount"><a class="header" href="#basic-mount">Basic Mount</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{MemoryBackend, Quota};
+use anyfs_mount::MountHandle;
+
+// Create backend with middleware
+let backend = Quota::new(MemoryBackend::new())
+    .with_max_total_size(100 * 1024 * 1024);
+
+// Mount as drive
+let mount = MountHandle::mount(backend, "/mnt/ramdisk")?;
+
+// Now /mnt/ramdisk is a real mount point
+// Any application can read/write files there
+
+// Unmount when done (or on drop)
+mount.unmount()?;
+<span class="boring">}</span></code></pre>
+<h3 id="windows-drive-letter"><a class="header" href="#windows-drive-letter">Windows Drive Letter</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(windows)]
+let mount = MountHandle::mount(backend, "X:")?;
+
+// Now X: is a virtual drive
+<span class="boring">}</span></code></pre>
+<h3 id="check-availability"><a class="header" href="#check-availability">Check Availability</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>if MountHandle::is_available() {
+    let mount = MountHandle::mount(backend, path)?;
+} else {
+    eprintln!("Mounting not available. Install:");
+    #[cfg(target_os = "macos")]
+    eprintln!("  - macFUSE: https://osxfuse.github.io/");
+    #[cfg(windows)]
+    eprintln!("  - WinFsp: https://winfsp.dev/");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="mount-options"><a class="header" href="#mount-options">Mount Options</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mount = MountHandle::builder(backend)
+    .mount_point("/mnt/data")
+    .read_only(true)                    // Force read-only mount
+    .allow_other(true)                  // Allow other users (Linux/macOS)
+    .auto_unmount(true)                 // Unmount on process exit
+    .uid(1000)                          // Override UID (Linux/macOS)
+    .gid(1000)                          // Override GID (Linux/macOS)
+    .mount()?;
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum MountError {
+    /// Platform doesn't support mounting (e.g., WASM)
+    PlatformNotSupported,
+
+    /// Required driver not installed (macFUSE, WinFsp)
+    DriverNotInstalled {
+        driver: &amp;'static str,
+        install_url: &amp;'static str,
+    },
+
+    /// Mount point doesn't exist or isn't accessible
+    InvalidMountPoint { path: PathBuf },
+
+    /// Mount point already in use
+    MountPointBusy { path: PathBuf },
+
+    /// Permission denied (need root/admin)
+    PermissionDenied,
+
+    /// Backend error during mount
+    Backend(FsError),
+
+    /// Platform-specific error
+    Platform(String),
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="integration-with-middleware"><a class="header" href="#integration-with-middleware">Integration with Middleware</a></h2>
+<p>All middleware works transparently when mounted:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::{SqliteBackend, Quota, PathFilter, Tracing, RateLimit};
+use anyfs_mount::MountHandle;
+
+// Build secure, audited, rate-limited mount
+let backend = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::new()
+        .max_total_size(1024 * 1024 * 1024))  // 1 GB
+    .layer(PathFilterLayer::new()
+        .deny("**/.git/**")
+        .deny("**/.env"))
+    .layer(RateLimitLayer::new()
+        .max_ops(10000)
+        .per_second())
+    .layer(TracingLayer::new());
+
+let mount = MountHandle::mount(backend, "/mnt/secure")?;
+
+// External apps see a normal filesystem
+// But all operations are:
+// - Quota-limited
+// - Path-filtered
+// - Rate-limited
+// - Traced/audited
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="temporary-workspace"><a class="header" href="#temporary-workspace">Temporary Workspace</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let workspace = MemoryBackend::new();
+let mount = MountHandle::mount(workspace, "/tmp/workspace")?;
+
+// Run build tools that expect real filesystem
+std::process::Command::new("cargo")
+    .current_dir("/tmp/workspace")
+    .arg("build")
+    .status()?;
+<span class="boring">}</span></code></pre>
+<h3 id="portable-database-as-drive"><a class="header" href="#portable-database-as-drive">Portable Database as Drive</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// User's files stored in SQLite
+let db = SqliteBackend::open("user_files.db")?;
+let mount = MountHandle::mount(db, "U:")?;
+
+// User can browse U: in Explorer
+// Files are actually in SQLite database
+<span class="boring">}</span></code></pre>
+<h3 id="network-storage"><a class="header" href="#network-storage">Network Storage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Remote backend (future anyfs-s3, anyfs-sftp, etc.)
+let remote = S3Backend::new("my-bucket")?;
+let cached = Cache::new(remote).with_max_size(100 * 1024 * 1024);
+let mount = MountHandle::mount(cached, "/mnt/cloud")?;
+
+// Local apps see /mnt/cloud as regular filesystem
+// Actually reads/writes to S3 with local caching
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="platform-requirements-summary"><a class="header" href="#platform-requirements-summary">Platform Requirements Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Driver</th><th>Install Command / URL</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>FUSE</td><td>Usually pre-installed. If not: <code>apt install fuse3</code></td></tr>
+<tr><td>macOS</td><td>macFUSE</td><td>https://osxfuse.github.io/</td></tr>
+<tr><td>Windows</td><td>WinFsp</td><td>https://winfsp.dev/ (recommended)</td></tr>
+<tr><td>Windows</td><td>Dokan</td><td>https://dokan-dev.github.io/ (alternative)</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ol>
+<li><strong>Requires external driver</strong> - Users must install macFUSE (macOS) or WinFsp (Windows)</li>
+<li><strong>Root/admin may be required</strong> - Some mount operations need elevated privileges</li>
+<li><strong>Not available on WASM</strong> - Browser environment has no filesystem mounting</li>
+<li><strong>Performance overhead</strong> - Userspace filesystem has kernel boundary crossing overhead</li>
+<li><strong>Backend must implement FsFuse</strong> - Requires <code>FsInode</code> trait for inode operations</li>
+</ol>
+<hr>
+<h2 id="alternative-no-mount-needed"><a class="header" href="#alternative-no-mount-needed">Alternative: No Mount Needed</a></h2>
+<p>For many use cases, mounting isn’t necessary. AnyFS backends can be used directly:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Need</th><th>With Mounting</th><th>Without Mounting</th></tr>
+</thead>
+<tbody>
+<tr><td>Build tools</td><td>Mount, run tools</td><td>Use tool’s VFS plugin if available</td></tr>
+<tr><td>File browser</td><td>Mount as drive</td><td>Build custom UI with AnyFS API</td></tr>
+<tr><td>Backup</td><td>Mount, use rsync</td><td>Use AnyFS API directly</td></tr>
+<tr><td>Database</td><td>Mount for SQL tools</td><td>Query SQLite directly</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Rule of thumb:</strong> Only mount when you need compatibility with external applications that expect real filesystem paths.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tutorial-building-a-txt-backend-yes-really"><a class="header" href="#tutorial-building-a-txt-backend-yes-really">Tutorial: Building a TXT Backend (Yes, Really)</a></h1>
+<p><strong>How to turn a humble text file into a functioning virtual filesystem</strong></p>
+<hr>
+<h2 id="the-absurd-premise"><a class="header" href="#the-absurd-premise">The Absurd Premise</a></h2>
+<p>What if your entire filesystem was just… a text file you can edit in Notepad?</p>
+<pre><code>path,type,mode,data
+/,dir,755,
+/hello.txt,file,644,SGVsbG8sIFdvcmxkIQ==
+/docs,dir,755,
+/docs/readme.md,file,644,IyBXZWxjb21lIQoKWWVzLCB0aGlzIGlzIGluIGEgLnR4dCBmaWxl
+</code></pre>
+<p>One line per file. Comma-separated. Base64 content. Open it in Notepad, edit a file, save, done.</p>
+<p>Sounds ridiculous? It is. But it <em>works</em>. And building it teaches you everything about implementing AnyFS backends.</p>
+<p>Let’s do this.</p>
+<hr>
+<h2 id="why-this-is-actually-useful"><a class="header" href="#why-this-is-actually-useful">Why This Is Actually Useful</a></h2>
+<p>Beyond the memes, a TXT backend demonstrates:</p>
+<ol>
+<li><strong>Backend flexibility</strong> - AnyFS doesn’t care how you store bytes</li>
+<li><strong>Trait implementation</strong> - You’ll implement <code>FsRead</code>, <code>FsWrite</code>, <code>FsDir</code></li>
+<li><strong>Middleware composition</strong> - We’ll add <code>Quota</code> to prevent the file from exploding</li>
+<li><strong>Real-world patterns</strong> - The same patterns apply to serious backends</li>
+</ol>
+<p>Plus, you can literally edit your “filesystem” in Notepad. Try doing that with ext4.</p>
+<hr>
+<h2 id="the-format"><a class="header" href="#the-format">The Format</a></h2>
+<p>One line per entry. Four comma-separated fields. Dead simple:</p>
+<pre><code>path,type,mode,data
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Description</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>path</code></td><td>Absolute path</td><td><code>/docs/file.txt</code></td></tr>
+<tr><td><code>type</code></td><td><code>file</code> or <code>dir</code></td><td><code>file</code></td></tr>
+<tr><td><code>mode</code></td><td>Unix permissions (octal)</td><td><code>644</code></td></tr>
+<tr><td><code>data</code></td><td>Base64-encoded content</td><td><code>SGVsbG8=</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Directories have empty data field. That’s the entire format. Open in Notepad, add a line, you created a file.</p>
+<hr>
+<h2 id="step-1-data-structures"><a class="header" href="#step-1-data-structures">Step 1: Data Structures</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+/// A single entry in our TXT filesystem
+#[derive(Clone, Debug)]
+struct TxtEntry {
+    path: PathBuf,
+    is_dir: bool,
+    mode: u32,
+    content: Vec&lt;u8&gt;,
+}
+
+impl TxtEntry {
+    fn new_dir(path: impl Into&lt;PathBuf&gt;) -&gt; Self {
+        Self {
+            path: path.into(),
+            is_dir: true,
+            mode: 0o755,
+            content: Vec::new(),
+        }
+    }
+
+    fn new_file(path: impl Into&lt;PathBuf&gt;, content: Vec&lt;u8&gt;) -&gt; Self {
+        Self {
+            path: path.into(),
+            is_dir: false,
+            mode: 0o644,
+            content,
+        }
+    }
+
+    /// Serialize to a line: path,type,mode,data
+    fn to_line(&amp;self) -&gt; String {
+        let file_type = if self.is_dir { "dir" } else { "file" };
+        let data_b64 = if self.content.is_empty() {
+            String::new()
+        } else {
+            BASE64.encode(&amp;self.content)
+        };
+
+        format!("{},{},{:o},{}", self.path.display(), file_type, self.mode, data_b64)
+    }
+
+    /// Parse from line: path,type,mode,data
+    fn from_line(line: &amp;str) -&gt; Result&lt;Self, TxtParseError&gt; {
+        let parts: Vec&lt;&amp;str&gt; = line.splitn(4, ',').collect();
+        if parts.len() &lt; 3 {
+            return Err(TxtParseError::InvalidFormat);
+        }
+
+        let content = if parts.len() == 4 &amp;&amp; !parts[3].is_empty() {
+            BASE64.decode(parts[3]).map_err(|_| TxtParseError::InvalidBase64)?
+        } else {
+            Vec::new()
+        };
+
+        Ok(Self {
+            path: PathBuf::from(parts[0]),
+            is_dir: parts[1] == "dir",
+            mode: u32::from_str_radix(parts[2], 8)
+                .map_err(|_| TxtParseError::InvalidNumber)?,
+            content,
+        })
+    }
+}
+
+#[derive(Debug)]
+enum TxtParseError {
+    InvalidFormat,
+    InvalidBase64,
+    InvalidNumber,
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="step-2-the-backend-structure"><a class="header" href="#step-2-the-backend-structure">Step 2: The Backend Structure</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, RwLock};
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
+
+/// A filesystem backend that stores everything in a .txt file.
+///
+/// Yes, this is cursed. Yes, it works. Yes, you can edit it in Notepad.
+pub struct TxtBackend {
+    /// Path to the .txt file on the host filesystem
+    txt_path: PathBuf,
+    /// In-memory cache of entries (path -&gt; entry)
+    entries: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, TxtEntry&gt;&gt;&gt;,
+}
+
+impl TxtBackend {
+    /// Create a new TXT backend, loading from file if it exists
+    pub fn open(txt_path: impl Into&lt;PathBuf&gt;) -&gt; Result&lt;Self, FsError&gt; {
+        let txt_path = txt_path.into();
+        let mut entries = HashMap::new();
+
+        // Always ensure root directory exists
+        entries.insert(PathBuf::from("/"), TxtEntry::new_dir("/"));
+
+        // Load existing entries if file exists
+        if txt_path.exists() {
+            let file = File::open(&amp;txt_path)
+                .map_err(|e| FsError::Io {
+                    operation: "open txt",
+                    path: txt_path.clone(),
+                    source: e,
+                })?;
+
+            for (line_num, line) in BufReader::new(file).lines().enumerate() {
+                let line = line.map_err(|e| FsError::Io {
+                    operation: "read line",
+                    path: txt_path.clone(),
+                    source: e,
+                })?;
+
+                // Skip header line
+                if line_num == 0 &amp;&amp; line.starts_with("path,") {
+                    continue;
+                }
+
+                // Skip empty lines
+                if line.trim().is_empty() {
+                    continue;
+                }
+
+                let entry = TxtEntry::from_line(&amp;line)
+                    .map_err(|_| FsError::CorruptedData {
+                        path: txt_path.clone(),
+                        details: format!("line {}", line_num + 1),
+                    })?;
+
+                entries.insert(entry.path.clone(), entry);
+            }
+        }
+
+        Ok(Self {
+            txt_path,
+            entries: Arc::new(RwLock::new(entries)),
+        })
+    }
+
+    /// Create a new in-memory backend (won't persist to disk)
+    pub fn in_memory() -&gt; Self {
+        let mut entries = HashMap::new();
+        entries.insert(PathBuf::from("/"), TxtEntry::new_dir("/"));
+
+        Self {
+            txt_path: PathBuf::from(":memory:"),
+            entries: Arc::new(RwLock::new(entries)),
+        }
+    }
+
+    /// Flush all entries to the .txt file
+    fn flush(&amp;self) -&gt; Result&lt;(), FsError&gt; {
+        // Skip if in-memory mode
+        if self.txt_path.as_os_str() == ":memory:" {
+            return Ok(());
+        }
+
+        let entries = self.entries.read().unwrap();
+
+        let mut file = File::create(&amp;self.txt_path)
+            .map_err(|e| FsError::Io {
+                operation: "create txt",
+                path: self.txt_path.clone(),
+                source: e,
+            })?;
+
+        // Write header
+        writeln!(file, "path,type,mode,data")
+            .map_err(|e| FsError::Io {
+                operation: "write header",
+                path: self.txt_path.clone(),
+                source: e,
+            })?;
+
+        // Write entries (sorted for consistency)
+        let mut paths: Vec&lt;_&gt; = entries.keys().collect();
+        paths.sort();
+
+        for path in paths {
+            let entry = &amp;entries[path];
+            writeln!(file, "{}", entry.to_line())
+                .map_err(|e| FsError::Io {
+                    operation: "write entry",
+                    path: path.clone(),
+                    source: e,
+                })?;
+        }
+
+        Ok(())
+    }
+
+    /// Normalize path (remove trailing slashes, handle . and ..)
+    fn normalize_path(path: impl AsRef&lt;Path&gt;) -&gt; PathBuf {
+        let path = path.as_ref();
+        let mut components = Vec::new();
+
+        for component in path.components() {
+            match component {
+                std::path::Component::RootDir =&gt; {
+                    components.clear();
+                    components.push("/");
+                }
+                std::path::Component::Normal(s) =&gt; {
+                    components.push(s.to_str().unwrap_or(""));
+                }
+                std::path::Component::ParentDir =&gt; {
+                    if components.len() &gt; 1 {
+                        components.pop();
+                    }
+                }
+                std::path::Component::CurDir =&gt; {}
+                std::path::Component::Prefix(_) =&gt; {}
+            }
+        }
+
+        if components.is_empty() || (components.len() == 1 &amp;&amp; components[0] == "/") {
+            PathBuf::from("/")
+        } else {
+            PathBuf::from(components.join("/"))
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="step-3-implement-fsread"><a class="header" href="#step-3-implement-fsread">Step 3: Implement FsRead</a></h2>
+<p>Now the fun part - making it quack like a filesystem:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::{FsRead, FsError, Metadata, FileType};
+
+impl FsRead for TxtBackend {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
+        let path = Self::normalize_path(path);
+        let entries = self.entries.read().unwrap();
+
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if entry.is_dir {
+            return Err(FsError::NotAFile { path });
+        }
+
+        Ok(entry.content.clone())
+    }
+
+    fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt; {
+        let bytes = self.read(path.as_ref())?;
+        String::from_utf8(bytes)
+            .map_err(|_| FsError::InvalidData {
+                path: path.as_ref().to_path_buf(),
+                details: "not valid UTF-8".to_string(),
+            })
+    }
+
+    fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
+        let content = self.read(path)?;
+        let start = offset as usize;
+
+        if start &gt;= content.len() {
+            return Ok(Vec::new());
+        }
+
+        let end = (start + len).min(content.len());
+        Ok(content[start..end].to_vec())
+    }
+
+    fn exists(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
+        let path = Self::normalize_path(path);
+        let entries = self.entries.read().unwrap();
+        Ok(entries.contains_key(&amp;path))
+    }
+
+    fn metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt; {
+        let path = Self::normalize_path(path);
+        let entries = self.entries.read().unwrap();
+
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        Ok(Metadata {
+            file_type: if entry.is_dir { FileType::Directory } else { FileType::File },
+            size: entry.content.len() as u64,
+            created: None,  // We keep it simple - no timestamps
+            modified: None,
+            accessed: None,
+            permissions: Some(entry.mode),
+            inode: None,
+        })
+    }
+
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Read + Send&gt;, FsError&gt; {
+        let content = self.read(path)?;
+        Ok(Box::new(std::io::Cursor::new(content)))
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="step-4-implement-fswrite"><a class="header" href="#step-4-implement-fswrite">Step 4: Implement FsWrite</a></h2>
+<p>Where the magic happens - writing files to a text file:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::FsWrite;
+
+impl FsWrite for TxtBackend {
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            if parent != Path::new("/") &amp;&amp; parent != Path::new("") {
+                let entries = self.entries.read().unwrap();
+                if !entries.contains_key(parent) {
+                    drop(entries);
+                    return Err(FsError::NotFound {
+                        path: parent.to_path_buf()
+                    });
+                }
+            }
+        }
+
+        let mut entries = self.entries.write().unwrap();
+
+        // Check if it's a directory
+        if let Some(existing) = entries.get(&amp;path) {
+            if existing.is_dir {
+                return Err(FsError::NotAFile { path });
+            }
+        }
+
+        // Create or update the file
+        let entry = TxtEntry::new_file(path.clone(), data.to_vec());
+        entries.insert(path, entry);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+        let mut entries = self.entries.write().unwrap();
+
+        let entry = entries.get_mut(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if entry.is_dir {
+            return Err(FsError::NotAFile { path });
+        }
+
+        entry.content.extend_from_slice(data);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+        let mut entries = self.entries.write().unwrap();
+
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if entry.is_dir {
+            return Err(FsError::NotAFile { path });
+        }
+
+        entries.remove(&amp;path);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let from = Self::normalize_path(from);
+        let to = Self::normalize_path(to);
+
+        let mut entries = self.entries.write().unwrap();
+
+        let mut entry = entries.remove(&amp;from)
+            .ok_or_else(|| FsError::NotFound { path: from.clone() })?;
+
+        entry.path = to.clone();
+        entries.insert(to, entry);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let from = Self::normalize_path(from);
+        let to = Self::normalize_path(to);
+
+        let entries = self.entries.read().unwrap();
+
+        let source = entries.get(&amp;from)
+            .ok_or_else(|| FsError::NotFound { path: from.clone() })?;
+
+        if source.is_dir {
+            return Err(FsError::NotAFile { path: from });
+        }
+
+        let mut new_entry = source.clone();
+        new_entry.path = to.clone();
+
+        drop(entries);
+
+        let mut entries = self.entries.write().unwrap();
+        entries.insert(to, new_entry);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+        let mut entries = self.entries.write().unwrap();
+
+        let entry = entries.get_mut(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if entry.is_dir {
+            return Err(FsError::NotAFile { path });
+        }
+
+        entry.content.truncate(size as usize);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
+        // For simplicity, we buffer writes and apply on drop
+        // A real implementation would be more sophisticated
+        let path = Self::normalize_path(path);
+
+        // Ensure file exists (create empty if not)
+        if !self.exists(&amp;path)? {
+            self.write(&amp;path, b"")?;
+        }
+
+        Ok(Box::new(TxtFileWriter {
+            backend: self.entries.clone(),
+            txt_path: self.txt_path.clone(),
+            path,
+            buffer: Vec::new(),
+        }))
+    }
+}
+
+/// Writer that buffers content and writes to TXT on drop
+struct TxtFileWriter {
+    backend: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, TxtEntry&gt;&gt;&gt;,
+    txt_path: PathBuf,
+    path: PathBuf,
+    buffer: Vec&lt;u8&gt;,
+}
+
+impl std::io::Write for TxtFileWriter {
+    fn write(&amp;mut self, buf: &amp;[u8]) -&gt; std::io::Result&lt;usize&gt; {
+        self.buffer.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&amp;mut self) -&gt; std::io::Result&lt;()&gt; {
+        Ok(())
+    }
+}
+
+impl Drop for TxtFileWriter {
+    fn drop(&amp;mut self) {
+        let mut entries = self.backend.write().unwrap();
+        if let Some(entry) = entries.get_mut(&amp;self.path) {
+            entry.content = std::mem::take(&amp;mut self.buffer);
+        }
+        // Note: flush to disk happens on next explicit flush() call
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="step-5-implement-fsdir"><a class="header" href="#step-5-implement-fsdir">Step 5: Implement FsDir</a></h2>
+<p>Directory operations to complete the <code>Fs</code> trait:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_backend::{FsDir, DirEntry};
+
+impl FsDir for TxtBackend {
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
+        let path = Self::normalize_path(path);
+        let entries = self.entries.read().unwrap();
+
+        // Verify the path is a directory
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if !entry.is_dir {
+            return Err(FsError::NotADirectory { path });
+        }
+
+        // Find all direct children
+        let mut children = Vec::new();
+
+        for (child_path, child_entry) in entries.iter() {
+            if let Some(parent) = child_path.parent() {
+                if parent == path &amp;&amp; child_path != &amp;path {
+                    children.push(DirEntry {
+                        name: child_path.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                        path: child_path.clone(),
+                        file_type: if child_entry.is_dir {
+                            FileType::Directory
+                        } else {
+                            FileType::File
+                        },
+                        size: child_entry.size,
+                        inode: None,
+                    });
+                }
+            }
+        }
+
+        // Sort for consistent ordering
+        children.sort_by(|a, b| a.name.cmp(&amp;b.name));
+
+        Ok(children)
+    }
+
+    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+
+        // Check parent exists
+        if let Some(parent) = path.parent() {
+            if parent != Path::new("/") &amp;&amp; parent != Path::new("") {
+                let entries = self.entries.read().unwrap();
+                let parent_entry = entries.get(parent)
+                    .ok_or_else(|| FsError::NotFound {
+                        path: parent.to_path_buf()
+                    })?;
+
+                if !parent_entry.is_dir {
+                    return Err(FsError::NotADirectory {
+                        path: parent.to_path_buf()
+                    });
+                }
+            }
+        }
+
+        let mut entries = self.entries.write().unwrap();
+
+        // Check if already exists
+        if entries.contains_key(&amp;path) {
+            return Err(FsError::AlreadyExists { path });
+        }
+
+        entries.insert(path.clone(), TxtEntry::new_dir(path));
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+
+        // Build list of directories to create
+        let mut to_create = Vec::new();
+        let mut current = path.clone();
+
+        loop {
+            {
+                let entries = self.entries.read().unwrap();
+                if entries.contains_key(&amp;current) {
+                    break;
+                }
+            }
+
+            to_create.push(current.clone());
+
+            match current.parent() {
+                Some(parent) if parent != Path::new("") =&gt; {
+                    current = parent.to_path_buf();
+                }
+                _ =&gt; break,
+            }
+        }
+
+        // Create directories from root to leaf
+        to_create.reverse();
+        for dir_path in to_create {
+            let mut entries = self.entries.write().unwrap();
+            if !entries.contains_key(&amp;dir_path) {
+                entries.insert(dir_path.clone(), TxtEntry::new_dir(dir_path));
+            }
+        }
+
+        self.flush()?;
+        Ok(())
+    }
+
+    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+
+        // Can't remove root
+        if path == Path::new("/") {
+            return Err(FsError::PermissionDenied {
+                path,
+                operation: "remove root directory"
+            });
+        }
+
+        let entries = self.entries.read().unwrap();
+
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if !entry.is_dir {
+            return Err(FsError::NotADirectory { path });
+        }
+
+        // Check if empty
+        let has_children = entries.keys().any(|p| {
+            p != &amp;path &amp;&amp; p.starts_with(&amp;path)
+        });
+
+        if has_children {
+            return Err(FsError::DirectoryNotEmpty { path });
+        }
+
+        drop(entries);
+
+        let mut entries = self.entries.write().unwrap();
+        entries.remove(&amp;path);
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+
+    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+        let path = Self::normalize_path(path);
+
+        // Can't remove root
+        if path == Path::new("/") {
+            return Err(FsError::PermissionDenied {
+                path,
+                operation: "remove root directory"
+            });
+        }
+
+        let mut entries = self.entries.write().unwrap();
+
+        // Verify it exists and is a directory
+        let entry = entries.get(&amp;path)
+            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+
+        if !entry.is_dir {
+            return Err(FsError::NotADirectory { path: path.clone() });
+        }
+
+        // Remove all entries under this path
+        let to_remove: Vec&lt;_&gt; = entries.keys()
+            .filter(|p| p.starts_with(&amp;path))
+            .cloned()
+            .collect();
+
+        for p in to_remove {
+            entries.remove(&amp;p);
+        }
+
+        drop(entries);
+        self.flush()?;
+
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="step-6-putting-it-all-together"><a class="header" href="#step-6-putting-it-all-together">Step 6: Putting It All Together</a></h2>
+<p>Now you have a complete <code>Fs</code> implementation! Let’s use it:</p>
+<pre class="playground"><code class="language-rust">use anyfs::{FileStorage, Quota, Tracing};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create our glorious TXT filesystem
+    let backend = TxtBackend::open("my_filesystem.txt")?;
+
+    // Wrap it with middleware to prevent the file from exploding
+    let backend = Quota::new(backend)
+        .with_max_total_size(10 * 1024 * 1024)  // 10 MB max
+        .with_max_file_size(1 * 1024 * 1024);   // 1 MB per file
+
+    // Add tracing because why not
+    let backend = Tracing::new(backend);
+
+    // Create the filesystem wrapper
+    let mut fs = FileStorage::new(backend);
+
+    // Use it like any other filesystem!
+    fs.create_dir_all("/projects/secret")?;
+    fs.write("/projects/secret/plans.txt", b"World domination via TXT")?;
+    fs.write("/projects/readme.md", b"# My TXT-backed project\n\nYes, really.")?;
+
+    // Read it back
+    let content = fs.read_to_string("/projects/secret/plans.txt")?;
+    println!("Plans: {}", content);
+
+    // List directory
+    for entry in fs.read_dir("/projects")? {
+        println!("  {} ({})", entry.name,
+            if entry.file_type == FileType::Directory { "dir" } else { "file" });
+    }
+
+    // Copy a file
+    fs.copy("/projects/readme.md", "/projects/readme_backup.md")?;
+
+    // Delete a file
+    fs.remove_file("/projects/readme_backup.md")?;
+
+    println!("\nNow open my_filesystem.txt in Notepad!");
+
+    Ok(())
+}</code></pre>
+<hr>
+<h2 id="the-result"><a class="header" href="#the-result">The Result</a></h2>
+<p>After running the code, your <code>my_filesystem.txt</code> looks like:</p>
+<pre><code>path,type,mode,data
+/,dir,755,
+/projects,dir,755,
+/projects/secret,dir,755,
+/projects/secret/plans.txt,file,644,V29ybGQgZG9taW5hdGlvbiB2aWEgVFhU
+/projects/readme.md,file,644,IyBNeSBUWFQtYmFja2VkIHByb2plY3QKCllzLCByZWFsbHku
+</code></pre>
+<p>Open it in Notepad. Marvel at your filesystem. Edit a line. Save. You just modified a file.</p>
+<hr>
+<h2 id="why-this-actually-matters"><a class="header" href="#why-this-actually-matters">Why This Actually Matters</a></h2>
+<p>This ridiculous example demonstrates the power of AnyFS’s design:</p>
+<ol>
+<li>
+<p><strong>True backend abstraction</strong> - The <code>FileStorage</code> API doesn’t know or care that it’s backed by a text file</p>
+</li>
+<li>
+<p><strong>Middleware just works</strong> - <code>Quota</code> and <code>Tracing</code> wrap your custom backend with zero extra code</p>
+</li>
+<li>
+<p><strong>Type safety preserved</strong> - Compile-time guarantees work with any backend</p>
+</li>
+<li>
+<p><strong>Easy to implement</strong> - ~250 lines for a complete working backend</p>
+</li>
+<li>
+<p><strong>Testable</strong> - Use <code>TxtBackend::in_memory()</code> for fast tests</p>
+</li>
+<li>
+<p><strong>Human-editable</strong> - Open in Notepad, add a line, you created a file</p>
+</li>
+</ol>
+<hr>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<p>If you’re feeling brave:</p>
+<ol>
+<li><strong>Add symlink support</strong> - Implement <code>FsLink</code> trait</li>
+<li><strong>Make it async</strong> - Wrap with <code>tokio::fs</code> for the host CSV file</li>
+<li><strong>Add compression</strong> - Gzip the base64 content</li>
+<li><strong>Excel integration</strong> - Add formulas that compute file sizes (why not?)</li>
+</ol>
+<hr>
+<h2 id="bonus-mount-it-as-a-drive"><a class="header" href="#bonus-mount-it-as-a-drive">Bonus: Mount It as a Drive</a></h2>
+<p>With <code>anyfs-mount</code>, you can mount your text file as a real filesystem:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_mount::MountHandle;
+
+let backend = TxtBackend::open("filesystem.txt")?;
+let mount = MountHandle::mount(backend, "/mnt/txt")?;
+
+// Now /mnt/txt is a real mount point backed by a .txt file
+// Any application can read/write files there
+// The data goes into a text file you can edit in Notepad
+// This is fine
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="the-moral"><a class="header" href="#the-moral">The Moral</a></h2>
+<p>AnyFS doesn’t care where bytes come from or where they go. Memory, SQLite, a text file, a REST API, carrier pigeons with USB drives - if you can implement the traits, it’s a valid backend.</p>
+<p>The middleware layer (quotas, sandboxing, rate limiting, logging) works transparently on any backend. That’s the power of good abstractions.</p>
+<p>Now go build something less cursed. Or don’t. I’m not your supervisor.</p>
+<hr>
+<p><em>“I store my production data in text files” - Nobody, ever (until now)</em></p>
+<p><em>“Can I edit my filesystem in Notepad?” - Yes. Yes you can.</em></p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="anyfs---comparison-and-positioning"><a class="header" href="#anyfs---comparison-and-positioning">AnyFS - Comparison and Positioning</a></h1>
 <p><strong>How AnyFS compares to existing solutions</strong></p>
 <p>AnyFS is a <strong>filesystem abstraction with composable middleware</strong>. It separates storage (backends) from policy (middleware) using a Tower-style pattern. With the SQLite backend, a tenant’s filesystem becomes a single portable <code>.db</code> file.</p>
@@ -4046,12 +5490,12 @@ fs.write(path, data)?;
 <hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <p>AnyFS is positioned as the <strong>Tower/Axum of filesystems</strong>: composable middleware over pluggable backends. It fills the gap between simple VFS abstractions (no policies) and complete runtimes (too much bundled together).</p>
-<p><em>For technical details, see <a href="#anyfs---design-overview">Design Overview</a> and <a href="../AGENTS.html">AGENTS.md</a>.</em></p>
+<p><em>For technical details, see <a href="#anyfs---design-overview">Design Overview</a>.</em></p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h1>
 <p><strong>Security model, threat analysis, and containment guarantees</strong></p>
 <hr>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
 <p>AnyFS is designed with security as a primary concern. Security policies are enforced via <strong>composable middleware</strong>, not hardcoded in backends or the container wrapper.</p>
 <hr>
 <h2 id="threat-model"><a class="header" href="#threat-model">Threat Model</a></h2>
@@ -5632,7 +7076,7 @@ alice@server:~$ du -sh .
 <h1 id="backend-implementers-guide"><a class="header" href="#backend-implementers-guide">Backend Implementer’s Guide</a></h1>
 <p>This guide walks you through implementing a custom AnyFS backend.</p>
 <hr>
-<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
 <p>AnyFS uses <strong>layered traits</strong> - you implement only what you need:</p>
 <pre><code>FsPosix (full POSIX)
    │
@@ -6050,7 +7494,7 @@ impl FsLink for MemoryBackend {
 <span class="boring">}</span></code></pre>
 <p><strong>Note:</strong> Most backends don’t need Layer 4. Only implement if you’re wrapping a real filesystem (<code>VRootFsBackend</code>) or building a database that needs full POSIX semantics.</p>
 <hr>
-<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<h2 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h2>
 <p>Return appropriate <code>FsError</code> variants:</p>
 <div class="table-wrapper">
 <table>
@@ -6500,7 +7944,7 @@ impl&lt;B: Vfs&gt; Layer&lt;B&gt; for EncryptedLayer {
     }
 }
 <span class="boring">}</span></code></pre>
-<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<h3 id="usage-1"><a class="header" href="#usage-1">Usage</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::MemoryBackend;
@@ -6798,6 +8242,1285 @@ fn test_path_with_dotdot() {
     assert_eq!(backend.read("/foo/bar/test.txt").unwrap(), b"data");
     assert_eq!(backend.read("/foo/bar/../bar/test.txt").unwrap(), b"data");
     assert_eq!(backend.read("/foo/./bar/test.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="memorybackend-snapshot--restore"><a class="header" href="#memorybackend-snapshot--restore">MemoryBackend Snapshot &amp; Restore</a></h2>
+<p><code>MemoryBackend</code> supports cloning its entire state (snapshot) and serializing to bytes for persistence.</p>
+<h3 id="core-concept"><a class="header" href="#core-concept">Core Concept</a></h3>
+<p><strong>Snapshot = Clone the storage.</strong> That’s it.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// MemoryBackend implements Clone
+#[derive(Clone)]
+pub struct MemoryBackend { ... }
+
+// Snapshot is just .clone()
+let snapshot = fs.clone();
+
+// Restore is just assignment
+fs = snapshot;
+<span class="boring">}</span></code></pre>
+<h3 id="api"><a class="header" href="#api">API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl MemoryBackend {
+    /// Clone the entire filesystem state.
+    /// This is a deep copy - modifications to the clone don't affect the original.
+    pub fn clone(&amp;self) -&gt; Self { ... }  // via #[derive(Clone)]
+
+    /// Serialize to bytes for persistence/transfer.
+    pub fn to_bytes(&amp;self) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+
+    /// Deserialize from bytes.
+    pub fn from_bytes(data: &amp;[u8]) -&gt; Result&lt;Self, FsError&gt;;
+
+    /// Save to file.
+    pub fn save_to(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+
+    /// Load from file.
+    pub fn load_from(path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="usage-1-1"><a class="header" href="#usage-1-1">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut fs = MemoryBackend::new();
+fs.write("/data.txt", b"important")?;
+
+// Snapshot = clone
+let checkpoint = fs.clone();
+
+// Do risky work...
+fs.write("/data.txt", b"corrupted")?;
+
+// Rollback = replace with clone
+fs = checkpoint;
+assert_eq!(fs.read("/data.txt")?, b"important");
+<span class="boring">}</span></code></pre>
+<h3 id="persistence"><a class="header" href="#persistence">Persistence</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Save to disk
+fs.save_to("state.bin")?;
+
+// Load from disk
+let fs = MemoryBackend::load_from("state.bin")?;
+<span class="boring">}</span></code></pre>
+<h3 id="sqlitebackend"><a class="header" href="#sqlitebackend">SqliteBackend</a></h3>
+<p>SQLite already has persistence - the database file IS the snapshot. For explicit snapshots:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl SqliteBackend {
+    /// Create an in-memory copy of the database.
+    pub fn clone_to_memory(&amp;self) -&gt; Result&lt;Self, FsError&gt;;
+
+    /// Backup to another file.
+    pub fn backup_to(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-guide"><a class="header" href="#testing-guide">Testing Guide</a></h1>
+<p><strong>Comprehensive testing strategy for AnyFS</strong></p>
+<hr>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<p>AnyFS uses a layered testing approach:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Layer</th><th>What it tests</th><th>Run with</th></tr>
+</thead>
+<tbody>
+<tr><td>Unit tests</td><td>Individual components</td><td><code>cargo test</code></td></tr>
+<tr><td>Conformance tests</td><td>Backend trait compliance</td><td><code>cargo test --features conformance</code></td></tr>
+<tr><td>Integration tests</td><td>Full stack behavior</td><td><code>cargo test --test integration</code></td></tr>
+<tr><td>Stress tests</td><td>Concurrency &amp; limits</td><td><code>cargo test --release -- --ignored</code></td></tr>
+<tr><td>Platform tests</td><td>Cross-platform behavior</td><td>CI matrix</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="1-backend-conformance-tests"><a class="header" href="#1-backend-conformance-tests">1. Backend Conformance Tests</a></h2>
+<p>Every backend must pass the same conformance suite. This ensures backends are interchangeable.</p>
+<h3 id="running-conformance-tests"><a class="header" href="#running-conformance-tests">Running Conformance Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_test::{run_conformance_suite, ConformanceLevel};
+
+#[test]
+fn memory_backend_conformance() {
+    run_conformance_suite(
+        MemoryBackend::new(),
+        ConformanceLevel::Fs,  // or FsFull, FsFuse, FsPosix
+    );
+}
+
+#[test]
+fn sqlite_backend_conformance() {
+    let temp = tempfile::tempdir().unwrap();
+    let db_path = temp.path().join("test.db");
+    run_conformance_suite(
+        SqliteBackend::open(&amp;db_path).unwrap(),
+        ConformanceLevel::FsFuse,
+    );
+}
+<span class="boring">}</span></code></pre>
+<h3 id="conformance-levels"><a class="header" href="#conformance-levels">Conformance Levels</a></h3>
+<pre><code>FsPosix  ──▶ FsHandles, FsLock, FsXattr tests
+    │
+FsFuse   ──▶ FsInode tests (path_to_inode, lookup, etc.)
+    │
+FsFull   ──▶ FsLink, FsPermissions, FsSync, FsStats tests
+    │
+Fs       ──▶ FsRead, FsWrite, FsDir tests (REQUIRED for all)
+</code></pre>
+<h3 id="core-tests-fs-level"><a class="header" href="#core-tests-fs-level">Core Tests (Fs level)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_write_and_read() {
+    let mut backend = create_backend();
+
+    backend.write("/file.txt", b"hello world").unwrap();
+    let content = backend.read("/file.txt").unwrap();
+
+    assert_eq!(content, b"hello world");
+}
+
+#[test]
+fn test_read_nonexistent_returns_not_found() {
+    let backend = create_backend();
+
+    let result = backend.read("/nonexistent.txt");
+
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
+}
+
+#[test]
+fn test_create_dir_and_list() {
+    let mut backend = create_backend();
+
+    backend.create_dir("/mydir").unwrap();
+    backend.write("/mydir/file.txt", b"data").unwrap();
+
+    let entries = backend.read_dir("/mydir").unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "file.txt");
+}
+
+#[test]
+fn test_create_dir_all() {
+    let mut backend = create_backend();
+
+    backend.create_dir_all("/a/b/c/d").unwrap();
+
+    assert!(backend.exists("/a/b/c/d").unwrap());
+}
+
+#[test]
+fn test_remove_file() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    backend.remove_file("/file.txt").unwrap();
+
+    assert!(!backend.exists("/file.txt").unwrap());
+}
+
+#[test]
+fn test_remove_dir_all() {
+    let mut backend = create_backend();
+    backend.create_dir_all("/a/b/c").unwrap();
+    backend.write("/a/b/c/file.txt", b"data").unwrap();
+
+    backend.remove_dir_all("/a").unwrap();
+
+    assert!(!backend.exists("/a").unwrap());
+}
+
+#[test]
+fn test_rename() {
+    let mut backend = create_backend();
+    backend.write("/old.txt", b"data").unwrap();
+
+    backend.rename("/old.txt", "/new.txt").unwrap();
+
+    assert!(!backend.exists("/old.txt").unwrap());
+    assert_eq!(backend.read("/new.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_copy() {
+    let mut backend = create_backend();
+    backend.write("/original.txt", b"data").unwrap();
+
+    backend.copy("/original.txt", "/copy.txt").unwrap();
+
+    assert_eq!(backend.read("/original.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/copy.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_metadata() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello").unwrap();
+
+    let meta = backend.metadata("/file.txt").unwrap();
+
+    assert_eq!(meta.size, 5);
+    assert!(meta.file_type.is_file());
+}
+
+#[test]
+fn test_append() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello").unwrap();
+
+    backend.append("/file.txt", b" world").unwrap();
+
+    assert_eq!(backend.read("/file.txt").unwrap(), b"hello world");
+}
+
+#[test]
+fn test_truncate() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello world").unwrap();
+
+    backend.truncate("/file.txt", 5).unwrap();
+
+    assert_eq!(backend.read("/file.txt").unwrap(), b"hello");
+}
+
+#[test]
+fn test_read_range() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello world").unwrap();
+
+    let partial = backend.read_range("/file.txt", 6, 5).unwrap();
+
+    assert_eq!(partial, b"world");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="extended-tests-fsfull-level"><a class="header" href="#extended-tests-fsfull-level">Extended Tests (FsFull level)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_symlink() {
+    let mut backend = create_backend();
+    backend.write("/target.txt", b"data").unwrap();
+
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // read_link returns the target
+    assert_eq!(backend.read_link("/link.txt").unwrap(), Path::new("/target.txt"));
+
+    // reading the symlink follows it
+    assert_eq!(backend.read("/link.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_hard_link() {
+    let mut backend = create_backend();
+    backend.write("/original.txt", b"data").unwrap();
+
+    backend.hard_link("/original.txt", "/hardlink.txt").unwrap();
+
+    // Both point to same data
+    assert_eq!(backend.read("/hardlink.txt").unwrap(), b"data");
+
+    // Metadata shows nlink &gt; 1
+    let meta = backend.metadata("/original.txt").unwrap();
+    assert!(meta.nlink &gt;= 2);
+}
+
+#[test]
+fn test_symlink_metadata() {
+    let mut backend = create_backend();
+    backend.write("/target.txt", b"data").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // symlink_metadata returns metadata of the symlink itself
+    let meta = backend.symlink_metadata("/link.txt").unwrap();
+    assert!(meta.file_type.is_symlink());
+}
+
+#[test]
+fn test_set_permissions() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    backend.set_permissions("/file.txt", Permissions::from_mode(0o644)).unwrap();
+
+    let meta = backend.metadata("/file.txt").unwrap();
+    assert_eq!(meta.permissions.mode() &amp; 0o777, 0o644);
+}
+
+#[test]
+fn test_sync() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    // Should not error
+    backend.sync().unwrap();
+    backend.fsync("/file.txt").unwrap();
+}
+
+#[test]
+fn test_statfs() {
+    let backend = create_backend();
+
+    let stats = backend.statfs().unwrap();
+
+    assert!(stats.total_bytes &gt; 0 || stats.total_bytes == 0); // Memory may report 0
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="2-middleware-tests"><a class="header" href="#2-middleware-tests">2. Middleware Tests</a></h2>
+<p>Each middleware is tested in isolation and in combination.</p>
+<h3 id="quota-tests"><a class="header" href="#quota-tests">Quota Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_quota_blocks_when_exceeded() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/big.txt", &amp;[0u8; 200]);
+
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_quota_allows_within_limit() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(1000);
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/small.txt", &amp;[0u8; 100]).unwrap();
+
+    assert!(fs.exists("/small.txt").unwrap());
+}
+
+#[test]
+fn test_quota_tracks_deletes() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", &amp;[0u8; 50]).unwrap();
+    fs.remove_file("/file.txt").unwrap();
+
+    // Should be able to write again after delete
+    fs.write("/file2.txt", &amp;[0u8; 50]).unwrap();
+}
+
+#[test]
+fn test_quota_max_file_size() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_file_size(50);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/big.txt", &amp;[0u8; 100]);
+
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_quota_streaming_write() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    let mut writer = fs.open_write("/file.txt").unwrap();
+    writer.write_all(&amp;[0u8; 50]).unwrap();
+    writer.write_all(&amp;[0u8; 50]).unwrap();
+    drop(writer);
+
+    // Next write should fail
+    let result = fs.write("/file2.txt", &amp;[0u8; 10]);
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="restrictions-tests"><a class="header" href="#restrictions-tests">Restrictions Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_restrictions_blocks_symlinks() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_symlinks();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/target.txt", b"data").unwrap();
+    let result = fs.symlink("/target.txt", "/link.txt");
+
+    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+}
+
+#[test]
+fn test_restrictions_allows_non_blocked() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_symlinks();  // Only block symlinks
+    let mut fs = FileStorage::new(backend);
+
+    // Hard links should still work
+    fs.write("/target.txt", b"data").unwrap();
+    fs.hard_link("/target.txt", "/link.txt").unwrap();
+}
+
+#[test]
+fn test_restrictions_blocks_permissions() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_permissions();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();
+    let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o777));
+
+    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="pathfilter-tests"><a class="header" href="#pathfilter-tests">PathFilter Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_pathfilter_allows_matching() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**");
+    let mut fs = FileStorage::new(backend);
+
+    fs.create_dir_all("/workspace/project").unwrap();
+    fs.write("/workspace/project/file.txt", b"data").unwrap();
+}
+
+#[test]
+fn test_pathfilter_blocks_non_matching() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**");
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/etc/passwd", b"data");
+
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_pathfilter_deny_overrides_allow() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**")
+        .deny("**/.env");
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/workspace/.env", b"SECRET=xxx");
+
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_pathfilter_read_dir_filters() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/workspace/allowed.txt", b"data").unwrap();
+    inner.write("/workspace/.env", b"secret").unwrap();
+
+    let backend = PathFilter::new(inner)
+        .allow("/workspace/**")
+        .deny("**/.env");
+    let fs = FileStorage::new(backend);
+
+    let entries = fs.read_dir("/workspace").unwrap();
+
+    // .env should be filtered out
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "allowed.txt");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="readonly-tests"><a class="header" href="#readonly-tests">ReadOnly Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_readonly_blocks_writes() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/file.txt", b"original").unwrap();
+
+    let backend = ReadOnly::new(inner);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/file.txt", b"modified");
+    assert!(matches!(result, Err(FsError::ReadOnly { .. })));
+
+    let result = fs.remove_file("/file.txt");
+    assert!(matches!(result, Err(FsError::ReadOnly { .. })));
+}
+
+#[test]
+fn test_readonly_allows_reads() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/file.txt", b"data").unwrap();
+
+    let backend = ReadOnly::new(inner);
+    let fs = FileStorage::new(backend);
+
+    assert_eq!(fs.read("/file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="middleware-composition-tests"><a class="header" href="#middleware-composition-tests">Middleware Composition Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_middleware_composition_order() {
+    // Quota inside, Restrictions outside
+    // Quota should be checked before restrictions
+    let backend = Restrictions::new(
+        Quota::new(MemoryBackend::new())
+            .with_max_total_size(100)
+    ).deny_symlinks();
+
+    let mut fs = FileStorage::new(backend);
+
+    // Write should hit quota first
+    let result = fs.write("/big.txt", &amp;[0u8; 200]);
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_layer_syntax() {
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::new().max_total_size(1000))
+        .layer(RestrictionsLayer::new().deny_symlinks())
+        .layer(TracingLayer::new());
+
+    let mut fs = FileStorage::new(backend);
+    fs.write("/test.txt", b"data").unwrap();
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="3-filestorage-tests"><a class="header" href="#3-filestorage-tests">3. FileStorage Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_filestorage_type_inference() {
+    // Type should be inferred
+    let fs = FileStorage::new(MemoryBackend::new());
+    // No explicit type needed
+}
+
+#[test]
+fn test_filestorage_marker_types() {
+    struct Sandbox;
+    struct Production;
+
+    let sandbox: FileStorage&lt;_, Sandbox&gt; = FileStorage::new(MemoryBackend::new());
+    let prod: FileStorage&lt;_, Production&gt; = FileStorage::new(MemoryBackend::new());
+
+    fn only_sandbox(_fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) {}
+
+    only_sandbox(&amp;sandbox);  // Compiles
+    // only_sandbox(&amp;prod);  // Would not compile
+}
+
+#[test]
+fn test_filestorage_boxed() {
+    let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
+    let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
+
+    // Both can be stored in same collection
+    let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="4-error-handling-tests"><a class="header" href="#4-error-handling-tests">4. Error Handling Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_error_not_found() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    match fs.read("/nonexistent") {
+        Err(FsError::NotFound { path, operation }) =&gt; {
+            assert_eq!(path, Path::new("/nonexistent"));
+            assert_eq!(operation, "read");
+        }
+        _ =&gt; panic!("Expected NotFound error"),
+    }
+}
+
+#[test]
+fn test_error_already_exists() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/mydir").unwrap();
+
+    match fs.create_dir("/mydir") {
+        Err(FsError::AlreadyExists { path, .. }) =&gt; {
+            assert_eq!(path, Path::new("/mydir"));
+        }
+        _ =&gt; panic!("Expected AlreadyExists error"),
+    }
+}
+
+#[test]
+fn test_error_not_a_directory() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.write("/file.txt", b"data").unwrap();
+
+    match fs.read_dir("/file.txt") {
+        Err(FsError::NotADirectory { path }) =&gt; {
+            assert_eq!(path, Path::new("/file.txt"));
+        }
+        _ =&gt; panic!("Expected NotADirectory error"),
+    }
+}
+
+#[test]
+fn test_error_directory_not_empty() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/mydir").unwrap();
+    fs.write("/mydir/file.txt", b"data").unwrap();
+
+    match fs.remove_dir("/mydir") {
+        Err(FsError::DirectoryNotEmpty { path }) =&gt; {
+            assert_eq!(path, Path::new("/mydir"));
+        }
+        _ =&gt; panic!("Expected DirectoryNotEmpty error"),
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="5-concurrency-tests"><a class="header" href="#5-concurrency-tests">5. Concurrency Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_concurrent_reads() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/file.txt", b"data").unwrap();
+    let backend = Arc::new(RwLock::new(backend));
+
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            let guard = backend.read().unwrap();
+            guard.read("/file.txt").unwrap()
+        })
+    }).collect();
+
+    for handle in handles {
+        assert_eq!(handle.join().unwrap(), b"data");
+    }
+}
+
+#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(Mutex::new(MemoryBackend::new()));
+
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            let mut guard = backend.lock().unwrap();
+            // Multiple threads creating same path should not race
+            guard.create_dir_all("/a/b/c/d").unwrap();
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    assert!(backend.lock().unwrap().exists("/a/b/c/d").unwrap());
+}
+
+#[test]
+#[ignore] // Run with: cargo test --release -- --ignored
+fn stress_test_concurrent_operations() {
+    let backend = Arc::new(Mutex::new(MemoryBackend::new()));
+
+    let handles: Vec&lt;_&gt; = (0..100).map(|i| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            for j in 0..100 {
+                let path = format!("/thread_{}/file_{}.txt", i, j);
+                let mut guard = backend.lock().unwrap();
+                guard.create_dir_all(&amp;format!("/thread_{}", i)).ok();
+                guard.write(&amp;path, b"data").unwrap();
+                drop(guard);
+
+                let guard = backend.lock().unwrap();
+                let _ = guard.read(&amp;path);
+            }
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="6-path-edge-case-tests"><a class="header" href="#6-path-edge-case-tests">6. Path Edge Case Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_path_normalization() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/a/b/../c/file.txt", b"data").unwrap();
+
+    // Should be accessible via normalized path
+    assert_eq!(fs.read("/a/c/file.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_double_slashes() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("//a//b//file.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/a/b/file.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_root_path() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    let entries = fs.read_dir("/").unwrap();
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn test_empty_path_returns_error() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    let result = fs.read("");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_unicode_paths() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/文件/データ.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/文件/データ.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_paths_with_spaces() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/my folder/my file.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/my folder/my file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="7-no-panic-guarantee-tests"><a class="header" href="#7-no-panic-guarantee-tests">7. No-Panic Guarantee Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn no_panic_missing_file() {
+    let fs = FileStorage::new(MemoryBackend::new());
+    let _ = fs.read("/missing");  // Should return Err, not panic
+}
+
+#[test]
+fn no_panic_missing_parent() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    let _ = fs.write("/missing/parent/file.txt", b"data");  // Should return Err
+}
+
+#[test]
+fn no_panic_read_dir_on_file() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.write("/file.txt", b"data").unwrap();
+    let _ = fs.read_dir("/file.txt");  // Should return Err, not panic
+}
+
+#[test]
+fn no_panic_remove_nonempty_dir() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/dir").unwrap();
+    fs.write("/dir/file.txt", b"data").unwrap();
+    let _ = fs.remove_dir("/dir");  // Should return Err, not panic
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="8-symlink-security-tests"><a class="header" href="#8-symlink-security-tests">8. Symlink Security Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Virtual backend symlink following control
+#[test]
+fn test_virtual_backend_follow_symlinks_enabled() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Default: following enabled
+    assert_eq!(backend.read("/link.txt").unwrap(), b"secret");
+}
+
+#[test]
+fn test_virtual_backend_follow_symlinks_disabled() {
+    let mut backend = MemoryBackend::new();
+    backend.set_follow_symlinks(false);
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Reading symlink should fail or return symlink data
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::IsSymlink { .. })));
+}
+
+#[test]
+fn test_symlink_chain_resolution() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"data").unwrap();
+    backend.symlink("/target.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    // Should follow chain
+    assert_eq!(backend.read("/link2.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_symlink_loop_detection() {
+    let mut backend = MemoryBackend::new();
+    backend.symlink("/link2.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    let result = backend.read("/link1.txt");
+    assert!(matches!(result, Err(FsError::SymlinkLoop { .. })));
+}
+
+#[test]
+fn test_virtual_symlink_cannot_escape() {
+    let mut backend = MemoryBackend::new();
+    // Create a symlink pointing "outside" - but in virtual backend, paths are just keys
+    backend.symlink("../../../etc/passwd", "/link.txt").unwrap();
+
+    // Reading should fail (target doesn't exist), not read real /etc/passwd
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="vrootfsbackend-containment-tests"><a class="header" href="#vrootfsbackend-containment-tests">VRootFsBackend Containment Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_vroot_prevents_path_traversal() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Attempt to escape via ..
+    let result = fs.read("/../../../etc/passwd");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_prevents_symlink_escape() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("file.txt"), b"data").unwrap();
+
+    // Create symlink pointing outside the jail
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc/passwd", temp.path().join("escape")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Reading should be blocked by strict-path
+    let result = fs.read("/escape");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_allows_internal_symlinks() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("target.txt"), b"data").unwrap();
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("target.txt", temp.path().join("link.txt")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Internal symlinks should work
+    assert_eq!(fs.read("/link.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_vroot_canonicalizes_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let mut fs = FileStorage::new(backend);
+
+    fs.create_dir("/a").unwrap();
+    fs.write("/a/file.txt", b"data").unwrap();
+
+    // Access via normalized path
+    assert_eq!(fs.read("/a/../a/./file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="9-ratelimit-middleware-tests"><a class="header" href="#9-ratelimit-middleware-tests">9. RateLimit Middleware Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_ratelimit_allows_within_limit() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(10)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    // Should succeed within limit
+    for i in 0..5 {
+        fs.write(&amp;format!("/file{}.txt", i), b"data").unwrap();
+    }
+}
+
+#[test]
+fn test_ratelimit_blocks_when_exceeded() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+    fs.write("/file3.txt", b"data").unwrap();
+
+    let result = fs.write("/file4.txt", b"data");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+
+#[test]
+fn test_ratelimit_resets_after_window() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(2)
+        .per(Duration::from_millis(100));
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+
+    // Wait for window to reset
+    std::thread::sleep(Duration::from_millis(150));
+
+    // Should succeed again
+    fs.write("/file3.txt", b"data").unwrap();
+}
+
+#[test]
+fn test_ratelimit_counts_all_operations() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();  // 1
+    let _ = fs.read("/file.txt");              // 2
+    let _ = fs.exists("/file.txt");            // 3
+
+    let result = fs.metadata("/file.txt");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="10-tracing-middleware-tests"><a class="header" href="#10-tracing-middleware-tests">10. Tracing Middleware Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct TestLogger {
+    logs: Arc&lt;Mutex&lt;Vec&lt;String&gt;&gt;&gt;,
+}
+
+impl TestLogger {
+    fn entries(&amp;self) -&gt; Vec&lt;String&gt; {
+        self.logs.lock().unwrap().clone()
+    }
+}
+
+#[test]
+fn test_tracing_logs_operations() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();
+    fs.read("/file.txt").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("write")));
+    assert!(entries.iter().any(|e| e.contains("read")));
+}
+
+#[test]
+fn test_tracing_includes_path() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/important/secret.txt", b"data").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("/important/secret.txt")));
+}
+
+#[test]
+fn test_tracing_logs_errors() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let fs = FileStorage::new(backend);
+
+    let _ = fs.read("/nonexistent.txt");
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("NotFound") || e.contains("error")));
+}
+
+#[test]
+fn test_tracing_with_span_context() {
+    use tracing::{info_span, Instrument};
+
+    let backend = Tracing::new(MemoryBackend::new());
+    let mut fs = FileStorage::new(backend);
+
+    async {
+        fs.write("/async.txt", b"data").unwrap();
+    }
+    .instrument(info_span!("test_operation"))
+    .now_or_never();
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="11-backend-interchangeability-tests"><a class="header" href="#11-backend-interchangeability-tests">11. Backend Interchangeability Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Ensure all backends can be used interchangeably
+fn generic_filesystem_test&lt;B: Fs&gt;(mut backend: B) {
+    backend.create_dir("/test").unwrap();
+    backend.write("/test/file.txt", b"hello").unwrap();
+    assert_eq!(backend.read("/test/file.txt").unwrap(), b"hello");
+    backend.remove_dir_all("/test").unwrap();
+    assert!(!backend.exists("/test").unwrap());
+}
+
+#[test]
+fn test_memory_backend_interchangeable() {
+    generic_filesystem_test(MemoryBackend::new());
+}
+
+#[test]
+fn test_sqlite_backend_interchangeable() {
+    let (backend, _temp) = temp_sqlite_backend();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_vroot_backend_interchangeable() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_middleware_stack_interchangeable() {
+    let backend = Tracing::new(
+        Quota::new(MemoryBackend::new())
+            .with_max_total_size(1024 * 1024)
+    );
+    generic_filesystem_test(backend);
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="12-property-based-tests"><a class="header" href="#12-property-based-tests">12. Property-Based Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn prop_write_read_roundtrip(data: Vec&lt;u8&gt;) {
+        let mut backend = MemoryBackend::new();
+        backend.write("/file.bin", &amp;data).unwrap();
+        let read_data = backend.read("/file.bin").unwrap();
+        prop_assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn prop_path_normalization_idempotent(path in "[a-z/]{1,50}") {
+        let mut backend = MemoryBackend::new();
+        if let Ok(()) = backend.create_dir_all(&amp;path) {
+            // Creating again should either succeed or return AlreadyExists
+            let result = backend.create_dir_all(&amp;path);
+            prop_assert!(result.is_ok() || matches!(result, Err(FsError::AlreadyExists { .. })));
+        }
+    }
+
+    #[test]
+    fn prop_quota_never_exceeds_limit(
+        file_count in 1..10usize,
+        file_sizes in prop::collection::vec(1..100usize, 1..10)
+    ) {
+        let limit = 500usize;
+        let backend = Quota::new(MemoryBackend::new())
+            .with_max_total_size(limit as u64);
+        let mut fs = FileStorage::new(backend);
+
+        let mut total_written = 0usize;
+        for (i, size) in file_sizes.into_iter().take(file_count).enumerate() {
+            let data = vec![0u8; size];
+            match fs.write(&amp;format!("/file{}.txt", i), &amp;data) {
+                Ok(()) =&gt; total_written += size,
+                Err(FsError::QuotaExceeded { .. }) =&gt; break,
+                Err(e) =&gt; panic!("Unexpected error: {:?}", e),
+            }
+        }
+        prop_assert!(total_written &lt;= limit);
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="13-snapshot--restore-tests"><a class="header" href="#13-snapshot--restore-tests">13. Snapshot &amp; Restore Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// MemoryBackend implements Clone - that's the snapshot mechanism
+#[test]
+fn test_clone_creates_independent_copy() {
+    let mut original = MemoryBackend::new();
+    original.write("/file.txt", b"original").unwrap();
+
+    // Clone = snapshot
+    let mut snapshot = original.clone();
+
+    // Modify original
+    original.write("/file.txt", b"modified").unwrap();
+    original.write("/new.txt", b"new").unwrap();
+
+    // Snapshot is unchanged
+    assert_eq!(snapshot.read("/file.txt").unwrap(), b"original");
+    assert!(!snapshot.exists("/new.txt").unwrap());
+}
+
+#[test]
+fn test_checkpoint_and_rollback() {
+    let mut fs = MemoryBackend::new();
+    fs.write("/important.txt", b"original").unwrap();
+
+    // Checkpoint = clone
+    let checkpoint = fs.clone();
+
+    // Do risky work
+    fs.write("/important.txt", b"corrupted").unwrap();
+
+    // Rollback = replace with checkpoint
+    fs = checkpoint;
+    assert_eq!(fs.read("/important.txt").unwrap(), b"original");
+}
+
+#[test]
+fn test_persistence_roundtrip() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("state.bin");
+
+    let mut fs = MemoryBackend::new();
+    fs.write("/data.txt", b"persisted").unwrap();
+
+    // Save
+    fs.save_to(&amp;path).unwrap();
+
+    // Load
+    let restored = MemoryBackend::load_from(&amp;path).unwrap();
+    assert_eq!(restored.read("/data.txt").unwrap(), b"persisted");
+}
+
+#[test]
+fn test_to_bytes_from_bytes() {
+    let mut fs = MemoryBackend::new();
+    fs.create_dir_all("/a/b/c").unwrap();
+    fs.write("/a/b/c/file.txt", b"nested").unwrap();
+
+    let bytes = fs.to_bytes().unwrap();
+    let restored = MemoryBackend::from_bytes(&amp;bytes).unwrap();
+
+    assert_eq!(restored.read("/a/b/c/file.txt").unwrap(), b"nested");
+}
+
+#[test]
+fn test_from_bytes_invalid_data() {
+    let result = MemoryBackend::from_bytes(b"garbage");
+    assert!(result.is_err());
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="14-running-tests"><a class="header" href="#14-running-tests">14. Running Tests</a></h2>
+<pre><code class="language-bash"># All tests
+cargo test
+
+# Specific backend conformance
+cargo test memory_backend_conformance
+cargo test sqlite_backend_conformance
+
+# Middleware tests
+cargo test quota
+cargo test restrictions
+cargo test pathfilter
+
+# Stress tests (release mode)
+cargo test --release -- --ignored
+
+# With coverage
+cargo tarpaulin --out Html
+
+# Cross-platform (CI)
+cargo test --target x86_64-unknown-linux-gnu
+cargo test --target x86_64-pc-windows-msvc
+cargo test --target x86_64-apple-darwin
+
+# WASM
+cargo test --target wasm32-unknown-unknown
+</code></pre>
+<hr>
+<h2 id="9-test-utilities"><a class="header" href="#9-test-utilities">9. Test Utilities</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In anyfs-test crate
+
+/// Create a temporary backend for testing
+pub fn temp_sqlite_backend() -&gt; (SqliteBackend, tempfile::TempDir) {
+    let temp = tempfile::tempdir().unwrap();
+    let db_path = temp.path().join("test.db");
+    let backend = SqliteBackend::open(&amp;db_path).unwrap();
+    (backend, temp)
+}
+
+/// Run a test against multiple backends
+pub fn test_all_backends&lt;F&gt;(test: F)
+where
+    F: Fn(&amp;mut dyn Fs),
+{
+    // Memory
+    let mut backend = MemoryBackend::new();
+    test(&amp;mut backend);
+
+    // SQLite
+    let (mut backend, _temp) = temp_sqlite_backend();
+    test(&amp;mut backend);
 }
 <span class="boring">}</span></code></pre>
 <div style="break-before: page; page-break-before: always;"></div>

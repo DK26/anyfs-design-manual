@@ -1,0 +1,1451 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Testing Guide - AnyFS Ecosystem Manual</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Documentation for AnyFS: pluggable virtual filesystem backends + container layer for Rust">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "../searchindex-e1a075be.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-b60f0e7e.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">AnyFS Ecosystem Manual</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/DK26/vfs-design-manual" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/DK26/vfs-design-manual/edit/main/src/implementation/testing-guide.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="testing-guide"><a class="header" href="#testing-guide">Testing Guide</a></h1>
+<p><strong>Comprehensive testing strategy for AnyFS</strong></p>
+<hr>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>AnyFS uses a layered testing approach:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Layer</th><th>What it tests</th><th>Run with</th></tr>
+</thead>
+<tbody>
+<tr><td>Unit tests</td><td>Individual components</td><td><code>cargo test</code></td></tr>
+<tr><td>Conformance tests</td><td>Backend trait compliance</td><td><code>cargo test --features conformance</code></td></tr>
+<tr><td>Integration tests</td><td>Full stack behavior</td><td><code>cargo test --test integration</code></td></tr>
+<tr><td>Stress tests</td><td>Concurrency &amp; limits</td><td><code>cargo test --release -- --ignored</code></td></tr>
+<tr><td>Platform tests</td><td>Cross-platform behavior</td><td>CI matrix</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="1-backend-conformance-tests"><a class="header" href="#1-backend-conformance-tests">1. Backend Conformance Tests</a></h2>
+<p>Every backend must pass the same conformance suite. This ensures backends are interchangeable.</p>
+<h3 id="running-conformance-tests"><a class="header" href="#running-conformance-tests">Running Conformance Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs_test::{run_conformance_suite, ConformanceLevel};
+
+#[test]
+fn memory_backend_conformance() {
+    run_conformance_suite(
+        MemoryBackend::new(),
+        ConformanceLevel::Fs,  // or FsFull, FsFuse, FsPosix
+    );
+}
+
+#[test]
+fn sqlite_backend_conformance() {
+    let temp = tempfile::tempdir().unwrap();
+    let db_path = temp.path().join("test.db");
+    run_conformance_suite(
+        SqliteBackend::open(&amp;db_path).unwrap(),
+        ConformanceLevel::FsFuse,
+    );
+}
+<span class="boring">}</span></code></pre>
+<h3 id="conformance-levels"><a class="header" href="#conformance-levels">Conformance Levels</a></h3>
+<pre><code>FsPosix  ──▶ FsHandles, FsLock, FsXattr tests
+    │
+FsFuse   ──▶ FsInode tests (path_to_inode, lookup, etc.)
+    │
+FsFull   ──▶ FsLink, FsPermissions, FsSync, FsStats tests
+    │
+Fs       ──▶ FsRead, FsWrite, FsDir tests (REQUIRED for all)
+</code></pre>
+<h3 id="core-tests-fs-level"><a class="header" href="#core-tests-fs-level">Core Tests (Fs level)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_write_and_read() {
+    let mut backend = create_backend();
+
+    backend.write("/file.txt", b"hello world").unwrap();
+    let content = backend.read("/file.txt").unwrap();
+
+    assert_eq!(content, b"hello world");
+}
+
+#[test]
+fn test_read_nonexistent_returns_not_found() {
+    let backend = create_backend();
+
+    let result = backend.read("/nonexistent.txt");
+
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
+}
+
+#[test]
+fn test_create_dir_and_list() {
+    let mut backend = create_backend();
+
+    backend.create_dir("/mydir").unwrap();
+    backend.write("/mydir/file.txt", b"data").unwrap();
+
+    let entries = backend.read_dir("/mydir").unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "file.txt");
+}
+
+#[test]
+fn test_create_dir_all() {
+    let mut backend = create_backend();
+
+    backend.create_dir_all("/a/b/c/d").unwrap();
+
+    assert!(backend.exists("/a/b/c/d").unwrap());
+}
+
+#[test]
+fn test_remove_file() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    backend.remove_file("/file.txt").unwrap();
+
+    assert!(!backend.exists("/file.txt").unwrap());
+}
+
+#[test]
+fn test_remove_dir_all() {
+    let mut backend = create_backend();
+    backend.create_dir_all("/a/b/c").unwrap();
+    backend.write("/a/b/c/file.txt", b"data").unwrap();
+
+    backend.remove_dir_all("/a").unwrap();
+
+    assert!(!backend.exists("/a").unwrap());
+}
+
+#[test]
+fn test_rename() {
+    let mut backend = create_backend();
+    backend.write("/old.txt", b"data").unwrap();
+
+    backend.rename("/old.txt", "/new.txt").unwrap();
+
+    assert!(!backend.exists("/old.txt").unwrap());
+    assert_eq!(backend.read("/new.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_copy() {
+    let mut backend = create_backend();
+    backend.write("/original.txt", b"data").unwrap();
+
+    backend.copy("/original.txt", "/copy.txt").unwrap();
+
+    assert_eq!(backend.read("/original.txt").unwrap(), b"data");
+    assert_eq!(backend.read("/copy.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_metadata() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello").unwrap();
+
+    let meta = backend.metadata("/file.txt").unwrap();
+
+    assert_eq!(meta.size, 5);
+    assert!(meta.file_type.is_file());
+}
+
+#[test]
+fn test_append() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello").unwrap();
+
+    backend.append("/file.txt", b" world").unwrap();
+
+    assert_eq!(backend.read("/file.txt").unwrap(), b"hello world");
+}
+
+#[test]
+fn test_truncate() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello world").unwrap();
+
+    backend.truncate("/file.txt", 5).unwrap();
+
+    assert_eq!(backend.read("/file.txt").unwrap(), b"hello");
+}
+
+#[test]
+fn test_read_range() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"hello world").unwrap();
+
+    let partial = backend.read_range("/file.txt", 6, 5).unwrap();
+
+    assert_eq!(partial, b"world");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="extended-tests-fsfull-level"><a class="header" href="#extended-tests-fsfull-level">Extended Tests (FsFull level)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_symlink() {
+    let mut backend = create_backend();
+    backend.write("/target.txt", b"data").unwrap();
+
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // read_link returns the target
+    assert_eq!(backend.read_link("/link.txt").unwrap(), Path::new("/target.txt"));
+
+    // reading the symlink follows it
+    assert_eq!(backend.read("/link.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_hard_link() {
+    let mut backend = create_backend();
+    backend.write("/original.txt", b"data").unwrap();
+
+    backend.hard_link("/original.txt", "/hardlink.txt").unwrap();
+
+    // Both point to same data
+    assert_eq!(backend.read("/hardlink.txt").unwrap(), b"data");
+
+    // Metadata shows nlink &gt; 1
+    let meta = backend.metadata("/original.txt").unwrap();
+    assert!(meta.nlink &gt;= 2);
+}
+
+#[test]
+fn test_symlink_metadata() {
+    let mut backend = create_backend();
+    backend.write("/target.txt", b"data").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // symlink_metadata returns metadata of the symlink itself
+    let meta = backend.symlink_metadata("/link.txt").unwrap();
+    assert!(meta.file_type.is_symlink());
+}
+
+#[test]
+fn test_set_permissions() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    backend.set_permissions("/file.txt", Permissions::from_mode(0o644)).unwrap();
+
+    let meta = backend.metadata("/file.txt").unwrap();
+    assert_eq!(meta.permissions.mode() &amp; 0o777, 0o644);
+}
+
+#[test]
+fn test_sync() {
+    let mut backend = create_backend();
+    backend.write("/file.txt", b"data").unwrap();
+
+    // Should not error
+    backend.sync().unwrap();
+    backend.fsync("/file.txt").unwrap();
+}
+
+#[test]
+fn test_statfs() {
+    let backend = create_backend();
+
+    let stats = backend.statfs().unwrap();
+
+    assert!(stats.total_bytes &gt; 0 || stats.total_bytes == 0); // Memory may report 0
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="2-middleware-tests"><a class="header" href="#2-middleware-tests">2. Middleware Tests</a></h2>
+<p>Each middleware is tested in isolation and in combination.</p>
+<h3 id="quota-tests"><a class="header" href="#quota-tests">Quota Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_quota_blocks_when_exceeded() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/big.txt", &amp;[0u8; 200]);
+
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_quota_allows_within_limit() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(1000);
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/small.txt", &amp;[0u8; 100]).unwrap();
+
+    assert!(fs.exists("/small.txt").unwrap());
+}
+
+#[test]
+fn test_quota_tracks_deletes() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", &amp;[0u8; 50]).unwrap();
+    fs.remove_file("/file.txt").unwrap();
+
+    // Should be able to write again after delete
+    fs.write("/file2.txt", &amp;[0u8; 50]).unwrap();
+}
+
+#[test]
+fn test_quota_max_file_size() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_file_size(50);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/big.txt", &amp;[0u8; 100]);
+
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_quota_streaming_write() {
+    let backend = Quota::new(MemoryBackend::new())
+        .with_max_total_size(100);
+    let mut fs = FileStorage::new(backend);
+
+    let mut writer = fs.open_write("/file.txt").unwrap();
+    writer.write_all(&amp;[0u8; 50]).unwrap();
+    writer.write_all(&amp;[0u8; 50]).unwrap();
+    drop(writer);
+
+    // Next write should fail
+    let result = fs.write("/file2.txt", &amp;[0u8; 10]);
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="restrictions-tests"><a class="header" href="#restrictions-tests">Restrictions Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_restrictions_blocks_symlinks() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_symlinks();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/target.txt", b"data").unwrap();
+    let result = fs.symlink("/target.txt", "/link.txt");
+
+    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+}
+
+#[test]
+fn test_restrictions_allows_non_blocked() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_symlinks();  // Only block symlinks
+    let mut fs = FileStorage::new(backend);
+
+    // Hard links should still work
+    fs.write("/target.txt", b"data").unwrap();
+    fs.hard_link("/target.txt", "/link.txt").unwrap();
+}
+
+#[test]
+fn test_restrictions_blocks_permissions() {
+    let backend = Restrictions::new(MemoryBackend::new())
+        .deny_permissions();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();
+    let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o777));
+
+    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="pathfilter-tests"><a class="header" href="#pathfilter-tests">PathFilter Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_pathfilter_allows_matching() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**");
+    let mut fs = FileStorage::new(backend);
+
+    fs.create_dir_all("/workspace/project").unwrap();
+    fs.write("/workspace/project/file.txt", b"data").unwrap();
+}
+
+#[test]
+fn test_pathfilter_blocks_non_matching() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**");
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/etc/passwd", b"data");
+
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_pathfilter_deny_overrides_allow() {
+    let backend = PathFilter::new(MemoryBackend::new())
+        .allow("/workspace/**")
+        .deny("**/.env");
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/workspace/.env", b"SECRET=xxx");
+
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_pathfilter_read_dir_filters() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/workspace/allowed.txt", b"data").unwrap();
+    inner.write("/workspace/.env", b"secret").unwrap();
+
+    let backend = PathFilter::new(inner)
+        .allow("/workspace/**")
+        .deny("**/.env");
+    let fs = FileStorage::new(backend);
+
+    let entries = fs.read_dir("/workspace").unwrap();
+
+    // .env should be filtered out
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "allowed.txt");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="readonly-tests"><a class="header" href="#readonly-tests">ReadOnly Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_readonly_blocks_writes() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/file.txt", b"original").unwrap();
+
+    let backend = ReadOnly::new(inner);
+    let mut fs = FileStorage::new(backend);
+
+    let result = fs.write("/file.txt", b"modified");
+    assert!(matches!(result, Err(FsError::ReadOnly { .. })));
+
+    let result = fs.remove_file("/file.txt");
+    assert!(matches!(result, Err(FsError::ReadOnly { .. })));
+}
+
+#[test]
+fn test_readonly_allows_reads() {
+    let mut inner = MemoryBackend::new();
+    inner.write("/file.txt", b"data").unwrap();
+
+    let backend = ReadOnly::new(inner);
+    let fs = FileStorage::new(backend);
+
+    assert_eq!(fs.read("/file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="middleware-composition-tests"><a class="header" href="#middleware-composition-tests">Middleware Composition Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_middleware_composition_order() {
+    // Quota inside, Restrictions outside
+    // Quota should be checked before restrictions
+    let backend = Restrictions::new(
+        Quota::new(MemoryBackend::new())
+            .with_max_total_size(100)
+    ).deny_symlinks();
+
+    let mut fs = FileStorage::new(backend);
+
+    // Write should hit quota first
+    let result = fs.write("/big.txt", &amp;[0u8; 200]);
+    assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
+}
+
+#[test]
+fn test_layer_syntax() {
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::new().max_total_size(1000))
+        .layer(RestrictionsLayer::new().deny_symlinks())
+        .layer(TracingLayer::new());
+
+    let mut fs = FileStorage::new(backend);
+    fs.write("/test.txt", b"data").unwrap();
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="3-filestorage-tests"><a class="header" href="#3-filestorage-tests">3. FileStorage Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_filestorage_type_inference() {
+    // Type should be inferred
+    let fs = FileStorage::new(MemoryBackend::new());
+    // No explicit type needed
+}
+
+#[test]
+fn test_filestorage_marker_types() {
+    struct Sandbox;
+    struct Production;
+
+    let sandbox: FileStorage&lt;_, Sandbox&gt; = FileStorage::new(MemoryBackend::new());
+    let prod: FileStorage&lt;_, Production&gt; = FileStorage::new(MemoryBackend::new());
+
+    fn only_sandbox(_fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) {}
+
+    only_sandbox(&amp;sandbox);  // Compiles
+    // only_sandbox(&amp;prod);  // Would not compile
+}
+
+#[test]
+fn test_filestorage_boxed() {
+    let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
+    let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
+
+    // Both can be stored in same collection
+    let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="4-error-handling-tests"><a class="header" href="#4-error-handling-tests">4. Error Handling Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_error_not_found() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    match fs.read("/nonexistent") {
+        Err(FsError::NotFound { path, operation }) =&gt; {
+            assert_eq!(path, Path::new("/nonexistent"));
+            assert_eq!(operation, "read");
+        }
+        _ =&gt; panic!("Expected NotFound error"),
+    }
+}
+
+#[test]
+fn test_error_already_exists() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/mydir").unwrap();
+
+    match fs.create_dir("/mydir") {
+        Err(FsError::AlreadyExists { path, .. }) =&gt; {
+            assert_eq!(path, Path::new("/mydir"));
+        }
+        _ =&gt; panic!("Expected AlreadyExists error"),
+    }
+}
+
+#[test]
+fn test_error_not_a_directory() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.write("/file.txt", b"data").unwrap();
+
+    match fs.read_dir("/file.txt") {
+        Err(FsError::NotADirectory { path }) =&gt; {
+            assert_eq!(path, Path::new("/file.txt"));
+        }
+        _ =&gt; panic!("Expected NotADirectory error"),
+    }
+}
+
+#[test]
+fn test_error_directory_not_empty() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/mydir").unwrap();
+    fs.write("/mydir/file.txt", b"data").unwrap();
+
+    match fs.remove_dir("/mydir") {
+        Err(FsError::DirectoryNotEmpty { path }) =&gt; {
+            assert_eq!(path, Path::new("/mydir"));
+        }
+        _ =&gt; panic!("Expected DirectoryNotEmpty error"),
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="5-concurrency-tests"><a class="header" href="#5-concurrency-tests">5. Concurrency Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_concurrent_reads() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/file.txt", b"data").unwrap();
+    let backend = Arc::new(RwLock::new(backend));
+
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            let guard = backend.read().unwrap();
+            guard.read("/file.txt").unwrap()
+        })
+    }).collect();
+
+    for handle in handles {
+        assert_eq!(handle.join().unwrap(), b"data");
+    }
+}
+
+#[test]
+fn test_concurrent_create_dir_all() {
+    let backend = Arc::new(Mutex::new(MemoryBackend::new()));
+
+    let handles: Vec&lt;_&gt; = (0..10).map(|_| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            let mut guard = backend.lock().unwrap();
+            // Multiple threads creating same path should not race
+            guard.create_dir_all("/a/b/c/d").unwrap();
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    assert!(backend.lock().unwrap().exists("/a/b/c/d").unwrap());
+}
+
+#[test]
+#[ignore] // Run with: cargo test --release -- --ignored
+fn stress_test_concurrent_operations() {
+    let backend = Arc::new(Mutex::new(MemoryBackend::new()));
+
+    let handles: Vec&lt;_&gt; = (0..100).map(|i| {
+        let backend = Arc::clone(&amp;backend);
+        thread::spawn(move || {
+            for j in 0..100 {
+                let path = format!("/thread_{}/file_{}.txt", i, j);
+                let mut guard = backend.lock().unwrap();
+                guard.create_dir_all(&amp;format!("/thread_{}", i)).ok();
+                guard.write(&amp;path, b"data").unwrap();
+                drop(guard);
+
+                let guard = backend.lock().unwrap();
+                let _ = guard.read(&amp;path);
+            }
+        })
+    }).collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="6-path-edge-case-tests"><a class="header" href="#6-path-edge-case-tests">6. Path Edge Case Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_path_normalization() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/a/b/../c/file.txt", b"data").unwrap();
+
+    // Should be accessible via normalized path
+    assert_eq!(fs.read("/a/c/file.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_double_slashes() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("//a//b//file.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/a/b/file.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_root_path() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    let entries = fs.read_dir("/").unwrap();
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn test_empty_path_returns_error() {
+    let fs = FileStorage::new(MemoryBackend::new());
+
+    let result = fs.read("");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_unicode_paths() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/文件/データ.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/文件/データ.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_paths_with_spaces() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+
+    fs.write("/my folder/my file.txt", b"data").unwrap();
+
+    assert_eq!(fs.read("/my folder/my file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="7-no-panic-guarantee-tests"><a class="header" href="#7-no-panic-guarantee-tests">7. No-Panic Guarantee Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn no_panic_missing_file() {
+    let fs = FileStorage::new(MemoryBackend::new());
+    let _ = fs.read("/missing");  // Should return Err, not panic
+}
+
+#[test]
+fn no_panic_missing_parent() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    let _ = fs.write("/missing/parent/file.txt", b"data");  // Should return Err
+}
+
+#[test]
+fn no_panic_read_dir_on_file() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.write("/file.txt", b"data").unwrap();
+    let _ = fs.read_dir("/file.txt");  // Should return Err, not panic
+}
+
+#[test]
+fn no_panic_remove_nonempty_dir() {
+    let mut fs = FileStorage::new(MemoryBackend::new());
+    fs.create_dir("/dir").unwrap();
+    fs.write("/dir/file.txt", b"data").unwrap();
+    let _ = fs.remove_dir("/dir");  // Should return Err, not panic
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="8-symlink-security-tests"><a class="header" href="#8-symlink-security-tests">8. Symlink Security Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Virtual backend symlink following control
+#[test]
+fn test_virtual_backend_follow_symlinks_enabled() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Default: following enabled
+    assert_eq!(backend.read("/link.txt").unwrap(), b"secret");
+}
+
+#[test]
+fn test_virtual_backend_follow_symlinks_disabled() {
+    let mut backend = MemoryBackend::new();
+    backend.set_follow_symlinks(false);
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Reading symlink should fail or return symlink data
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::IsSymlink { .. })));
+}
+
+#[test]
+fn test_symlink_chain_resolution() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"data").unwrap();
+    backend.symlink("/target.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    // Should follow chain
+    assert_eq!(backend.read("/link2.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_symlink_loop_detection() {
+    let mut backend = MemoryBackend::new();
+    backend.symlink("/link2.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    let result = backend.read("/link1.txt");
+    assert!(matches!(result, Err(FsError::SymlinkLoop { .. })));
+}
+
+#[test]
+fn test_virtual_symlink_cannot_escape() {
+    let mut backend = MemoryBackend::new();
+    // Create a symlink pointing "outside" - but in virtual backend, paths are just keys
+    backend.symlink("../../../etc/passwd", "/link.txt").unwrap();
+
+    // Reading should fail (target doesn't exist), not read real /etc/passwd
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="vrootfsbackend-containment-tests"><a class="header" href="#vrootfsbackend-containment-tests">VRootFsBackend Containment Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_vroot_prevents_path_traversal() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Attempt to escape via ..
+    let result = fs.read("/../../../etc/passwd");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_prevents_symlink_escape() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("file.txt"), b"data").unwrap();
+
+    // Create symlink pointing outside the jail
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc/passwd", temp.path().join("escape")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Reading should be blocked by strict-path
+    let result = fs.read("/escape");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_allows_internal_symlinks() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("target.txt"), b"data").unwrap();
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("target.txt", temp.path().join("link.txt")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Internal symlinks should work
+    assert_eq!(fs.read("/link.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_vroot_canonicalizes_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let mut fs = FileStorage::new(backend);
+
+    fs.create_dir("/a").unwrap();
+    fs.write("/a/file.txt", b"data").unwrap();
+
+    // Access via normalized path
+    assert_eq!(fs.read("/a/../a/./file.txt").unwrap(), b"data");
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="9-ratelimit-middleware-tests"><a class="header" href="#9-ratelimit-middleware-tests">9. RateLimit Middleware Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_ratelimit_allows_within_limit() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(10)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    // Should succeed within limit
+    for i in 0..5 {
+        fs.write(&amp;format!("/file{}.txt", i), b"data").unwrap();
+    }
+}
+
+#[test]
+fn test_ratelimit_blocks_when_exceeded() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+    fs.write("/file3.txt", b"data").unwrap();
+
+    let result = fs.write("/file4.txt", b"data");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+
+#[test]
+fn test_ratelimit_resets_after_window() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(2)
+        .per(Duration::from_millis(100));
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+
+    // Wait for window to reset
+    std::thread::sleep(Duration::from_millis(150));
+
+    // Should succeed again
+    fs.write("/file3.txt", b"data").unwrap();
+}
+
+#[test]
+fn test_ratelimit_counts_all_operations() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();  // 1
+    let _ = fs.read("/file.txt");              // 2
+    let _ = fs.exists("/file.txt");            // 3
+
+    let result = fs.metadata("/file.txt");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="10-tracing-middleware-tests"><a class="header" href="#10-tracing-middleware-tests">10. Tracing Middleware Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct TestLogger {
+    logs: Arc&lt;Mutex&lt;Vec&lt;String&gt;&gt;&gt;,
+}
+
+impl TestLogger {
+    fn entries(&amp;self) -&gt; Vec&lt;String&gt; {
+        self.logs.lock().unwrap().clone()
+    }
+}
+
+#[test]
+fn test_tracing_logs_operations() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();
+    fs.read("/file.txt").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("write")));
+    assert!(entries.iter().any(|e| e.contains("read")));
+}
+
+#[test]
+fn test_tracing_includes_path() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/important/secret.txt", b"data").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("/important/secret.txt")));
+}
+
+#[test]
+fn test_tracing_logs_errors() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&amp;logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let fs = FileStorage::new(backend);
+
+    let _ = fs.read("/nonexistent.txt");
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("NotFound") || e.contains("error")));
+}
+
+#[test]
+fn test_tracing_with_span_context() {
+    use tracing::{info_span, Instrument};
+
+    let backend = Tracing::new(MemoryBackend::new());
+    let mut fs = FileStorage::new(backend);
+
+    async {
+        fs.write("/async.txt", b"data").unwrap();
+    }
+    .instrument(info_span!("test_operation"))
+    .now_or_never();
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="11-backend-interchangeability-tests"><a class="header" href="#11-backend-interchangeability-tests">11. Backend Interchangeability Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Ensure all backends can be used interchangeably
+fn generic_filesystem_test&lt;B: Fs&gt;(mut backend: B) {
+    backend.create_dir("/test").unwrap();
+    backend.write("/test/file.txt", b"hello").unwrap();
+    assert_eq!(backend.read("/test/file.txt").unwrap(), b"hello");
+    backend.remove_dir_all("/test").unwrap();
+    assert!(!backend.exists("/test").unwrap());
+}
+
+#[test]
+fn test_memory_backend_interchangeable() {
+    generic_filesystem_test(MemoryBackend::new());
+}
+
+#[test]
+fn test_sqlite_backend_interchangeable() {
+    let (backend, _temp) = temp_sqlite_backend();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_vroot_backend_interchangeable() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_middleware_stack_interchangeable() {
+    let backend = Tracing::new(
+        Quota::new(MemoryBackend::new())
+            .with_max_total_size(1024 * 1024)
+    );
+    generic_filesystem_test(backend);
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="12-property-based-tests"><a class="header" href="#12-property-based-tests">12. Property-Based Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn prop_write_read_roundtrip(data: Vec&lt;u8&gt;) {
+        let mut backend = MemoryBackend::new();
+        backend.write("/file.bin", &amp;data).unwrap();
+        let read_data = backend.read("/file.bin").unwrap();
+        prop_assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn prop_path_normalization_idempotent(path in "[a-z/]{1,50}") {
+        let mut backend = MemoryBackend::new();
+        if let Ok(()) = backend.create_dir_all(&amp;path) {
+            // Creating again should either succeed or return AlreadyExists
+            let result = backend.create_dir_all(&amp;path);
+            prop_assert!(result.is_ok() || matches!(result, Err(FsError::AlreadyExists { .. })));
+        }
+    }
+
+    #[test]
+    fn prop_quota_never_exceeds_limit(
+        file_count in 1..10usize,
+        file_sizes in prop::collection::vec(1..100usize, 1..10)
+    ) {
+        let limit = 500usize;
+        let backend = Quota::new(MemoryBackend::new())
+            .with_max_total_size(limit as u64);
+        let mut fs = FileStorage::new(backend);
+
+        let mut total_written = 0usize;
+        for (i, size) in file_sizes.into_iter().take(file_count).enumerate() {
+            let data = vec![0u8; size];
+            match fs.write(&amp;format!("/file{}.txt", i), &amp;data) {
+                Ok(()) =&gt; total_written += size,
+                Err(FsError::QuotaExceeded { .. }) =&gt; break,
+                Err(e) =&gt; panic!("Unexpected error: {:?}", e),
+            }
+        }
+        prop_assert!(total_written &lt;= limit);
+    }
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="13-snapshot--restore-tests"><a class="header" href="#13-snapshot--restore-tests">13. Snapshot &amp; Restore Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// MemoryBackend implements Clone - that's the snapshot mechanism
+#[test]
+fn test_clone_creates_independent_copy() {
+    let mut original = MemoryBackend::new();
+    original.write("/file.txt", b"original").unwrap();
+
+    // Clone = snapshot
+    let mut snapshot = original.clone();
+
+    // Modify original
+    original.write("/file.txt", b"modified").unwrap();
+    original.write("/new.txt", b"new").unwrap();
+
+    // Snapshot is unchanged
+    assert_eq!(snapshot.read("/file.txt").unwrap(), b"original");
+    assert!(!snapshot.exists("/new.txt").unwrap());
+}
+
+#[test]
+fn test_checkpoint_and_rollback() {
+    let mut fs = MemoryBackend::new();
+    fs.write("/important.txt", b"original").unwrap();
+
+    // Checkpoint = clone
+    let checkpoint = fs.clone();
+
+    // Do risky work
+    fs.write("/important.txt", b"corrupted").unwrap();
+
+    // Rollback = replace with checkpoint
+    fs = checkpoint;
+    assert_eq!(fs.read("/important.txt").unwrap(), b"original");
+}
+
+#[test]
+fn test_persistence_roundtrip() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("state.bin");
+
+    let mut fs = MemoryBackend::new();
+    fs.write("/data.txt", b"persisted").unwrap();
+
+    // Save
+    fs.save_to(&amp;path).unwrap();
+
+    // Load
+    let restored = MemoryBackend::load_from(&amp;path).unwrap();
+    assert_eq!(restored.read("/data.txt").unwrap(), b"persisted");
+}
+
+#[test]
+fn test_to_bytes_from_bytes() {
+    let mut fs = MemoryBackend::new();
+    fs.create_dir_all("/a/b/c").unwrap();
+    fs.write("/a/b/c/file.txt", b"nested").unwrap();
+
+    let bytes = fs.to_bytes().unwrap();
+    let restored = MemoryBackend::from_bytes(&amp;bytes).unwrap();
+
+    assert_eq!(restored.read("/a/b/c/file.txt").unwrap(), b"nested");
+}
+
+#[test]
+fn test_from_bytes_invalid_data() {
+    let result = MemoryBackend::from_bytes(b"garbage");
+    assert!(result.is_err());
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="14-running-tests"><a class="header" href="#14-running-tests">14. Running Tests</a></h2>
+<pre><code class="language-bash"># All tests
+cargo test
+
+# Specific backend conformance
+cargo test memory_backend_conformance
+cargo test sqlite_backend_conformance
+
+# Middleware tests
+cargo test quota
+cargo test restrictions
+cargo test pathfilter
+
+# Stress tests (release mode)
+cargo test --release -- --ignored
+
+# With coverage
+cargo tarpaulin --out Html
+
+# Cross-platform (CI)
+cargo test --target x86_64-unknown-linux-gnu
+cargo test --target x86_64-pc-windows-msvc
+cargo test --target x86_64-apple-darwin
+
+# WASM
+cargo test --target wasm32-unknown-unknown
+</code></pre>
+<hr>
+<h2 id="9-test-utilities"><a class="header" href="#9-test-utilities">9. Test Utilities</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In anyfs-test crate
+
+/// Create a temporary backend for testing
+pub fn temp_sqlite_backend() -&gt; (SqliteBackend, tempfile::TempDir) {
+    let temp = tempfile::tempdir().unwrap();
+    let db_path = temp.path().join("test.db");
+    let backend = SqliteBackend::open(&amp;db_path).unwrap();
+    (backend, temp)
+}
+
+/// Run a test against multiple backends
+pub fn test_all_backends&lt;F&gt;(test: F)
+where
+    F: Fn(&amp;mut dyn Fs),
+{
+    // Memory
+    let mut backend = MemoryBackend::new();
+    test(&amp;mut backend);
+
+    // SQLite
+    let (mut backend, _temp) = temp_sqlite_backend();
+    test(&amp;mut backend);
+}
+<span class="boring">}</span></code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../implementation/backend-guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../implementation/lessons-learned.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../implementation/backend-guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../implementation/lessons-learned.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace-2a3cd908.js"></script>
+        <script src="../mode-rust-2c9d5c9a.js"></script>
+        <script src="../editor-16ca416c.js"></script>
+        <script src="../theme-dawn-4493f9c8.js"></script>
+        <script src="../theme-tomorrow_night-9dbe62a9.js"></script>
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

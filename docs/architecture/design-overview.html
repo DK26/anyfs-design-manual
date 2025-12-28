@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-69e25fcb.js";
+            window.path_to_searchindex_js = "../searchindex-e1a075be.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-18c48b55.js"></script>
+        <script src="../toc-b60f0e7e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1187,6 +1187,136 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 }
 <span class="boring">}</span></code></pre>
 <p>All error variants include enough context for meaningful error messages.</p>
+<hr>
+<h2 id="cross-platform-compatibility"><a class="header" href="#cross-platform-compatibility">Cross-Platform Compatibility</a></h2>
+<p>AnyFS is designed for cross-platform use. Virtual backends work everywhere; real filesystem backends have platform considerations.</p>
+<h3 id="backend-compatibility"><a class="header" href="#backend-compatibility">Backend Compatibility</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th style="text-align: center">Windows</th><th style="text-align: center">Linux</th><th style="text-align: center">macOS</th><th style="text-align: center">WASM</th></tr>
+</thead>
+<tbody>
+<tr><td><code>MemoryBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>SqliteBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅*</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td><code>StdFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+</tbody>
+</table>
+</div>
+<p>*SQLite on WASM requires <code>wasm32</code> build of rusqlite with bundled SQLite.</p>
+<h3 id="feature-compatibility"><a class="header" href="#feature-compatibility">Feature Compatibility</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">Virtual Backends</th><th style="text-align: center">VRootFsBackend</th></tr>
+</thead>
+<tbody>
+<tr><td>Basic I/O (<code>Fs</code>)</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">✅ All platforms</td></tr>
+<tr><td>Symlinks</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">Platform-dependent (see below)</td></tr>
+<tr><td>Hard links</td><td style="text-align: center">✅ All platforms</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>Permissions</td><td style="text-align: center">✅ Stored as metadata</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>Extended attributes</td><td style="text-align: center">✅ Stored as metadata</td><td style="text-align: center">Platform-dependent</td></tr>
+<tr><td>FUSE mounting</td><td style="text-align: center">N/A</td><td style="text-align: center">Platform-dependent</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="platform-specific-notes"><a class="header" href="#platform-specific-notes">Platform-Specific Notes</a></h3>
+<h4 id="virtual-backends-memorybackend-sqlitebackend"><a class="header" href="#virtual-backends-memorybackend-sqlitebackend">Virtual Backends (MemoryBackend, SqliteBackend)</a></h4>
+<p><strong>Fully cross-platform.</strong> All features work identically everywhere because:</p>
+<ul>
+<li>Paths are just strings/keys - no OS path resolution</li>
+<li>Symlinks are stored data, not OS constructs</li>
+<li>Permissions are metadata, not enforced by OS</li>
+<li>No filesystem syscalls involved</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This works identically on Windows, Linux, macOS, and WASM
+let mut fs = MemoryBackend::new();
+fs.symlink("/target", "/link")?;           // Just stores the link
+fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+<span class="boring">}</span></code></pre>
+<h4 id="vrootfsbackend-real-filesystem"><a class="header" href="#vrootfsbackend-real-filesystem">VRootFsBackend (Real Filesystem)</a></h4>
+<p>Wraps the host filesystem. Platform differences apply:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Linux</th><th>macOS</th><th>Windows</th></tr>
+</thead>
+<tbody>
+<tr><td>Symlinks</td><td>✅</td><td>✅</td><td>⚠️ Requires privileges*</td></tr>
+<tr><td>Hard links</td><td>✅</td><td>✅</td><td>✅ (NTFS only)</td></tr>
+<tr><td>Permissions (mode bits)</td><td>✅</td><td>✅</td><td>⚠️ Limited mapping</td></tr>
+<tr><td>Extended attributes</td><td>✅ xattr</td><td>✅ xattr</td><td>⚠️ ADS (different API)</td></tr>
+<tr><td>Case sensitivity</td><td>✅</td><td>⚠️ Default insensitive</td><td>⚠️ Insensitive</td></tr>
+</tbody>
+</table>
+</div>
+<p>*Windows requires <code>SeCreateSymbolicLinkPrivilege</code> or Developer Mode for symlinks.</p>
+<h4 id="fuse-mounting"><a class="header" href="#fuse-mounting">FUSE Mounting</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Support</th><th>Library</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>✅ Native</td><td>libfuse</td></tr>
+<tr><td>macOS</td><td>⚠️ Third-party</td><td>macFUSE</td></tr>
+<tr><td>Windows</td><td>⚠️ Third-party</td><td>WinFsp or Dokan</td></tr>
+<tr><td>WASM</td><td>❌</td><td>N/A</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="path-handling-1"><a class="header" href="#path-handling-1">Path Handling</a></h3>
+<p>Virtual backends use <code>/</code> as separator internally, regardless of platform:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Always use forward slashes with virtual backends
+fs.write("/project/src/main.rs", code)?;  // Works everywhere
+<span class="boring">}</span></code></pre>
+<p><code>VRootFsBackend</code> translates to native paths internally:</p>
+<ul>
+<li>Linux/macOS: <code>/</code> stays <code>/</code></li>
+<li>Windows: <code>/project/file.txt</code> → <code>C:\root\project\file.txt</code></li>
+</ul>
+<h3 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Use Case</th><th>Recommended Backend</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td>Cross-platform app</td><td><code>MemoryBackend</code> or <code>SqliteBackend</code></td><td>No platform differences</td></tr>
+<tr><td>Portable storage</td><td><code>SqliteBackend</code></td><td>Single file, works everywhere</td></tr>
+<tr><td>WASM/browser</td><td><code>MemoryBackend</code> or <code>SqliteBackend</code></td><td>No filesystem access needed</td></tr>
+<tr><td>Host filesystem access</td><td><code>VRootFsBackend</code></td><td>With awareness of platform limits</td></tr>
+<tr><td>Testing</td><td><code>MemoryBackend</code></td><td>Fast, no cleanup, deterministic</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="feature-detection"><a class="header" href="#feature-detection">Feature Detection</a></h3>
+<p>Check platform capabilities at runtime if needed:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Check if symlinks are supported on the current platform.
+pub fn symlinks_available() -&gt; bool {
+    #[cfg(unix)]
+    return true;
+
+    #[cfg(windows)]
+    {
+        // Check for Developer Mode or symlink privilege
+        // ...
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>Or use <code>Restrictions</code> middleware to disable unsupported features uniformly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(windows)]
+let backend = Restrictions::new(backend).deny_symlinks();
+<span class="boring">}</span></code></pre>
 
                     </main>
 
