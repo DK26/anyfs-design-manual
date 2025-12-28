@@ -747,7 +747,372 @@ fn no_panic_remove_nonempty_dir() {
 
 ---
 
-## 8. Running Tests
+## 8. Symlink Security Tests
+
+```rust
+// Virtual backend symlink following control
+#[test]
+fn test_virtual_backend_follow_symlinks_enabled() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Default: following enabled
+    assert_eq!(backend.read("/link.txt").unwrap(), b"secret");
+}
+
+#[test]
+fn test_virtual_backend_follow_symlinks_disabled() {
+    let mut backend = MemoryBackend::new();
+    backend.set_follow_symlinks(false);
+    backend.write("/target.txt", b"secret").unwrap();
+    backend.symlink("/target.txt", "/link.txt").unwrap();
+
+    // Reading symlink should fail or return symlink data
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::IsSymlink { .. })));
+}
+
+#[test]
+fn test_symlink_chain_resolution() {
+    let mut backend = MemoryBackend::new();
+    backend.write("/target.txt", b"data").unwrap();
+    backend.symlink("/target.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    // Should follow chain
+    assert_eq!(backend.read("/link2.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_symlink_loop_detection() {
+    let mut backend = MemoryBackend::new();
+    backend.symlink("/link2.txt", "/link1.txt").unwrap();
+    backend.symlink("/link1.txt", "/link2.txt").unwrap();
+
+    let result = backend.read("/link1.txt");
+    assert!(matches!(result, Err(FsError::SymlinkLoop { .. })));
+}
+
+#[test]
+fn test_virtual_symlink_cannot_escape() {
+    let mut backend = MemoryBackend::new();
+    // Create a symlink pointing "outside" - but in virtual backend, paths are just keys
+    backend.symlink("../../../etc/passwd", "/link.txt").unwrap();
+
+    // Reading should fail (target doesn't exist), not read real /etc/passwd
+    let result = backend.read("/link.txt");
+    assert!(matches!(result, Err(FsError::NotFound { .. })));
+}
+```
+
+### VRootFsBackend Containment Tests
+
+```rust
+#[test]
+fn test_vroot_prevents_path_traversal() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Attempt to escape via ..
+    let result = fs.read("/../../../etc/passwd");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_prevents_symlink_escape() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("file.txt"), b"data").unwrap();
+
+    // Create symlink pointing outside the jail
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc/passwd", temp.path().join("escape")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Reading should be blocked by strict-path
+    let result = fs.read("/escape");
+    assert!(matches!(result, Err(FsError::AccessDenied { .. })));
+}
+
+#[test]
+fn test_vroot_allows_internal_symlinks() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("target.txt"), b"data").unwrap();
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("target.txt", temp.path().join("link.txt")).unwrap();
+
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let fs = FileStorage::new(backend);
+
+    // Internal symlinks should work
+    assert_eq!(fs.read("/link.txt").unwrap(), b"data");
+}
+
+#[test]
+fn test_vroot_canonicalizes_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    let mut fs = FileStorage::new(backend);
+
+    fs.create_dir("/a").unwrap();
+    fs.write("/a/file.txt", b"data").unwrap();
+
+    // Access via normalized path
+    assert_eq!(fs.read("/a/../a/./file.txt").unwrap(), b"data");
+}
+```
+
+---
+
+## 9. RateLimit Middleware Tests
+
+```rust
+#[test]
+fn test_ratelimit_allows_within_limit() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(10)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    // Should succeed within limit
+    for i in 0..5 {
+        fs.write(&format!("/file{}.txt", i), b"data").unwrap();
+    }
+}
+
+#[test]
+fn test_ratelimit_blocks_when_exceeded() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+    fs.write("/file3.txt", b"data").unwrap();
+
+    let result = fs.write("/file4.txt", b"data");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+
+#[test]
+fn test_ratelimit_resets_after_window() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(2)
+        .per(Duration::from_millis(100));
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file1.txt", b"data").unwrap();
+    fs.write("/file2.txt", b"data").unwrap();
+
+    // Wait for window to reset
+    std::thread::sleep(Duration::from_millis(150));
+
+    // Should succeed again
+    fs.write("/file3.txt", b"data").unwrap();
+}
+
+#[test]
+fn test_ratelimit_counts_all_operations() {
+    let backend = RateLimit::new(MemoryBackend::new())
+        .max_ops(3)
+        .per_second();
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();  // 1
+    let _ = fs.read("/file.txt");              // 2
+    let _ = fs.exists("/file.txt");            // 3
+
+    let result = fs.metadata("/file.txt");
+    assert!(matches!(result, Err(FsError::RateLimitExceeded { .. })));
+}
+```
+
+---
+
+## 10. Tracing Middleware Tests
+
+```rust
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct TestLogger {
+    logs: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestLogger {
+    fn entries(&self) -> Vec<String> {
+        self.logs.lock().unwrap().clone()
+    }
+}
+
+#[test]
+fn test_tracing_logs_operations() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/file.txt", b"data").unwrap();
+    fs.read("/file.txt").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("write")));
+    assert!(entries.iter().any(|e| e.contains("read")));
+}
+
+#[test]
+fn test_tracing_includes_path() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let mut fs = FileStorage::new(backend);
+
+    fs.write("/important/secret.txt", b"data").unwrap();
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("/important/secret.txt")));
+}
+
+#[test]
+fn test_tracing_logs_errors() {
+    let logger = TestLogger::default();
+    let logs = Arc::clone(&logger.logs);
+
+    let backend = Tracing::new(MemoryBackend::new())
+        .with_logger(move |op| {
+            logs.lock().unwrap().push(op.to_string());
+        });
+    let fs = FileStorage::new(backend);
+
+    let _ = fs.read("/nonexistent.txt");
+
+    let entries = logger.entries();
+    assert!(entries.iter().any(|e| e.contains("NotFound") || e.contains("error")));
+}
+
+#[test]
+fn test_tracing_with_span_context() {
+    use tracing::{info_span, Instrument};
+
+    let backend = Tracing::new(MemoryBackend::new());
+    let mut fs = FileStorage::new(backend);
+
+    async {
+        fs.write("/async.txt", b"data").unwrap();
+    }
+    .instrument(info_span!("test_operation"))
+    .now_or_never();
+}
+```
+
+---
+
+## 11. Backend Interchangeability Tests
+
+```rust
+/// Ensure all backends can be used interchangeably
+fn generic_filesystem_test<B: Fs>(mut backend: B) {
+    backend.create_dir("/test").unwrap();
+    backend.write("/test/file.txt", b"hello").unwrap();
+    assert_eq!(backend.read("/test/file.txt").unwrap(), b"hello");
+    backend.remove_dir_all("/test").unwrap();
+    assert!(!backend.exists("/test").unwrap());
+}
+
+#[test]
+fn test_memory_backend_interchangeable() {
+    generic_filesystem_test(MemoryBackend::new());
+}
+
+#[test]
+fn test_sqlite_backend_interchangeable() {
+    let (backend, _temp) = temp_sqlite_backend();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_vroot_backend_interchangeable() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
+    generic_filesystem_test(backend);
+}
+
+#[test]
+fn test_middleware_stack_interchangeable() {
+    let backend = Tracing::new(
+        Quota::new(MemoryBackend::new())
+            .with_max_total_size(1024 * 1024)
+    );
+    generic_filesystem_test(backend);
+}
+```
+
+---
+
+## 12. Property-Based Tests
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn prop_write_read_roundtrip(data: Vec<u8>) {
+        let mut backend = MemoryBackend::new();
+        backend.write("/file.bin", &data).unwrap();
+        let read_data = backend.read("/file.bin").unwrap();
+        prop_assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn prop_path_normalization_idempotent(path in "[a-z/]{1,50}") {
+        let mut backend = MemoryBackend::new();
+        if let Ok(()) = backend.create_dir_all(&path) {
+            // Creating again should either succeed or return AlreadyExists
+            let result = backend.create_dir_all(&path);
+            prop_assert!(result.is_ok() || matches!(result, Err(FsError::AlreadyExists { .. })));
+        }
+    }
+
+    #[test]
+    fn prop_quota_never_exceeds_limit(
+        file_count in 1..10usize,
+        file_sizes in prop::collection::vec(1..100usize, 1..10)
+    ) {
+        let limit = 500usize;
+        let backend = Quota::new(MemoryBackend::new())
+            .with_max_total_size(limit as u64);
+        let mut fs = FileStorage::new(backend);
+
+        let mut total_written = 0usize;
+        for (i, size) in file_sizes.into_iter().take(file_count).enumerate() {
+            let data = vec![0u8; size];
+            match fs.write(&format!("/file{}.txt", i), &data) {
+                Ok(()) => total_written += size,
+                Err(FsError::QuotaExceeded { .. }) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+        prop_assert!(total_written <= limit);
+    }
+}
+```
+
+---
+
+## 13. Running Tests
 
 ```bash
 # All tests
