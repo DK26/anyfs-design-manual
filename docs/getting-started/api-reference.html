@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -400,10 +400,15 @@ fs.remove_dir_all("/path")?;             // Recursive
 fs.rename("/from", "/to")?;
 fs.copy("/from", "/to")?;
 
-// Links (requires Restrictions)
+// Links
 fs.symlink("/target", "/link")?;
 fs.hard_link("/original", "/link")?;
 fs.read_link("/link")?;                  // -&gt; PathBuf
+fs.symlink_metadata("/link")?;           // Metadata of link itself, not target
+
+// Symlink following (virtual backends only)
+backend.set_follow_symlinks(false);      // Don't follow symlinks during resolution
+backend.set_follow_symlinks(true);       // Follow symlinks (default)
 
 // Permissions (requires Restrictions)
 fs.set_permissions("/path", perms)?;
@@ -415,6 +420,47 @@ fs.truncate("/path", 1024)?;             // Resize to 1024 bytes
 fs.sync()?;                              // Flush all writes
 fs.fsync("/path")?;                      // Flush writes for one file
 <span class="boring">}</span></code></pre>
+<hr>
+<h2 id="path-canonicalization"><a class="header" href="#path-canonicalization">Path Canonicalization</a></h2>
+<p><code>FileStorage</code> provides path canonicalization that works on the virtual filesystem:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Strict canonicalization - path must exist
+let canonical = fs.canonicalize("/some/../path/./file.txt")?;
+// Returns fully resolved absolute path, follows symlinks
+
+// Soft canonicalization - handles non-existent paths
+let resolved = fs.soft_canonicalize("/existing/dir/new_file.txt")?;
+// Resolves existing components, appends non-existent remainder lexically
+
+// Anchored canonicalization - sandboxed resolution
+let safe = fs.anchored_canonicalize("/workspace/../etc/passwd", "/workspace")?;
+// Clamps result within anchor directory (returns error if escape attempted)
+<span class="boring">}</span></code></pre>
+<p><strong>Standalone utility (no backend needed):</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::normalize;
+
+// Lexical path cleanup only
+let clean = normalize("//foo///bar//");  // -&gt; "/foo/bar"
+// Does NOT resolve . or .. (those require filesystem context)
+// Does NOT follow symlinks
+<span class="boring">}</span></code></pre>
+<p><strong>Comparison:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Path Must Exist?</th><th>Follows Symlinks?</th><th>Resolves <code>..</code>?</th></tr>
+</thead>
+<tbody>
+<tr><td><code>canonicalize</code></td><td>Yes (all components)</td><td>Yes</td><td>Yes (symlink-aware)</td></tr>
+<tr><td><code>soft_canonicalize</code></td><td>No (appends non-existent)</td><td>Yes (for existing)</td><td>Yes (symlink-aware)</td></tr>
+<tr><td><code>anchored_canonicalize</code></td><td>No</td><td>Yes (for existing)</td><td>Yes (clamped to anchor)</td></tr>
+<tr><td><code>normalize</code></td><td>N/A (lexical only)</td><td>No</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
 <h2 id="inode-operations-fsinode-trait"><a class="header" href="#inode-operations-fsinode-trait">Inode Operations (<code>FsInode</code> trait)</a></h2>
 <p>Backends implementing <code>FsInode</code> track inodes internally for hardlink support and FUSE mounting:</p>
@@ -501,12 +547,33 @@ match result {
 </thead>
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td><code>memory</code> (default)</td><td>In-memory</td></tr>
-<tr><td><code>SqliteBackend</code></td><td><code>sqlite</code></td><td>Persistent</td></tr>
+<tr><td><code>SqliteBackend</code></td><td><code>sqlite</code></td><td>Persistent single-file database</td></tr>
+<tr><td><code>SqliteCipherBackend</code></td><td><code>sqlite-cipher</code></td><td>Encrypted SQLite (AES-256 via SQLCipher)</td></tr>
 <tr><td><code>StdFsBackend</code></td><td><code>stdfs</code></td><td>Direct <code>std::fs</code> (no containment)</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td><code>vrootfs</code></td><td>Host filesystem (with containment)</td></tr>
 </tbody>
 </table>
 </div>
+<p><strong>Note:</strong> <code>sqlite</code> and <code>sqlite-cipher</code> are mutually exclusive features.</p>
+<hr>
+<h2 id="sqlitecipherbackend-methods"><a class="header" href="#sqlitecipherbackend-methods">SqliteCipherBackend Methods</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::SqliteCipherBackend;
+
+// Open with password (key derived via PBKDF2)
+let backend = SqliteCipherBackend::open("encrypted.db", "password")?;
+
+// Open with raw 256-bit key
+let backend = SqliteCipherBackend::open_with_key("encrypted.db", &amp;key)?;
+
+// Create new encrypted database
+let backend = SqliteCipherBackend::create("new.db", "password")?;
+
+// Change password on open database
+backend.change_password("new-password")?;
+<span class="boring">}</span></code></pre>
+<p>Without the correct password, the <code>.db</code> file appears as random bytes.</p>
 <hr>
 <h2 id="middleware"><a class="header" href="#middleware">Middleware</a></h2>
 <div class="table-wrapper">

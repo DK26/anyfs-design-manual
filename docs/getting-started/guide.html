@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -449,14 +449,14 @@ let fs = FileStorage::new(
 <p>Always check for quota exceeded, feature not enabled, and other errors.</p>
 <hr>
 <h2 id="advanced-use-cases-future"><a class="header" href="#advanced-use-cases-future">Advanced Use Cases (Future)</a></h2>
-<p>These use cases require <code>anyfs-fuse</code> (future crate).</p>
+<p>These use cases require <code>anyfs-mount</code> (future crate).</p>
 <h3 id="database-backed-drive-with-live-monitoring"><a class="header" href="#database-backed-drive-with-live-monitoring">Database-Backed Drive with Live Monitoring</a></h3>
 <p>Mount a database-backed filesystem and query it directly for real-time analytics:</p>
 <pre><code>┌─────────────────────────────────────────────────────────────┐
 │  Database (SQLite, PostgreSQL, etc.)                        │
 ├─────────────────────────────────────────────────────────────┤
 │                         │                                   │
-│    anyfs-fuse           │         Stats Dashboard           │
+│    anyfs-mount          │         Stats Dashboard           │
 │    (write + read)       │         (direct DB queries)       │
 │         │               │               │                   │
 │         ▼               │               ▼                   │

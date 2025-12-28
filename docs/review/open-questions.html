@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -412,23 +412,27 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <p><strong>The honest answer:</strong> VRootFsBackend cannot disable symlink following. <code>strict-path</code> prevents escapes, but symlinks within the jail are followed by the OS. This is a fundamental limitation of wrapping a real filesystem.</p>
 <hr>
 <h2 id="virtual-vs-real-backends-path-resolution"><a class="header" href="#virtual-vs-real-backends-path-resolution">Virtual vs Real Backends: Path Resolution</a></h2>
+<p><strong>Status:</strong> Resolved</p>
 <p><strong>Question:</strong> Should path resolution logic be different for virtual backends (memory, SQLite) vs filesystem-based backends (StdFsBackend, VRootFsBackend)?</p>
-<p><strong>Analysis:</strong></p>
+<p><strong>Resolution:</strong> <code>FileStorage</code> handles symlink-aware path resolution for ALL backends by default. Backends do NOT perform path resolution - they receive already-resolved paths.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Backend Type</th><th>Path Resolution</th><th>Symlink Handling</th></tr>
 </thead>
 <tbody>
-<tr><td>MemoryBackend</td><td>Pure lexical (our code)</td><td>We control everything</td></tr>
-<tr><td>SqliteBackend</td><td>Pure lexical (our code)</td><td>We control everything</td></tr>
-<tr><td>StdFsBackend</td><td>OS handles it</td><td>OS follows symlinks</td></tr>
-<tr><td>VRootFsBackend</td><td>OS handles it</td><td>OS follows symlinks (strict-path prevents escapes)</td></tr>
+<tr><td>MemoryBackend</td><td><strong>FileStorage</strong> (symlink-aware)</td><td><code>set_follow_symlinks(bool)</code></td></tr>
+<tr><td>SqliteBackend</td><td><strong>FileStorage</strong> (symlink-aware)</td><td><code>set_follow_symlinks(bool)</code></td></tr>
+<tr><td>VRootFsBackend</td><td><strong>OS</strong> (implements <code>SelfResolving</code>)</td><td>OS follows symlinks (strict-path prevents escapes)</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Current design:</strong> For virtual backends, we perform lexical path resolution ourselves. For filesystem backends (StdFsBackend, VRootFsBackend), we delegate to the OS via <code>std::fs</code>. VRootFsBackend additionally uses <code>strict-path::VirtualRoot</code> for containment.</p>
-<p><strong>Open question:</strong> Should we abstract this difference, accept it, or use two traits?</p>
+<p><strong>Key design decision:</strong> Backends that wrap a real filesystem implement the <code>SelfResolving</code> marker trait to tell <code>FileStorage</code> to skip resolution:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl SelfResolving for VRootFsBackend {}
+<span class="boring">}</span></code></pre>
+<p>This ensures consistent behavior: all virtual backends get symlink-aware resolution from <code>FileStorage</code>, while real filesystem backends delegate to the OS.</p>
 <hr>
 <h2 id="compression-and-encryption"><a class="header" href="#compression-and-encryption">Compression and Encryption</a></h2>
 <p><strong>Question:</strong> Does the current design allow backends to compress/decompress or encrypt/decrypt files transparently?</p>
@@ -609,7 +613,7 @@ process_sandbox(&amp;userdata);  // Compile error!
 <p><strong>Question:</strong> How POSIX-compatible should AnyFS be?</p>
 <p><strong>Answer:</strong> AnyFS is <strong>not</strong> a POSIX emulator. We use <code>std::fs</code>-like naming and semantics for familiarity, but we don’t aim for full POSIX compliance. Specific differences:</p>
 <ul>
-<li>Lexical path resolution (not runtime symlink following during normalization)</li>
+<li>Symlink-aware path resolution (FileStorage walks the virtual structure using <code>metadata()</code> and <code>read_link()</code>)</li>
 <li>No file descriptors or open file handles in the basic API</li>
 <li>Simplified permissions model</li>
 <li>No device files, FIFOs, or sockets</li>
@@ -646,7 +650,7 @@ process_sandbox(&amp;userdata);  // Compile error!
 </thead>
 <tbody>
 <tr><td>Symlink security</td><td>Virtual backends: <code>set_follow_symlinks()</code>. VRootFsBackend: <code>strict-path</code> escapes only.</td></tr>
-<tr><td>Path resolution</td><td>Virtual = lexical; VRootFs = OS</td></tr>
+<tr><td>Path resolution</td><td>FileStorage (symlink-aware); VRootFs = OS via <code>SelfResolving</code></td></tr>
 <tr><td>Compression/encryption</td><td>Backend responsibility</td></tr>
 <tr><td>Hooks/callbacks</td><td><code>Tracing</code> middleware</td></tr>
 <tr><td>FUSE mount</td><td><code>anyfs-mount</code> crate (cross-platform)</td></tr>

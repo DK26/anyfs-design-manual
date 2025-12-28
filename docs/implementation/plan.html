@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -215,12 +215,22 @@ let entry = self.entries.get(&amp;path)
 </ul>
 <p><strong>Required:</strong> Concurrent stress tests in conformance suite.</p>
 <h3 id="3-consistent-path-handling"><a class="header" href="#3-consistent-path-handling">3. Consistent Path Handling</a></h3>
-<p>Normalize paths in ONE place (FilesContainer or dedicated normalizer):</p>
+<p>FileStorage handles path resolution (symlink-aware, not just lexical normalization):</p>
 <ul>
 <li>Always absolute paths internally</li>
 <li>Always <code>/</code> separator (even on Windows)</li>
-<li>Normalize <code>..</code> and <code>.</code> components</li>
+<li>Resolve <code>..</code> and <code>.</code> via canonicalization (symlink-aware, not lexical)</li>
 <li>Handle edge cases: <code>//</code>, trailing <code>/</code>, empty string</li>
+</ul>
+<p><strong>Public canonicalization API on FileStorage:</strong></p>
+<ul>
+<li><code>canonicalize(path)</code> - strict, all components must exist</li>
+<li><code>soft_canonicalize(path)</code> - resolves existing, appends non-existent lexically</li>
+<li><code>anchored_canonicalize(path, anchor)</code> - sandboxed resolution</li>
+</ul>
+<p><strong>Standalone utility:</strong></p>
+<ul>
+<li><code>normalize(path)</code> - lexical cleanup only (collapses <code>//</code>, removes trailing <code>/</code>). Does NOT resolve <code>.</code> or <code>..</code>.</li>
 </ul>
 <h3 id="4-error-type-design"><a class="header" href="#4-error-type-design">4. Error Type Design</a></h3>
 <p><code>FsError</code> must be:</p>
@@ -340,47 +350,57 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li>Define core types (<code>Metadata</code>, <code>Permissions</code>, <code>FileType</code>, <code>DirEntry</code>, <code>StatFs</code>)</li>
 <li>Define <code>FsError</code> with contextual variants (see guidelines above)</li>
 <li>Define <code>ROOT_INODE = 1</code> constant</li>
-<li>Include <code>const NEEDS_PATH_RESOLUTION: bool = true</code> (opt-out for real FS backends)</li>
+<li>Define <code>SelfResolving</code> marker trait (opt-in for backends that handle their own path resolution, e.g., VRootFsBackend)</li>
 </ul>
 <p><strong>Exit criteria:</strong> <code>anyfs-backend</code> stands alone with minimal dependencies (<code>thiserror</code>).</p>
 <hr>
 <h2 id="phase-2-anyfs-backends--middleware"><a class="header" href="#phase-2-anyfs-backends--middleware">Phase 2: <code>anyfs</code> (backends + middleware)</a></h2>
 <p><strong>Goal:</strong> Provide reference backends and core middleware.</p>
-<h3 id="path-resolution-utility"><a class="header" href="#path-resolution-utility">Path Resolution Utility</a></h3>
-<ul>
-<li><code>resolve_path(backend, path, follow_symlinks)</code> - works on any <code>Fs</code>
+<h3 id="path-resolution-filestorages-responsibility"><a class="header" href="#path-resolution-filestorages-responsibility">Path Resolution (FileStorage’s Responsibility)</a></h3>
+<p>FileStorage handles path resolution for ALL backends (unless they implement <code>SelfResolving</code>):</p>
 <ul>
 <li>Walks path component by component using <code>metadata()</code> and <code>read_link()</code></li>
-<li>Handles <code>..</code> correctly (requires knowing what each component resolves to)</li>
+<li>Handles <code>..</code> correctly after symlink resolution (symlink-aware, not lexical)</li>
+<li>Respects <code>set_follow_symlinks(bool)</code> setting</li>
 <li>Detects circular symlinks (max depth or visited set)</li>
-<li>Returns canonical resolved path</li>
+<li>Returns canonical resolved path to the backend</li>
 </ul>
-</li>
-<li>Applied automatically by <code>FileStorage</code> when backend’s <code>NEEDS_PATH_RESOLUTION == true</code></li>
-</ul>
+<p><strong>Backends receive already-resolved paths</strong> - they just store/retrieve bytes.</p>
 <h3 id="backends-feature-gated"><a class="header" href="#backends-feature-gated">Backends (feature-gated)</a></h3>
 <p>Each backend implements the traits it supports:</p>
 <ul>
 <li><code>memory</code> (default): <code>MemoryBackend</code>
 <ul>
 <li>Implements: <code>Fs</code> + <code>FsLink</code> + <code>FsPermissions</code> + <code>FsSync</code> + <code>FsStats</code> + <code>FsInode</code> = <code>FsFuse</code></li>
-<li><code>NEEDS_PATH_RESOLUTION = true</code> (uses path resolution utility)</li>
+<li>FileStorage handles path resolution (symlink-aware)</li>
 <li>Inode source: internal node IDs (incrementing counter)</li>
-<li><code>set_follow_symlinks(bool)</code> - control symlink resolution</li>
+<li><code>set_follow_symlinks(bool)</code> - control symlink following during resolution</li>
 </ul>
 </li>
 <li><code>sqlite</code> (optional): <code>SqliteBackend</code>
 <ul>
 <li>Implements: <code>FsFuse</code> (all traits through Layer 3)</li>
-<li><code>NEEDS_PATH_RESOLUTION = true</code> (uses path resolution utility)</li>
+<li>FileStorage handles path resolution (symlink-aware)</li>
 <li>Inode source: SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</li>
-<li><code>set_follow_symlinks(bool)</code> - control symlink resolution</li>
+<li><code>set_follow_symlinks(bool)</code> - control symlink following during resolution</li>
+</ul>
+</li>
+<li><code>sqlite-cipher</code> (optional): <code>SqliteCipherBackend</code>
+<ul>
+<li>Implements: <code>FsFuse</code> (same as SqliteBackend)</li>
+<li>Full AES-256 encryption via <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a></li>
+<li>Password-protected: <code>.db</code> file is random bytes without password</li>
+<li>Uses <code>rusqlite</code> with <code>bundled-sqlcipher</code> feature</li>
+<li><code>open(path, password)</code> - derive key from password (PBKDF2)</li>
+<li><code>open_with_key(path, key)</code> - use raw 256-bit key</li>
+<li><code>change_password(new_password)</code> - re-key database</li>
+<li><strong>Mutually exclusive with <code>sqlite</code> feature</strong> (different SQLite builds)</li>
 </ul>
 </li>
 <li><code>stdfs</code> (optional): <code>StdFsBackend</code> - direct <code>std::fs</code> delegation
 <ul>
-<li>Implements: <code>FsPosix</code> (all traits including Layer 4)</li>
-<li><code>NEEDS_PATH_RESOLUTION = false</code> (OS handles resolution)</li>
+<li>Implements: <code>FsPosix</code> (all traits including Layer 4) + <code>SelfResolving</code></li>
+<li>Implements <code>SelfResolving</code> (OS handles resolution)</li>
 <li>Inode source: OS inode numbers (<code>std::fs::Metadata::ino()</code>)</li>
 <li>No path containment - full filesystem access</li>
 <li>Use when you only need middleware layers without sandboxing</li>
@@ -388,10 +408,9 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 </li>
 <li><code>vrootfs</code> (optional): <code>VRootFsBackend</code> using <code>strict-path</code> for containment
 <ul>
-<li>Implements: <code>FsPosix</code> (all traits including Layer 4)</li>
-<li><code>NEEDS_PATH_RESOLUTION = false</code> (OS handles resolution)</li>
+<li>Implements: <code>FsPosix</code> (all traits including Layer 4) + <code>SelfResolving</code></li>
+<li>Implements <code>SelfResolving</code> (OS handles resolution, <code>strict-path</code> prevents escapes)</li>
 <li>Inode source: OS inode numbers (<code>std::fs::Metadata::ino()</code>)</li>
-<li><code>strict-path</code> prevents symlink escapes</li>
 </ul>
 </li>
 </ul>
@@ -582,19 +601,19 @@ strategy:
 <hr>
 <h2 id="future-work-post-mvp"><a class="header" href="#future-work-post-mvp">Future work (post-MVP)</a></h2>
 <ul>
-<li>Async API (<code>AsyncVfs</code>, <code>AsyncFsFull</code>, etc.)</li>
+<li>Async API (<code>AsyncFs</code>, <code>AsyncFsFull</code>, etc.)</li>
 <li>Import/export helpers (host path &lt;-&gt; container)</li>
 <li>Encryption middleware</li>
 <li>Compression middleware</li>
 <li><code>no_std</code> support (learned from <code>vfs</code> #38)</li>
 <li>Batch operations for performance (learned from <code>agentfs</code> #130)</li>
 </ul>
-<h3 id="anyfs-fuse---mount-as-real-filesystem"><a class="header" href="#anyfs-fuse---mount-as-real-filesystem"><code>anyfs-fuse</code> - Mount as Real Filesystem</a></h3>
+<h3 id="anyfs-mount---mount-as-real-filesystem"><a class="header" href="#anyfs-mount---mount-as-real-filesystem"><code>anyfs-mount</code> - Mount as Real Filesystem</a></h3>
 <p>Adapter to expose any <code>FsFuse</code> backend as a FUSE mount point.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, QuotaLayer, FsFuse};
-use anyfs_fuse::FuseMount;
+use anyfs_mount::FuseMount;
 
 // RAM drive with 1GB quota
 let backend = MemoryBackend::new()
@@ -622,7 +641,7 @@ let mount = FuseMount::mount(backend, "/mnt/ramdisk")?;
 </tbody>
 </table>
 </div>
-<p><code>anyfs-fuse</code> provides a unified API across platforms:</p>
+<p><code>anyfs-mount</code> provides a unified API across platforms:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: FsFuse&gt; FuseMount&lt;B&gt; {
@@ -678,7 +697,7 @@ let sandbox = FuseMount::mount(
 <pre><code>┌────────────────────────────────────────────────┐
 │  /mnt/myfs (FUSE mount point)                  │
 ├────────────────────────────────────────────────┤
-│  anyfs-fuse                                    │
+│  anyfs-mount                                   │
 │    - Linux/macOS/BSD: fuser                    │
 │    - Windows: winfsp-rs                        │
 ├────────────────────────────────────────────────┤
@@ -705,22 +724,22 @@ let sandbox = FuseMount::mount(
 <li>No <code>truncate</code>, <code>statfs</code>, or <code>read_range</code></li>
 <li>No middleware composition pattern</li>
 </ul>
-<p><strong>Our layered traits are a superset</strong> - <code>Vfs</code> covers everything <code>vfs::FileSystem</code> does, plus our extended traits add more.</p>
+<p><strong>Our layered traits are a superset</strong> - <code>Fs</code> covers everything <code>vfs::FileSystem</code> does, plus our extended traits add more.</p>
 <p><strong>Adapters:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Wrap a vfs::FileSystem to use as AnyFS backend
-// Only implements Vfs (Layer 1) - no links, permissions, etc.
+// Only implements Fs (Layer 1) - no links, permissions, etc.
 pub struct VfsCompat&lt;F: vfs::FileSystem&gt;(F);
 impl&lt;F: vfs::FileSystem&gt; FsRead for VfsCompat&lt;F&gt; { ... }
 impl&lt;F: vfs::FileSystem&gt; FsWrite for VfsCompat&lt;F&gt; { ... }
 impl&lt;F: vfs::FileSystem&gt; FsDir for VfsCompat&lt;F&gt; { ... }
-// VfsCompat&lt;F&gt; implements Vfs via blanket impl
+// VfsCompat&lt;F&gt; implements Fs via blanket impl
 
 // Wrap an AnyFS backend to use as vfs::FileSystem
-// Any backend implementing Vfs works
-pub struct AnyFsCompat&lt;B: Vfs&gt;(B);
-impl&lt;B: Vfs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
+// Any backend implementing Fs works
+pub struct AnyFsCompat&lt;B: Fs&gt;(B);
+impl&lt;B: Fs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <span class="boring">}</span></code></pre>
 <p><strong>Use cases:</strong></p>
 <ul>
@@ -740,7 +759,7 @@ impl&lt;B: Vfs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 │         │              │              │              │              │
 │    ┌────┴────┐   ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐       │
 │    │ S3 API  │   │ gRPC/REST │  │    NFS    │  │  WebDAV   │       │
-│    │ (Vfs)   │   │  (Vfs)    │  │ (FsFuse) │  │  (FsFull)│       │
+│    │  (Fs)   │   │   (Fs)    │  │ (FsFuse) │  │  (FsFull)│       │
 │    └────┬────┘   └─────┬─────┘  └─────┬─────┘  └─────┬─────┘       │
 └─────────┼──────────────┼──────────────┼──────────────┼─────────────┘
           │              │              │              │
@@ -754,18 +773,18 @@ impl&lt;B: Vfs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <tr><th>Crate</th><th>Required Trait</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>anyfs-s3-server</code></td><td><code>Vfs</code></td><td>Expose as S3-compatible API (objects = files)</td></tr>
+<tr><td><code>anyfs-s3-server</code></td><td><code>Fs</code></td><td>Expose as S3-compatible API (objects = files)</td></tr>
 <tr><td><code>anyfs-sftp-server</code></td><td><code>FsFull</code></td><td>SFTP server with permissions/links</td></tr>
 <tr><td><code>anyfs-ssh-shell</code></td><td><code>FsFuse</code></td><td>SSH server with FUSE-mounted home directories</td></tr>
-<tr><td><code>anyfs-remote</code></td><td><code>Vfs</code></td><td><code>RemoteBackend</code> client (implements <code>Vfs</code>)</td></tr>
-<tr><td><code>anyfs-grpc</code></td><td><code>Vfs</code></td><td>gRPC protocol adapter</td></tr>
+<tr><td><code>anyfs-remote</code></td><td><code>Fs</code></td><td><code>RemoteBackend</code> client (implements <code>Fs</code>)</td></tr>
+<tr><td><code>anyfs-grpc</code></td><td><code>Fs</code></td><td>gRPC protocol adapter</td></tr>
 <tr><td><code>anyfs-webdav</code></td><td><code>FsFull</code></td><td>WebDAV server (needs permissions)</td></tr>
 <tr><td><code>anyfs-nfs</code></td><td><code>FsFuse</code></td><td>NFS server (needs inodes)</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="anyfs-s3-server---s3-compatible-object-storage"><a class="header" href="#anyfs-s3-server---s3-compatible-object-storage"><code>anyfs-s3-server</code> - S3-Compatible Object Storage</a></h4>
-<p>Expose any <code>Vfs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
+<p>Expose any <code>Fs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, Quota, Tracing};
@@ -793,7 +812,7 @@ aws s3 ls s3://user-files/ --endpoint-url http://yourserver:9000
 aws s3 cp s3://user-files/document.pdf ./local.pdf --endpoint-url http://yourserver:9000
 </code></pre>
 <h4 id="anyfs-remote---remote-backend-client"><a class="header" href="#anyfs-remote---remote-backend-client"><code>anyfs-remote</code> - Remote Backend Client</a></h4>
-<p>A <code>Vfs</code> implementation that connects to a remote server. Works with <code>FileStorage</code> or <code>anyfs-fuse</code>.</p>
+<p>An <code>Fs</code> implementation that connects to a remote server. Works with <code>FileStorage</code> or <code>anyfs-mount</code>.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs_remote::RemoteBackend;
@@ -824,7 +843,7 @@ FuseMount::mount(remote, "/mnt/cloud")?;
 // $ cat /mnt/cloud/file.txt
 <span class="boring">}</span></code></pre>
 <h4 id="anyfs-grpc---grpc-protocol"><a class="header" href="#anyfs-grpc---grpc-protocol"><code>anyfs-grpc</code> - gRPC Protocol</a></h4>
-<p>Efficient binary protocol for remote <code>Vfs</code> access.</p>
+<p>Efficient binary protocol for remote <code>Fs</code> access.</p>
 <p><strong>Server side:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -1010,10 +1029,10 @@ alice@server:~$ du -sh .
 <tbody>
 <tr><td>S3 API</td><td><code>anyfs-s3-server</code></td><td>AWS SDK (any language)</td><td>Object storage, web apps</td></tr>
 <tr><td>SFTP</td><td><code>anyfs-sftp-server</code></td><td>Any SFTP client</td><td>Shell-like file access</td></tr>
-<tr><td>SSH Shell</td><td><code>anyfs-ssh-shell</code> + <code>anyfs-fuse</code></td><td>SSH client</td><td>Full shell with sandboxed home</td></tr>
+<tr><td>SSH Shell</td><td><code>anyfs-ssh-shell</code> + <code>anyfs-mount</code></td><td>SSH client</td><td>Full shell with sandboxed home</td></tr>
 <tr><td>gRPC</td><td><code>anyfs-grpc</code></td><td>Generated client</td><td>High-performance apps</td></tr>
 <tr><td>REST</td><td>Custom adapter</td><td>HTTP client</td><td>Simple integrations</td></tr>
-<tr><td>FUSE mount</td><td><code>anyfs-fuse</code> + <code>anyfs-remote</code></td><td>FUSE installed</td><td>Transparent local access</td></tr>
+<tr><td>FUSE mount</td><td><code>anyfs-mount</code> + <code>anyfs-remote</code></td><td>FUSE installed</td><td>Transparent local access</td></tr>
 <tr><td>WebDAV</td><td><code>anyfs-webdav</code></td><td>WebDAV client/OS</td><td>File manager access</td></tr>
 <tr><td>NFS</td><td><code>anyfs-nfs</code></td><td>NFS client</td><td>Unix network shares</td></tr>
 </tbody>

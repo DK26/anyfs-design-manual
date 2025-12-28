@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -194,7 +194,7 @@
 <tr><td>1</td><td>Panics instead of errors</td><td>No-panic policy, always return <code>Result</code></td></tr>
 <tr><td>2</td><td>Thread safety problems</td><td>Concurrent stress tests required</td></tr>
 <tr><td>3</td><td>Inconsistent path handling</td><td>Normalize in one place, test edge cases</td></tr>
-<tr><td>4</td><td>Poor error ergonomics</td><td><code>VfsError</code> with context fields</td></tr>
+<tr><td>4</td><td>Poor error ergonomics</td><td><code>FsError</code> with context fields</td></tr>
 <tr><td>5</td><td>Missing documentation</td><td>Performance &amp; thread safety docs required</td></tr>
 <tr><td>6</td><td>Platform issues</td><td>Cross-platform CI pipeline</td></tr>
 </tbody>
@@ -219,7 +219,7 @@
 <ul>
 <li><strong>Test concurrent operations explicitly</strong> - stress test with multiple threads</li>
 <li><strong>Document thread safety guarantees</strong> per backend</li>
-<li><strong><code>VfsBackend: Send</code></strong> bound is intentional</li>
+<li><strong><code>Fs: Send</code></strong> bound is intentional</li>
 <li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for interior mutability</li>
 </ul>
 <p><strong>Required tests:</strong></p>
@@ -265,7 +265,7 @@ let entry = self.entries.get(&amp;path).unwrap();
 
 // GOOD - returns error
 let entry = self.entries.get(&amp;path)
-    .ok_or_else(|| VfsError::NotFound { path: path.to_path_buf() })?;
+    .ok_or_else(|| FsError::NotFound { path: path.to_path_buf() })?;
 <span class="boring">}</span></code></pre>
 <p><strong>Edge cases that must return errors (not panic):</strong></p>
 <ul>
@@ -295,7 +295,7 @@ let entry = self.entries.get(&amp;path)
 <p><strong>Root cause:</strong> Each backend implemented path handling differently.</p>
 <h3 id="anyfs-response-2"><a class="header" href="#anyfs-response-2">AnyFS Response</a></h3>
 <ul>
-<li><strong>Normalize paths in ONE place</strong> (FilesContainer or dedicated normalizer)</li>
+<li><strong>Normalize paths in ONE place</strong> (FileStorage or dedicated normalizer)</li>
 <li><strong>Consistent semantics:</strong> always absolute, always <code>/</code> separator</li>
 <li><strong>Use <code>impl AsRef&lt;Path&gt;</code></strong> but normalize internally</li>
 </ul>
@@ -332,7 +332,7 @@ let entry = self.entries.get(&amp;path)
 <h3 id="anyfs-response-3"><a class="header" href="#anyfs-response-3">AnyFS Response</a></h3>
 <ul>
 <li><strong>Avoid <code>'static</code> bounds</strong> unless necessary</li>
-<li><strong>Our design:</strong> <code>VfsBackend: Send</code> (not <code>'static</code>)</li>
+<li><strong>Our design:</strong> <code>Fs: Send</code> (not <code>'static</code>)</li>
 <li><strong>Document why bounds exist</strong> when needed</li>
 </ul>
 <hr>
@@ -365,17 +365,17 @@ let entry = self.entries.get(&amp;path)
 <tr><th>Project</th><th>Issue</th><th>Problem</th></tr>
 </thead>
 <tbody>
-<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/33">#33</a></td><td>VfsError hard to match programmatically</td></tr>
+<tr><td>vfs</td><td><a href="https://github.com/manuel-woelker/rust-vfs/issues/33">#33</a></td><td>Error type hard to match programmatically</td></tr>
 </tbody>
 </table>
 </div>
 <p><strong>Root cause:</strong> Error enum wasn’t designed for pattern matching.</p>
 <h3 id="anyfs-response-5"><a class="header" href="#anyfs-response-5">AnyFS Response</a></h3>
-<p><code>VfsError</code> includes context and is easy to match:</p>
+<p><code>FsError</code> includes context and is easy to match:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[derive(Debug, thiserror::Error)]
-pub enum VfsError {
+pub enum FsError {
     #[error("not found: {path}")]
     NotFound { path: PathBuf },
 
@@ -432,10 +432,10 @@ pub enum VfsError {
 <p><strong>Already solved:</strong> <code>ReadOnly&lt;B&gt;</code> middleware blocks all writes.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let readonly_fs = FilesContainer::new(
+</span>let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );
-// All write operations return VfsError::ReadOnly
+// All write operations return FsError::ReadOnly
 <span class="boring">}</span></code></pre>
 <p>This validates our middleware approach.</p>
 <hr>

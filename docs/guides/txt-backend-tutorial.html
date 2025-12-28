@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -202,8 +202,12 @@
 <li><strong>Trait implementation</strong> - You’ll implement <code>FsRead</code>, <code>FsWrite</code>, <code>FsDir</code></li>
 <li><strong>Middleware composition</strong> - We’ll add <code>Quota</code> to prevent the file from exploding</li>
 <li><strong>Real-world patterns</strong> - The same patterns apply to serious backends</li>
+<li><strong>Separation of concerns</strong> - Backends just store bytes; FileStorage handles path resolution</li>
 </ol>
 <p>Plus, you can literally edit your “filesystem” in Notepad. Try doing that with ext4.</p>
+<blockquote>
+<p><strong>Important:</strong> Backends receive <strong>already-resolved paths</strong> from FileStorage. You don’t need to handle <code>..</code>, symlinks, or normalization - that’s FileStorage’s job. Your backend just stores and retrieves bytes at the given paths.</p>
+</blockquote>
 <hr>
 <h2 id="the-format"><a class="header" href="#the-format">The Format</a></h2>
 <p>One line per entry. Four comma-separated fields. Dead simple:</p>
@@ -422,36 +426,6 @@ impl TxtBackend {
         Ok(())
     }
 
-    /// Normalize path (remove trailing slashes, handle . and ..)
-    fn normalize_path(path: impl AsRef&lt;Path&gt;) -&gt; PathBuf {
-        let path = path.as_ref();
-        let mut components = Vec::new();
-
-        for component in path.components() {
-            match component {
-                std::path::Component::RootDir =&gt; {
-                    components.clear();
-                    components.push("/");
-                }
-                std::path::Component::Normal(s) =&gt; {
-                    components.push(s.to_str().unwrap_or(""));
-                }
-                std::path::Component::ParentDir =&gt; {
-                    if components.len() &gt; 1 {
-                        components.pop();
-                    }
-                }
-                std::path::Component::CurDir =&gt; {}
-                std::path::Component::Prefix(_) =&gt; {}
-            }
-        }
-
-        if components.is_empty() || (components.len() == 1 &amp;&amp; components[0] == "/") {
-            PathBuf::from("/")
-        } else {
-            PathBuf::from(components.join("/"))
-        }
-    }
 }
 <span class="boring">}</span></code></pre>
 <hr>
@@ -463,7 +437,7 @@ impl TxtBackend {
 
 impl FsRead for TxtBackend {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref();
         let entries = self.entries.read().unwrap();
 
         let entry = entries.get(&amp;path)
@@ -498,17 +472,17 @@ impl FsRead for TxtBackend {
     }
 
     fn exists(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref();
         let entries = self.entries.read().unwrap();
-        Ok(entries.contains_key(&amp;path))
+        Ok(entries.contains_key(path))
     }
 
     fn metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref();
         let entries = self.entries.read().unwrap();
 
-        let entry = entries.get(&amp;path)
-            .ok_or_else(|| FsError::NotFound { path: path.clone() })?;
+        let entry = entries.get(path)
+            .ok_or_else(|| FsError::NotFound { path: path.to_path_buf() })?;
 
         Ok(Metadata {
             file_type: if entry.is_dir { FileType::Directory } else { FileType::File },
@@ -536,7 +510,7 @@ impl FsRead for TxtBackend {
 
 impl FsWrite for TxtBackend {
     fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
@@ -571,7 +545,7 @@ impl FsWrite for TxtBackend {
     }
 
     fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
         let entry = entries.get_mut(&amp;path)
@@ -590,7 +564,7 @@ impl FsWrite for TxtBackend {
     }
 
     fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
         let entry = entries.get(&amp;path)
@@ -609,8 +583,8 @@ impl FsWrite for TxtBackend {
     }
 
     fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let from = Self::normalize_path(from);
-        let to = Self::normalize_path(to);
+        let from = from.as_ref().to_path_buf();
+        let to = to.as_ref().to_path_buf();
 
         let mut entries = self.entries.write().unwrap();
 
@@ -627,8 +601,8 @@ impl FsWrite for TxtBackend {
     }
 
     fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let from = Self::normalize_path(from);
-        let to = Self::normalize_path(to);
+        let from = from.as_ref().to_path_buf();
+        let to = to.as_ref().to_path_buf();
 
         let entries = self.entries.read().unwrap();
 
@@ -654,7 +628,7 @@ impl FsWrite for TxtBackend {
     }
 
     fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
         let entry = entries.get_mut(&amp;path)
@@ -675,7 +649,7 @@ impl FsWrite for TxtBackend {
     fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
         // For simplicity, we buffer writes and apply on drop
         // A real implementation would be more sophisticated
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Ensure file exists (create empty if not)
         if !self.exists(&amp;path)? {
@@ -729,7 +703,7 @@ impl Drop for TxtFileWriter {
 
 impl FsDir for TxtBackend {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
         let entries = self.entries.read().unwrap();
 
         // Verify the path is a directory
@@ -771,7 +745,7 @@ impl FsDir for TxtBackend {
     }
 
     fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Check parent exists
         if let Some(parent) = path.parent() {
@@ -806,7 +780,7 @@ impl FsDir for TxtBackend {
     }
 
     fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Build list of directories to create
         let mut to_create = Vec::new();
@@ -844,7 +818,7 @@ impl FsDir for TxtBackend {
     }
 
     fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Can't remove root
         if path == Path::new("/") {
@@ -884,7 +858,7 @@ impl FsDir for TxtBackend {
     }
 
     fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
-        let path = Self::normalize_path(path);
+        let path = path.as_ref().to_path_buf();
 
         // Can't remove root
         if path == Path::new("/") {

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -198,7 +198,8 @@ FsRead + FsWrite + FsDir (core)
 <p>Key properties:</p>
 <ul>
 <li>Backends accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters</li>
-<li>Backends handle <strong>storage + filesystem semantics only</strong></li>
+<li><strong>Backends receive already-resolved paths</strong> - FileStorage handles path resolution (symlinks, <code>..</code>, normalization)</li>
+<li>Backends handle <strong>storage only</strong> - just store/retrieve bytes at given paths</li>
 <li>Policy (limits, feature gates) is handled by middleware, not backends</li>
 <li>Implement only the traits your backend supports</li>
 </ul>
@@ -810,7 +811,7 @@ impl&lt;B: FsDir&gt; FsDir for Counter&lt;B&gt; {
     // ... implement FsDir methods
 }
 
-// Counter&lt;B&gt; now implements Vfs when B: Vfs (blanket impl)
+// Counter&lt;B&gt; now implements Fs when B: Fs (blanket impl)
 <span class="boring">}</span></code></pre>
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -1030,7 +1031,7 @@ impl&lt;B: FsDir&gt; FsDir for Encrypted&lt;B&gt; {
     // ... delegate other FsDir methods
 }
 
-// Encrypted&lt;B&gt; now implements Vfs when B: Vfs (blanket impl)
+// Encrypted&lt;B&gt; now implements Fs when B: Fs (blanket impl)
 
 /// Layer for creating Encrypted middleware.
 pub struct EncryptedLayer {
@@ -1043,7 +1044,7 @@ impl EncryptedLayer {
     }
 }
 
-impl&lt;B: Vfs&gt; Layer&lt;B&gt; for EncryptedLayer {
+impl&lt;B: Fs&gt; Layer&lt;B&gt; for EncryptedLayer {
     type Backend = Encrypted&lt;B&gt;;
 
     fn layer(self, backend: B) -&gt; Self::Backend {
@@ -1153,56 +1154,30 @@ impl Fs for MemoryBackend {
 <li><code>read_dir</code> while directory is being modified</li>
 <li><code>rename</code> with concurrent access to source or destination</li>
 </ul>
-<h3 id="3-path-normalization"><a class="header" href="#3-path-normalization">3. Path Normalization</a></h3>
-<p>Normalize paths consistently. Recommended approach:</p>
+<h3 id="3-path-resolution---not-your-job"><a class="header" href="#3-path-resolution---not-your-job">3. Path Resolution - NOT Your Job</a></h3>
+<p><strong>Backends do NOT handle path resolution.</strong> FileStorage handles:</p>
+<ul>
+<li>Resolving <code>..</code> and <code>.</code> components</li>
+<li>Following symlinks (when <code>set_follow_symlinks(true)</code>)</li>
+<li>Normalizing paths (<code>//</code> → <code>/</code>, trailing slashes, etc.)</li>
+<li>Walking the virtual directory structure</li>
+</ul>
+<p>Your backend receives <strong>already-resolved, clean paths</strong>. Just store and retrieve bytes at those paths.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn normalize_path(path: &amp;Path) -&gt; PathBuf {
-    let mut components = Vec::new();
-
-    for component in path.components() {
-        match component {
-            Component::RootDir =&gt; {
-                components.clear();
-                components.push(Component::RootDir);
-            }
-            Component::CurDir =&gt; {
-                // Skip "."
-            }
-            Component::ParentDir =&gt; {
-                // Go up, but don't go past root
-                if components.len() &gt; 1 {
-                    components.pop();
-                }
-            }
-            Component::Normal(name) =&gt; {
-                components.push(Component::Normal(name));
-            }
-            Component::Prefix(_) =&gt; {
-                // Windows prefix - handle appropriately
-            }
-        }
+</span>impl FsRead for MyBackend {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
+        // Path is already resolved - just use it directly
+        let path = path.as_ref();
+        self.storage.get(path).ok_or_else(|| FsError::NotFound { path: path.to_path_buf() })
     }
-
-    components.iter().collect()
 }
 <span class="boring">}</span></code></pre>
-<p><strong>Path edge cases to test:</strong></p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Input</th><th>Expected Output</th></tr>
-</thead>
-<tbody>
-<tr><td><code>/foo/../bar</code></td><td><code>/bar</code></td></tr>
-<tr><td><code>/foo/./bar</code></td><td><code>/foo/bar</code></td></tr>
-<tr><td><code>//double//slash</code></td><td><code>/double/slash</code></td></tr>
-<tr><td><code>/</code></td><td><code>/</code></td></tr>
-<tr><td>`` (empty)</td><td>Error</td></tr>
-<tr><td><code>/foo/bar/</code></td><td><code>/foo/bar</code> (or keep trailing, be consistent)</td></tr>
-</tbody>
-</table>
-</div>
+<p><strong>Exception:</strong> If your backend wraps a real filesystem (like <code>VRootFsBackend</code>), implement <code>SelfResolving</code> to tell FileStorage to skip resolution - the OS handles it.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl SelfResolving for VRootFsBackend {}
+<span class="boring">}</span></code></pre>
 <h3 id="4-error-messages"><a class="header" href="#4-error-messages">4. Error Messages</a></h3>
 <p>Include context in errors for debugging:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]

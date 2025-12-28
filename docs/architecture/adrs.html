@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6f0767ad.js";
+            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -190,21 +190,21 @@
 <tr><th>ADR</th><th>Title</th><th>Status</th></tr>
 </thead>
 <tbody>
-<tr><td>ADR-001</td><td>Path-based <code>VfsBackend</code> trait</td><td>Accepted</td></tr>
+<tr><td>ADR-001</td><td>Path-based <code>Fs</code> trait</td><td>Accepted</td></tr>
 <tr><td>ADR-002</td><td>Two-crate structure</td><td>Accepted</td></tr>
 <tr><td>ADR-003</td><td><code>impl AsRef&lt;Path&gt;</code> for all path parameters</td><td>Accepted</td></tr>
 <tr><td>ADR-004</td><td>Tower-style middleware pattern</td><td>Accepted</td></tr>
 <tr><td>ADR-005</td><td><code>std::fs</code>-aligned method names</td><td>Accepted</td></tr>
 <tr><td>ADR-006</td><td>Quota for quota enforcement</td><td>Accepted</td></tr>
 <tr><td>ADR-007</td><td>Restrictions for least-privilege</td><td>Accepted</td></tr>
-<tr><td>ADR-008</td><td>FilesContainer as thin ergonomic wrapper</td><td>Accepted</td></tr>
+<tr><td>ADR-008</td><td>FileStorage as thin ergonomic wrapper</td><td>Accepted</td></tr>
 <tr><td>ADR-009</td><td>Built-in backends are feature-gated</td><td>Accepted</td></tr>
 <tr><td>ADR-010</td><td>Sync-first, async-ready design</td><td>Accepted</td></tr>
 <tr><td>ADR-011</td><td>Layer trait for standardized composition</td><td>Accepted</td></tr>
 <tr><td>ADR-012</td><td>Tracing for instrumentation</td><td>Accepted</td></tr>
-<tr><td>ADR-013</td><td>VfsBackendExt for extension methods</td><td>Accepted</td></tr>
+<tr><td>ADR-013</td><td>FsExt for extension methods</td><td>Accepted</td></tr>
 <tr><td>ADR-014</td><td>Optional Bytes support</td><td>Accepted</td></tr>
-<tr><td>ADR-015</td><td>Contextual VfsError</td><td>Accepted</td></tr>
+<tr><td>ADR-015</td><td>Contextual FsError</td><td>Accepted</td></tr>
 <tr><td>ADR-016</td><td>PathFilter for path-based access control</td><td>Accepted</td></tr>
 <tr><td>ADR-017</td><td>ReadOnly for preventing writes</td><td>Accepted</td></tr>
 <tr><td>ADR-018</td><td>RateLimit for operation throttling</td><td>Accepted</td></tr>
@@ -215,7 +215,7 @@
 </table>
 </div>
 <hr>
-<h2 id="adr-001-path-based-vfsbackend-trait"><a class="header" href="#adr-001-path-based-vfsbackend-trait">ADR-001: Path-based <code>VfsBackend</code> trait</a></h2>
+<h2 id="adr-001-path-based-fs-trait"><a class="header" href="#adr-001-path-based-fs-trait">ADR-001: Path-based <code>Fs</code> trait</a></h2>
 <p><strong>Decision:</strong> Backends implement a path-based trait aligned with <code>std::fs</code> method naming.</p>
 <p><strong>Why:</strong> Filesystem operations are naturally path-oriented; a single, familiar trait surface is easier to implement and adopt than graph-store or inode models.</p>
 <hr>
@@ -240,7 +240,7 @@
 </ul>
 <hr>
 <h2 id="adr-003-impl-asrefpath-for-all-path-parameters"><a class="header" href="#adr-003-impl-asrefpath-for-all-path-parameters">ADR-003: <code>impl AsRef&lt;Path&gt;</code> for all path parameters</a></h2>
-<p><strong>Decision:</strong> Both <code>VfsBackend</code> and <code>FilesContainer</code> accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters.</p>
+<p><strong>Decision:</strong> Both <code>Fs</code> traits and <code>FileStorage</code> accept <code>impl AsRef&lt;Path&gt;</code> for all path parameters.</p>
 <p><strong>Why:</strong></p>
 <ul>
 <li>Aligned with <code>std::fs</code> API conventions.</li>
@@ -249,7 +249,7 @@
 </ul>
 <hr>
 <h2 id="adr-004-tower-style-middleware-pattern"><a class="header" href="#adr-004-tower-style-middleware-pattern">ADR-004: Tower-style middleware pattern</a></h2>
-<p><strong>Decision:</strong> Use composable middleware (decorator pattern) for cross-cutting concerns like limits, logging, and feature gates. Each middleware implements <code>VfsBackend</code> by wrapping another <code>VfsBackend</code>.</p>
+<p><strong>Decision:</strong> Use composable middleware (decorator pattern) for cross-cutting concerns like limits, logging, and feature gates. Each middleware implements <code>Fs</code> by wrapping another <code>Fs</code>.</p>
 <p><strong>Why:</strong></p>
 <ul>
 <li>Complete separation of concerns - each layer has one job.</li>
@@ -273,7 +273,7 @@
 <p><strong>Why:</strong> Familiarity and reduced cognitive overhead.</p>
 <hr>
 <h2 id="adr-006-quota-for-quota-enforcement"><a class="header" href="#adr-006-quota-for-quota-enforcement">ADR-006: Quota for quota enforcement</a></h2>
-<p><strong>Decision:</strong> Quota/limit enforcement is handled by <code>Quota&lt;B&gt;</code> middleware, not by backends or FilesContainer.</p>
+<p><strong>Decision:</strong> Quota/limit enforcement is handled by <code>Quota&lt;B&gt;</code> middleware, not by backends or FileStorage.</p>
 <p><strong>Configuration:</strong></p>
 <ul>
 <li><code>with_max_total_size(bytes)</code> - total storage limit</li>
@@ -307,7 +307,7 @@
 <li><code>.deny_hard_links()</code> - block <code>hard_link()</code> calls</li>
 <li><code>.deny_permissions()</code> - block <code>set_permissions()</code> calls</li>
 </ul>
-<p>When blocked, operations return <code>VfsError::FeatureNotEnabled</code>.</p>
+<p>When blocked, operations return <code>FsError::FeatureNotEnabled</code>.</p>
 <p><strong>Symlink following:</strong> Controlled separately via <code>set_follow_symlinks(bool)</code> on virtual backends. VRootFsBackend delegates to OS (strict-path prevents escapes).</p>
 <p><strong>Why:</strong></p>
 <ul>
@@ -316,8 +316,8 @@
 <li>Clear separation: Restrictions blocks operations, backend settings control behavior.</li>
 </ul>
 <hr>
-<h2 id="adr-008-filescontainer-as-thin-ergonomic-wrapper"><a class="header" href="#adr-008-filescontainer-as-thin-ergonomic-wrapper">ADR-008: FilesContainer as thin ergonomic wrapper</a></h2>
-<p><strong>Decision:</strong> <code>FilesContainer&lt;B&gt;</code> is a thin wrapper that provides std::fs-aligned ergonomics only. It contains NO policy logic.</p>
+<h2 id="adr-008-filestorage-as-thin-ergonomic-wrapper"><a class="header" href="#adr-008-filestorage-as-thin-ergonomic-wrapper">ADR-008: FileStorage as thin ergonomic wrapper</a></h2>
+<p><strong>Decision:</strong> <code>FileStorage&lt;B, M&gt;</code> is a thin wrapper that provides std::fs-aligned ergonomics only. It contains NO policy logic.</p>
 <p><strong>What it does:</strong></p>
 <ul>
 <li>Provides familiar method names</li>
@@ -348,7 +348,7 @@
 <p><strong>Why:</strong> Minimizes binary size and compile time for users who don’t need all backends.</p>
 <hr>
 <h2 id="adr-010-sync-first-async-ready-design"><a class="header" href="#adr-010-sync-first-async-ready-design">ADR-010: Sync-first, async-ready design</a></h2>
-<p><strong>Decision:</strong> VfsBackend is synchronous for v1. The API is designed to allow adding <code>AsyncVfsBackend</code> later without breaking changes.</p>
+<p><strong>Decision:</strong> <code>Fs</code> traits are synchronous for v1. The API is designed to allow adding <code>AsyncFs</code> later without breaking changes.</p>
 <p><strong>Rationale:</strong></p>
 <ul>
 <li>All built-in backends are naturally synchronous:
@@ -363,8 +363,8 @@
 </ul>
 <p><strong>Async-ready design principles:</strong></p>
 <ul>
-<li>Trait requires <code>Send</code> - compatible with async executors</li>
-<li>Return types are <code>Result&lt;T, VfsError&gt;</code> - works with async</li>
+<li>Traits require <code>Send</code> - compatible with async executors</li>
+<li>Return types are <code>Result&lt;T, FsError&gt;</code> - works with async</li>
 <li>No internal blocking assumptions</li>
 <li>Methods are stateless per-call - no hidden blocking state</li>
 </ul>
@@ -373,20 +373,20 @@ When async is needed (e.g., network-backed storage), add a parallel trait:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// In anyfs-backend
-pub trait AsyncVfsBackend: Send + Sync {
-    async fn read(&amp;self, path: impl AsRef&lt;Path&gt; + Send) -&gt; Result&lt;Vec&lt;u8&gt;, VfsError&gt;;
-    async fn write(&amp;mut self, path: impl AsRef&lt;Path&gt; + Send, data: &amp;[u8]) -&gt; Result&lt;(), VfsError&gt;;
-    // ... mirrors VfsBackend with async
+pub trait AsyncFs: Send + Sync {
+    async fn read(&amp;self, path: impl AsRef&lt;Path&gt; + Send) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+    async fn write(&amp;mut self, path: impl AsRef&lt;Path&gt; + Send, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    // ... mirrors Fs with async
 
     // Streaming uses AsyncRead/AsyncWrite
     async fn open_read(&amp;self, path: impl AsRef&lt;Path&gt; + Send)
-        -&gt; Result&lt;Box&lt;dyn AsyncRead + Send + Unpin&gt;, VfsError&gt;;
+        -&gt; Result&lt;Box&lt;dyn AsyncRead + Send + Unpin&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Migration notes:</strong></p>
 <ul>
-<li><code>AsyncVfsBackend</code> would be a separate trait, not replacing <code>VfsBackend</code></li>
-<li>Blanket impl possible: <code>impl&lt;T: VfsBackend&gt; AsyncVfsBackend for T</code> using <code>spawn_blocking</code></li>
+<li><code>AsyncFs</code> would be a separate trait, not replacing <code>Fs</code></li>
+<li>Blanket impl possible: <code>impl&lt;T: Fs&gt; AsyncFs for T</code> using <code>spawn_blocking</code></li>
 <li>Middleware would need async variants: <code>AsyncQuota&lt;B&gt;</code>, etc.</li>
 <li>No breaking changes to existing sync API</li>
 </ul>
@@ -401,8 +401,8 @@ pub trait AsyncVfsBackend: Send + Sync {
 <p><strong>Decision:</strong> Provide a <code>Layer</code> trait (inspired by Tower) that standardizes middleware composition.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait Layer&lt;B: VfsBackend&gt; {
-    type Backend: VfsBackend;
+</span>pub trait Layer&lt;B: Fs&gt; {
+    type Backend: Fs;
     fn layer(self, backend: B) -&gt; Self::Backend;
 }
 <span class="boring">}</span></code></pre>
@@ -438,25 +438,35 @@ pub trait AsyncVfsBackend: Send + Sync {
     .with_level(tracing::Level::DEBUG)
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="adr-013-vfsbackendext-for-extension-methods"><a class="header" href="#adr-013-vfsbackendext-for-extension-methods">ADR-013: VfsBackendExt for extension methods</a></h2>
-<p><strong>Decision:</strong> Provide <code>VfsBackendExt</code> trait with convenience methods, auto-implemented for all backends.</p>
+<h2 id="adr-013-fsext-for-extension-methods"><a class="header" href="#adr-013-fsext-for-extension-methods">ADR-013: FsExt for extension methods</a></h2>
+<p><strong>Decision:</strong> Provide <code>FsExt</code> trait with convenience methods, auto-implemented for all backends.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait VfsBackendExt: VfsBackend {
-    fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, VfsError&gt;;
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), VfsError&gt;;
-    fn is_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, VfsError&gt;;
-    fn is_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, VfsError&gt;;
+</span>pub trait FsExt: Fs {
+    fn is_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt;;
+    fn is_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt;;
+
+    // JSON methods require `serde` feature
+    #[cfg(feature = "serde")]
+    fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
+    #[cfg(feature = "serde")]
+    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
 }
 
-impl&lt;B: VfsBackend&gt; VfsBackendExt for B {}
+impl&lt;B: Fs&gt; FsExt for B {}
 <span class="boring">}</span></code></pre>
+<p><strong>Feature gating:</strong></p>
+<ul>
+<li><code>is_file()</code> and <code>is_dir()</code> are always available.</li>
+<li><code>read_json()</code> and <code>write_json()</code> require <code>anyfs-backend = { features = ["serde"] }</code>.</li>
+</ul>
 <p><strong>Why:</strong></p>
 <ul>
-<li>Adds convenience without bloating <code>VfsBackend</code> trait.</li>
+<li>Adds convenience without bloating <code>Fs</code> trait.</li>
 <li>Blanket impl means all backends get these methods for free.</li>
 <li>Users can define their own extension traits for domain-specific operations.</li>
 <li>Follows Rust convention (e.g., <code>IteratorExt</code>, <code>StreamExt</code>).</li>
+<li>Serde is optional - users who don’t need JSON avoid the dependency.</li>
 </ul>
 <hr>
 <h2 id="adr-014-optional-bytes-support"><a class="header" href="#adr-014-optional-bytes-support">ADR-014: Optional Bytes support</a></h2>
@@ -482,23 +492,23 @@ pub type FileContent = bytes::Bytes;
 pub type FileContent = Vec&lt;u8&gt;;
 
 // In trait definition
-pub trait VfsBackend: Send {
-    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;FileContent, VfsError&gt;;
+pub trait FsRead: Send {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;FileContent, FsError&gt;;
     // ...
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Middleware compatibility:</strong> Middleware passes <code>FileContent</code> through unchanged. No special handling needed - both <code>Vec&lt;u8&gt;</code> and <code>Bytes</code> implement <code>AsRef&lt;[u8]&gt;</code> and <code>Deref&lt;Target=[u8]&gt;</code>.</p>
 <hr>
-<h2 id="adr-015-contextual-vfserror"><a class="header" href="#adr-015-contextual-vfserror">ADR-015: Contextual VfsError</a></h2>
-<p><strong>Decision:</strong> <code>VfsError</code> variants include context for better debugging.</p>
+<h2 id="adr-015-contextual-fserror"><a class="header" href="#adr-015-contextual-fserror">ADR-015: Contextual FsError</a></h2>
+<p><strong>Decision:</strong> <code>FsError</code> variants include context for better debugging.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>VfsError::NotFound {
+</span>FsError::NotFound {
     path: PathBuf,
     operation: &amp;'static str,  // "read", "metadata", etc.
 }
 
-VfsError::QuotaExceeded {
+FsError::QuotaExceeded {
     limit: u64,
     requested: u64,
     usage: u64,
@@ -527,7 +537,7 @@ VfsError::QuotaExceeded {
 <li>Rules are evaluated in order; first match wins.</li>
 <li>If no rules match, access is denied (deny by default).</li>
 <li>Uses glob patterns (e.g., <code>**</code> for recursive, <code>*</code> for single segment).</li>
-<li>Returns <code>VfsError::AccessDenied</code> for denied paths.</li>
+<li>Returns <code>FsError::AccessDenied</code> for denied paths.</li>
 </ul>
 <p><strong>Why:</strong></p>
 <ul>
@@ -553,7 +563,7 @@ VfsError::QuotaExceeded {
 <p><strong>Semantics:</strong></p>
 <ul>
 <li>All read operations pass through to inner backend.</li>
-<li>All write operations return <code>VfsError::ReadOnly</code>.</li>
+<li>All write operations return <code>FsError::ReadOnly</code>.</li>
 <li>Simple, no configuration needed.</li>
 </ul>
 <p><strong>Why:</strong></p>
@@ -575,7 +585,7 @@ VfsError::QuotaExceeded {
 <p><strong>Semantics:</strong></p>
 <ul>
 <li>Tracks operation count in sliding time window.</li>
-<li>Returns <code>VfsError::RateLimitExceeded</code> when limit exceeded.</li>
+<li>Returns <code>FsError::RateLimitExceeded</code> when limit exceeded.</li>
 <li>Counter resets after window expires.</li>
 </ul>
 <p><strong>Why:</strong></p>
