@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-e1a075be.js";
+            window.path_to_searchindex_js = "searchindex-6f0767ad.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b60f0e7e.js"></script>
@@ -9923,9 +9923,12 @@ pub struct SqliteBackend { ... }
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="open-questions--future-considerations"><a class="header" href="#open-questions--future-considerations">Open Questions &amp; Future Considerations</a></h1>
 <p><strong>Status:</strong> Under Discussion
-<strong>Last Updated:</strong> 2025-12-24</p>
+<strong>Last Updated:</strong> 2025-12-28</p>
 <hr>
 <p>This document captures open questions and design considerations that may influence future development of AnyFS.</p>
+<blockquote>
+<p><strong>Note:</strong> Many items originally in this document have been resolved and implemented. See the Architecture Decision Records for final decisions.</p>
+</blockquote>
 <hr>
 <h2 id="symlink-security-following-vs-creating"><a class="header" href="#symlink-security-following-vs-creating">Symlink Security: Following vs Creating</a></h2>
 <p><strong>IMPORTANT:</strong> The current discussion about symlinks has been fundamentally reconsidered.</p>
@@ -9967,13 +9970,13 @@ If we follow the symlink:
 <p>Walk each path component manually using <code>lstat</code> (symlink_metadata):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn resolve_no_follow(&amp;self, path: &amp;Path) -&gt; Result&lt;PathBuf, VfsError&gt; {
+</span>fn resolve_no_follow(&amp;self, path: &amp;Path) -&gt; Result&lt;PathBuf, FsError&gt; {
     let mut current = self.root.clone();
     for component in path.components() {
         current = current.join(component);
         let meta = std::fs::symlink_metadata(&amp;current)?;
         if meta.file_type().is_symlink() {
-            return Err(VfsError::SymlinkNotAllowed { path: current });
+            return Err(FsError::SymlinkNotAllowed { path: current });
         }
     }
     Ok(current)
@@ -9996,12 +9999,12 @@ If we follow the symlink:
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>/// Virtual backends where we control everything
-pub trait VirtualVfsBackend: VfsBackend {
+pub trait VirtualFs: Fs {
     fn set_symlink_resolution(&amp;mut self, enabled: bool);
 }
 
 /// Real filesystem backends where OS controls symlink resolution
-pub trait RealFsBackend: VfsBackend {
+pub trait RealFs: Fs {
     // OS controls symlinks, we just ensure containment
 }
 <span class="boring">}</span></code></pre>
@@ -10021,7 +10024,7 @@ pub trait RealFsBackend: VfsBackend {
 <h4 id="option-3-capability-query"><a class="header" href="#option-3-capability-query">Option 3: Capability Query</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait VfsBackend {
+</span>pub trait Fs {
     fn capabilities(&amp;self) -&gt; Capabilities;
     // ...
 }
@@ -10176,7 +10179,7 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <li>Encrypt blobs with a user-provided key</li>
 <li>Use a remote object store with encryption at rest</li>
 </ul>
-<p>This is an implementation detail of the backend, not visible to the <code>FilesContainer</code> API.</p>
+<p>This is an implementation detail of the backend, not visible to the <code>FileStorage</code> API.</p>
 <hr>
 <h2 id="hooks-and-callbacks"><a class="header" href="#hooks-and-callbacks">Hooks and Callbacks</a></h2>
 <p><strong>Question:</strong> Should AnyFS support hooks or callbacks for file operations (e.g., audit logging, validation)?</p>
@@ -10184,15 +10187,9 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <ul>
 <li>AgentFS (see comparison below) provides audit logging as a core feature</li>
 <li>Hooks add complexity but enable powerful use cases</li>
-<li>Could be implemented as a middleware pattern around FilesContainer</li>
+<li>Could be implemented as a middleware pattern around FileStorage</li>
 </ul>
-<p><strong>Options:</strong></p>
-<ol>
-<li><strong>No hooks in v1</strong>: Keep it simple. Users can wrap FilesContainer in their own type.</li>
-<li><strong>Event emitter</strong>: FilesContainer emits events that users can subscribe to</li>
-<li><strong>Middleware trait</strong>: Allow wrapping backends with cross-cutting concerns</li>
-</ol>
-<p><strong>Recommendation:</strong> Defer to v2. Users can wrap <code>FilesContainer</code> or backends for now.</p>
+<p><strong>Resolution:</strong> Implemented via <code>Tracing</code> middleware. Users can also wrap <code>FileStorage</code> or backends for custom hooks.</p>
 <hr>
 <h2 id="agentfs-comparison"><a class="header" href="#agentfs-comparison">AgentFS Comparison</a></h2>
 <p><strong>Note:</strong> There are two projects named “AgentFS”:</p>
@@ -10234,17 +10231,17 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <h3 id="relationship-options"><a class="header" href="#relationship-options">Relationship Options</a></h3>
 <p><strong>AnyFS could be used BY AgentFS:</strong></p>
 <ul>
-<li>AgentFS could implement its filesystem portion using <code>VfsBackend</code></li>
+<li>AgentFS could implement its filesystem portion using <code>Fs</code> trait</li>
 <li>Our middleware (Quota, PathFilter, etc.) would work with their system</li>
 </ul>
 <p><strong>AgentFS-compatible backend for AnyFS:</strong></p>
 <ul>
-<li>Someone could implement <code>VfsBackend</code> using AgentFS’s SQLite schema</li>
+<li>Someone could implement <code>Fs</code> using AgentFS’s SQLite schema</li>
 <li>Would enable interop with AgentFS tooling</li>
 </ul>
 <p><strong>What we should NOT do:</strong></p>
 <ul>
-<li>Add KV store to <code>VfsBackend</code> (different abstraction, scope creep)</li>
+<li>Add KV store to <code>Fs</code> (different abstraction, scope creep)</li>
 <li>Add tool call auditing to core trait (that’s what <code>Tracing</code> middleware is for)</li>
 </ul>
 <h3 id="when-to-use-which"><a class="header" href="#when-to-use-which">When to Use Which</a></h3>
@@ -10298,7 +10295,7 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 </ol>
 <hr>
 <h2 id="fuse-mount-support"><a class="header" href="#fuse-mount-support">FUSE Mount Support</a></h2>
-<p><strong>Question:</strong> Should AnyFS support mounting as a FUSE filesystem?</p>
+<p><strong>Status:</strong> Resolved - Implemented in <code>anyfs-mount</code></p>
 <p><strong>What is FUSE?</strong>
 <a href="https://en.wikipedia.org/wiki/Filesystem_in_Userspace">FUSE (Filesystem in Userspace)</a> allows implementing filesystems in userspace rather than kernel code. It enables:</p>
 <ul>
@@ -10306,25 +10303,32 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <li>Using standard Unix tools (ls, cat, etc.) on AnyFS containers</li>
 <li>Integration with existing workflows</li>
 </ul>
-<p><strong>Considerations:</strong></p>
+<p><strong>Resolution:</strong> Implemented via <code>anyfs-mount</code> crate with cross-platform support:</p>
 <ul>
-<li>FUSE requires platform-specific code (Linux, macOS via macFUSE)</li>
-<li>Adds significant complexity</li>
-<li>Performance overhead vs direct API access</li>
-<li>Security implications of exposing to OS</li>
+<li>Linux: FUSE (native)</li>
+<li>macOS: macFUSE</li>
+<li>Windows: WinFsp</li>
 </ul>
-<p><strong>Recommendation:</strong> Not in v1. If there’s demand, we could add a <code>anyfs-fuse</code> crate that mounts a FilesContainer as a FUSE filesystem. This would be a separate, optional layer.</p>
+<p>See <a href="#cross-platform-virtual-drive-mounting">Cross-Platform Mounting</a> for full details.</p>
 <hr>
 <h2 id="type-system-protection-for-cross-container-operations"><a class="header" href="#type-system-protection-for-cross-container-operations">Type-System Protection for Cross-Container Operations</a></h2>
+<p><strong>Status:</strong> Resolved - Implemented via marker types</p>
 <p><strong>Question:</strong> Should we use the type system to prevent accidentally mixing data between containers?</p>
-<p><strong>Example concern:</strong> Reading from Container A and writing to Container B without explicit acknowledgment.</p>
-<p><strong>Options:</strong></p>
-<ol>
-<li><strong>Marker generics</strong>: <code>FilesContainer&lt;B, Marker&gt;</code> where Marker distinguishes instances</li>
-<li><strong>Opaque handles</strong>: File content wrapped in typed handles tied to origin container</li>
-<li><strong>No protection</strong>: Trust the user to wire things correctly</li>
-</ol>
-<p><strong>Recommendation:</strong> Defer. The complexity may not be worth it for most use cases. Users who need this can implement their own type wrappers.</p>
+<p><strong>Resolution:</strong> Implemented via <code>FileStorage&lt;B, M&gt;</code> where <code>M</code> is a marker type:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct Sandbox;
+struct UserData;
+
+let sandbox: FileStorage&lt;_, Sandbox&gt; = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage&lt;_, UserData&gt; = FileStorage::new(SqliteBackend::open("data.db")?);
+
+fn process_sandbox(fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) { /* only accepts Sandbox */ }
+
+process_sandbox(&amp;sandbox);   // OK
+process_sandbox(&amp;userdata);  // Compile error!
+<span class="boring">}</span></code></pre>
+<p>See <a href="#filestorageb-m-anyfs">FileStorage&lt;B, M&gt;</a> for details.</p>
 <hr>
 <h2 id="naming-considerations"><a class="header" href="#naming-considerations">Naming Considerations</a></h2>
 <p>Based on review feedback, the following naming concerns were raised:</p>
@@ -10353,7 +10357,7 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 </ul>
 <hr>
 <h2 id="async-support"><a class="header" href="#async-support">Async Support</a></h2>
-<p><strong>Question:</strong> Should VfsBackend be async?</p>
+<p><strong>Question:</strong> Should <code>Fs</code> traits be async?</p>
 <p><strong>Decision:</strong> Sync-first, async-ready (see ADR-010).</p>
 <p><strong>Rationale:</strong></p>
 <ul>
@@ -10363,14 +10367,14 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 </ul>
 <p><strong>Async-ready design:</strong></p>
 <ul>
-<li>Trait requires <code>Send</code> - compatible with async executors</li>
-<li>Return types are <code>Result&lt;T, VfsError&gt;</code> - works with async</li>
+<li>Traits require <code>Send</code> - compatible with async executors</li>
+<li>Return types are <code>Result&lt;T, FsError&gt;</code> - works with async</li>
 <li>No hidden blocking state</li>
 <li>Methods are stateless per-call</li>
 </ul>
-<p><strong>Future path:</strong> When needed (e.g., S3/network backends), add parallel <code>AsyncVfsBackend</code> trait:</p>
+<p><strong>Future path:</strong> When needed (e.g., S3/network backends), add parallel <code>AsyncFs</code> trait:</p>
 <ul>
-<li>Separate trait, not replacing <code>VfsBackend</code></li>
+<li>Separate trait, not replacing <code>Fs</code></li>
 <li>Blanket impl possible via <code>spawn_blocking</code></li>
 <li>No breaking changes to existing sync API</li>
 </ul>
@@ -10385,25 +10389,25 @@ backend.set_follow_symlinks(false);  // Symlinks not resolved during path operat
 <tr><td>Symlink security</td><td>Virtual backends: <code>set_follow_symlinks()</code>. VRootFsBackend: <code>strict-path</code> escapes only.</td></tr>
 <tr><td>Path resolution</td><td>Virtual = lexical; VRootFs = OS</td></tr>
 <tr><td>Compression/encryption</td><td>Backend responsibility</td></tr>
-<tr><td>Hooks/callbacks</td><td>Defer to v2</td></tr>
-<tr><td>FUSE mount</td><td>Possible with current trait (has truncate, fsync, statfs)</td></tr>
-<tr><td>Type-system protection</td><td>Defer</td></tr>
+<tr><td>Hooks/callbacks</td><td><code>Tracing</code> middleware</td></tr>
+<tr><td>FUSE mount</td><td><code>anyfs-mount</code> crate (cross-platform)</td></tr>
+<tr><td>Type-system protection</td><td><code>FileStorage&lt;B, M&gt;</code> marker types</td></tr>
 <tr><td>POSIX compatibility</td><td>Not a goal</td></tr>
-<tr><td><code>truncate</code></td><td>Added to VfsBackend</td></tr>
-<tr><td><code>sync</code> / <code>fsync</code></td><td>Added to VfsBackend</td></tr>
+<tr><td><code>truncate</code></td><td>Added to <code>FsWrite</code></td></tr>
+<tr><td><code>sync</code> / <code>fsync</code></td><td>Added to <code>FsSync</code></td></tr>
 <tr><td>Async support</td><td>Sync-first, async-ready (ADR-010)</td></tr>
 <tr><td>Layer trait</td><td>Tower-style composition (ADR-011)</td></tr>
 <tr><td>Logging</td><td>Tracing with tracing ecosystem (ADR-012)</td></tr>
-<tr><td>Extension methods</td><td>VfsBackendExt (ADR-013)</td></tr>
+<tr><td>Extension methods</td><td><code>FsExt</code> (ADR-013)</td></tr>
 <tr><td>Zero-copy bytes</td><td>Optional <code>bytes</code> feature (ADR-014)</td></tr>
-<tr><td>Error context</td><td>Contextual VfsError (ADR-015)</td></tr>
-<tr><td>BackendStack builder</td><td>Fluent API in anyfs</td></tr>
-<tr><td>Path-based access control</td><td>PathFilter middleware (ADR-016)</td></tr>
-<tr><td>Read-only mode</td><td>ReadOnly middleware (ADR-017)</td></tr>
-<tr><td>Rate limiting</td><td>RateLimit middleware (ADR-018)</td></tr>
-<tr><td>Dry-run testing</td><td>DryRun middleware (ADR-019)</td></tr>
-<tr><td>Read caching</td><td>Cache middleware (ADR-020)</td></tr>
-<tr><td>Union filesystem</td><td>Overlay middleware (ADR-021)</td></tr>
+<tr><td>Error context</td><td>Contextual <code>FsError</code> (ADR-015)</td></tr>
+<tr><td>BackendStack builder</td><td>Fluent API via <code>.layer()</code></td></tr>
+<tr><td>Path-based access control</td><td><code>PathFilter</code> middleware (ADR-016)</td></tr>
+<tr><td>Read-only mode</td><td><code>ReadOnly</code> middleware (ADR-017)</td></tr>
+<tr><td>Rate limiting</td><td><code>RateLimit</code> middleware (ADR-018)</td></tr>
+<tr><td>Dry-run testing</td><td><code>DryRun</code> middleware (ADR-019)</td></tr>
+<tr><td>Read caching</td><td><code>Cache</code> middleware (ADR-020)</td></tr>
+<tr><td>Union filesystem</td><td><code>Overlay</code> middleware (ADR-021)</td></tr>
 </tbody>
 </table>
 </div>
