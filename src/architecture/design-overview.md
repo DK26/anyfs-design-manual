@@ -1096,3 +1096,119 @@ pub enum FsError {
 ```
 
 All error variants include enough context for meaningful error messages.
+
+---
+
+## Cross-Platform Compatibility
+
+AnyFS is designed for cross-platform use. Virtual backends work everywhere; real filesystem backends have platform considerations.
+
+### Backend Compatibility
+
+| Backend | Windows | Linux | macOS | WASM |
+|---------|:-------:|:-----:|:-----:|:----:|
+| `MemoryBackend` | ✅ | ✅ | ✅ | ✅ |
+| `SqliteBackend` | ✅ | ✅ | ✅ | ✅* |
+| `VRootFsBackend` | ✅ | ✅ | ✅ | ❌ |
+| `StdFsBackend` | ✅ | ✅ | ✅ | ❌ |
+
+*SQLite on WASM requires `wasm32` build of rusqlite with bundled SQLite.
+
+### Feature Compatibility
+
+| Feature | Virtual Backends | VRootFsBackend |
+|---------|:----------------:|:--------------:|
+| Basic I/O (`Fs`) | ✅ All platforms | ✅ All platforms |
+| Symlinks | ✅ All platforms | Platform-dependent (see below) |
+| Hard links | ✅ All platforms | Platform-dependent |
+| Permissions | ✅ Stored as metadata | Platform-dependent |
+| Extended attributes | ✅ Stored as metadata | Platform-dependent |
+| FUSE mounting | N/A | Platform-dependent |
+
+### Platform-Specific Notes
+
+#### Virtual Backends (MemoryBackend, SqliteBackend)
+
+**Fully cross-platform.** All features work identically everywhere because:
+- Paths are just strings/keys - no OS path resolution
+- Symlinks are stored data, not OS constructs
+- Permissions are metadata, not enforced by OS
+- No filesystem syscalls involved
+
+```rust
+// This works identically on Windows, Linux, macOS, and WASM
+let mut fs = MemoryBackend::new();
+fs.symlink("/target", "/link")?;           // Just stores the link
+fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+```
+
+#### VRootFsBackend (Real Filesystem)
+
+Wraps the host filesystem. Platform differences apply:
+
+| Feature | Linux | macOS | Windows |
+|---------|-------|-------|---------|
+| Symlinks | ✅ | ✅ | ⚠️ Requires privileges* |
+| Hard links | ✅ | ✅ | ✅ (NTFS only) |
+| Permissions (mode bits) | ✅ | ✅ | ⚠️ Limited mapping |
+| Extended attributes | ✅ xattr | ✅ xattr | ⚠️ ADS (different API) |
+| Case sensitivity | ✅ | ⚠️ Default insensitive | ⚠️ Insensitive |
+
+*Windows requires `SeCreateSymbolicLinkPrivilege` or Developer Mode for symlinks.
+
+#### FUSE Mounting
+
+| Platform | Support | Library |
+|----------|---------|---------|
+| Linux | ✅ Native | libfuse |
+| macOS | ⚠️ Third-party | macFUSE |
+| Windows | ⚠️ Third-party | WinFsp or Dokan |
+| WASM | ❌ | N/A |
+
+### Path Handling
+
+Virtual backends use `/` as separator internally, regardless of platform:
+
+```rust
+// Always use forward slashes with virtual backends
+fs.write("/project/src/main.rs", code)?;  // Works everywhere
+```
+
+`VRootFsBackend` translates to native paths internally:
+- Linux/macOS: `/` stays `/`
+- Windows: `/project/file.txt` → `C:\root\project\file.txt`
+
+### Recommendations
+
+| Use Case | Recommended Backend | Why |
+|----------|---------------------|-----|
+| Cross-platform app | `MemoryBackend` or `SqliteBackend` | No platform differences |
+| Portable storage | `SqliteBackend` | Single file, works everywhere |
+| WASM/browser | `MemoryBackend` or `SqliteBackend` | No filesystem access needed |
+| Host filesystem access | `VRootFsBackend` | With awareness of platform limits |
+| Testing | `MemoryBackend` | Fast, no cleanup, deterministic |
+
+### Feature Detection
+
+Check platform capabilities at runtime if needed:
+
+```rust
+/// Check if symlinks are supported on the current platform.
+pub fn symlinks_available() -> bool {
+    #[cfg(unix)]
+    return true;
+
+    #[cfg(windows)]
+    {
+        // Check for Developer Mode or symlink privilege
+        // ...
+    }
+}
+```
+
+Or use `Restrictions` middleware to disable unsupported features uniformly:
+
+```rust
+#[cfg(windows)]
+let backend = Restrictions::new(backend).deny_symlinks();
+```
