@@ -37,6 +37,7 @@
 
 - [Which Crate Should I Use?](./guides/which-layer.md)
 - [Implementation Patterns (LLM Context)](./guides/llm-context.md)
+- [Cross-Platform Mounting](./guides/mounting.md)
 
 ---
 

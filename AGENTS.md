@@ -274,7 +274,27 @@ let backend = Restrictions::new(backend)
 
 **VRootFsBackend has platform limitations:**
 - Windows: symlinks need privileges, permissions have limited mapping
-- FUSE: Linux native, macOS/Windows need third-party libraries
+
+---
+
+## Virtual Drive Mounting
+
+Backends implementing `FsFuse` can be mounted as real filesystem drives via `anyfs-mount`:
+
+| Platform | Technology | Required |
+|----------|------------|----------|
+| Linux | FUSE | Usually pre-installed |
+| macOS | macFUSE | User must install |
+| Windows | WinFsp | User must install |
+
+```rust
+use anyfs_mount::MountHandle;
+
+let mount = MountHandle::mount(backend, "/mnt/drive")?;
+// Now /mnt/drive is a real mount point any app can use
+```
+
+See `guides/mounting.md` for full details.
 
 ---
 
