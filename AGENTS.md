@@ -388,6 +388,30 @@ All detailed documentation is in `src/` (mdbook):
 
 ---
 
+## Performance: Strategic Boxing (ADR-025)
+
+**We follow Tower/Axum's approach: zero-cost on hot path, box at boundaries.**
+
+```
+HOT PATH (zero-cost):
+  read(), write(), metadata(), exists()     ← Concrete types
+  Middleware: Quota<Tracing<B>>             ← Generics, monomorphized
+
+COLD PATH (boxed, I/O dominates):
+  open_read() → Box<dyn Read>               ← Once per file open
+  open_write() → Box<dyn Write>             ← Once per file open
+  read_dir() → ReadDirIter                  ← Boxed inner iterator
+
+OPT-IN TYPE ERASURE:
+  FileStorage::boxed()                      ← Like Tower's BoxService
+```
+
+**Why:** Box allocation (~50ns) is <1% of actual I/O time. Enables middleware flexibility (QuotaWriter, PathFilter filtering, Overlay merging) without type explosion.
+
+**Do NOT:** Add boxing to `read()`, `write()`, `metadata()`, or middleware composition.
+
+---
+
 ## Implementation Requirements
 
 **Non-negotiable:**

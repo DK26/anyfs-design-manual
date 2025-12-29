@@ -24,6 +24,7 @@
 - [Two-Layer Path Handling](./architecture/two-layer-design.md)
 - [Architecture Decision Records](./architecture/adrs.md)
 - [Hybrid Backend Design](./architecture/hybrid-backend-design.md)
+- [Zero-Cost Alternatives](./architecture/zero-cost-alternatives.md)
 
 ---
 

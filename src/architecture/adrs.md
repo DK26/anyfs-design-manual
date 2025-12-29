@@ -32,6 +32,7 @@ This file captures the decisions for the current AnyFS design.
 | ADR-022 | Builder pattern for configurable middleware | Accepted |
 | ADR-023 | Interior mutability for all trait methods | Accepted |
 | ADR-024 | Async Strategy | Accepted |
+| ADR-025 | Strategic Boxing (Tower-style) | Accepted |
 
 ---
 
@@ -872,3 +873,137 @@ FsPosix       →      AsyncFsPosix
 | Sync-only | Simple | Can't support network backends efficiently |
 
 **Conclusion:** Parallel async traits provide the best balance of simplicity now (sync-only core) with a clear migration path for async support later. The `Layer` trait design already accommodates this pattern.
+
+---
+
+## ADR-025: Strategic Boxing (Tower-style)
+
+**Status:** Accepted
+
+**Context:** Dynamic dispatch (`Box<dyn Trait>`) adds heap allocation and vtable indirection. We need to decide where boxing is acceptable vs. where zero-cost abstractions are required.
+
+**Decision:** Follow Tower/Axum's battle-tested strategy: **zero-cost on the hot path, box at boundaries where flexibility is needed and I/O cost dominates.**
+
+### Boxing Strategy
+
+```
+HOT PATH (many calls per operation - must be zero-cost):
+┌─────────────────────────────────────────────────────┐
+│  read(), write(), metadata(), exists()              │  ← Returns concrete types
+│  Read::read() / Write::write() on streams           │  ← Vtable dispatch only
+│  Iterator::next() on ReadDirIter                    │  ← Vtable dispatch only
+│  Middleware composition                             │  ← Generics, monomorphized
+└─────────────────────────────────────────────────────┘
+
+COLD PATH (once per operation - boxing acceptable):
+┌─────────────────────────────────────────────────────┐
+│  open_read(), open_write()                          │  ← Box<dyn Read/Write>
+│  read_dir()                                         │  ← ReadDirIter (boxed inner)
+└─────────────────────────────────────────────────────┘
+
+SETUP (once at startup - zero-cost):
+┌─────────────────────────────────────────────────────┐
+│  Middleware stacking: Quota<Tracing<B>>             │  ← Generics, no boxing
+│  FileStorage::new(backend)                          │  ← Zero-cost wrapper
+└─────────────────────────────────────────────────────┘
+
+OPT-IN TYPE ERASURE (when explicitly needed):
+┌─────────────────────────────────────────────────────┐
+│  FileStorage::boxed() -> FileStorage<Box<dyn Fs>>   │  ← Like Tower's BoxService
+└─────────────────────────────────────────────────────┘
+```
+
+### What Gets Boxed and Why
+
+| API | Boxed? | Rationale |
+|-----|--------|-----------|
+| `read()` → `Vec<u8>` | No | Hot path, most common operation |
+| `write(data)` → `()` | No | Hot path, most common operation |
+| `metadata()` → `Metadata` | No | Hot path, frequently called |
+| `exists()` → `bool` | No | Hot path, frequently called |
+| `open_read()` → `Box<dyn Read>` | Yes | Cold path (once per file), enables middleware wrappers |
+| `open_write()` → `Box<dyn Write>` | Yes | Cold path (once per file), enables `QuotaWriter` |
+| `read_dir()` → `ReadDirIter` | Yes (inner) | Enables filtering in PathFilter, merging in Overlay |
+| Middleware stack | No | Generics compose at compile time |
+| `FileStorage::boxed()` | Opt-in | Explicit type erasure when needed |
+
+### Why This Works
+
+**1. Bulk operations are the common case:**
+Most code uses `read()` and `write()`, not streaming. These are zero-cost.
+
+**2. Streaming is for large files:**
+`open_read()` / `open_write()` are for files too large to load into memory. For large files, I/O time (1-100ms) dwarfs box allocation (~50ns).
+
+**3. Box once, vtable many:**
+After `open_read()` allocates once, subsequent `Read::read()` calls are just vtable dispatch - no further allocations.
+
+**4. Middleware needs flexibility:**
+- `Quota` wraps streams with `QuotaWriter` to count bytes
+- `PathFilter` filters `ReadDirIter` to hide denied entries
+- `Overlay` merges directory listings from two backends
+Boxing enables this without type explosion.
+
+### Comparison to Tower/Axum
+
+| AnyFS | Tower/Axum | Purpose |
+|-------|------------|---------|
+| `Quota<Tracing<B>>` | `Timeout<RateLimit<S>>` | Zero-cost middleware composition |
+| `Box<dyn Read>` | `Pin<Box<dyn Future>>` | Flexibility at boundaries |
+| `ReadDirIter` | `BoxedIntoRoute` | Type erasure for storage |
+| `FileStorage::boxed()` | `BoxService` / `BoxCloneService` | Opt-in type erasure |
+
+Tower's Timeout middleware [uses `Pin<Box<dyn Future>>`](https://docs.rs/tower/latest/tower/trait.Service.html) in practice. Axum's Router [uses `BoxedIntoRoute`](https://github.com/tokio-rs/axum/discussions/1438) to store handlers. We follow the same pattern.
+
+### Cost Analysis
+
+| Operation | Box Allocation | Actual I/O | Box % of Total |
+|-----------|----------------|------------|----------------|
+| Open + read 4KB file | ~50ns | ~10,000ns | 0.5% |
+| Open + read 1MB file | ~50ns | ~1,000,000ns | 0.005% |
+| List directory (10 entries) | ~50ns | ~5,000ns | 1% |
+
+**The boxing cost is negligible relative to actual I/O.**
+
+### Alternatives Considered
+
+**1. Associated types everywhere:**
+```rust
+pub trait FsRead {
+    type Reader: Read + Send;
+    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+}
+```
+Rejected: Causes type explosion. `QuotaReader<PathFilterReader<TracingReader<Cursor<Vec<u8>>>>>` is unwieldy and every middleware needs a custom wrapper type.
+
+**2. RPITIT (Rust 1.75+):**
+```rust
+fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError>;
+```
+Rejected as default: Loses object safety. Can't use `dyn Fs` for runtime backend selection.
+
+**3. Always box everything:**
+Rejected: Unnecessary overhead on hot path operations like `read()`.
+
+### Future Considerations
+
+If profiling shows stream boxing is a bottleneck (unlikely), we can add:
+
+```rust
+/// Extension trait for zero-cost streaming when backend type is known
+pub trait FsReadTyped: FsRead {
+    type Reader: Read + Send;
+    fn open_read_typed(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+}
+```
+
+This follows Tower's pattern of providing both `Service` (with associated types) and `BoxService` (with type erasure).
+
+### Conclusion
+
+Our boxing strategy mirrors Tower/Axum's production-proven approach:
+- **Zero-cost where it matters** (hot path bulk operations, middleware composition)
+- **Box where flexibility is needed** (streaming I/O, iterator filtering)
+- **Opt-in type erasure** (explicit `boxed()` method)
+
+The performance cost is negligible (<1% of I/O time), while the ergonomic and flexibility benefits are substantial.

@@ -132,6 +132,31 @@ anyfs-backend (trait + types)
 
 ---
 
+## Performance: Strategic Boxing (ADR-025)
+
+AnyFS follows Tower/Axum's approach to dynamic dispatch: **zero-cost on the hot path, box at boundaries where flexibility is needed**.
+
+| Path | Operations | Cost |
+|------|------------|------|
+| **Hot path** (zero-cost) | `read()`, `write()`, `metadata()`, `exists()` | Concrete types, no boxing |
+| **Hot path** (zero-cost) | Middleware composition: `Quota<Tracing<B>>` | Generics, monomorphized |
+| **Cold path** (boxed) | `open_read()`, `open_write()`, `read_dir()` | One `Box` allocation per call |
+| **Opt-in** | `FileStorage::boxed()` | Explicit type erasure |
+
+**Why box streams and iterators?**
+1. Middleware needs to wrap them (`QuotaWriter` counts bytes, `PathFilter` filters entries)
+2. Box allocation (~50ns) is <1% of actual I/O time
+3. Avoids type explosion: `QuotaReader<PathFilterReader<TracingReader<Cursor<...>>>>`
+
+**Why NOT box bulk operations?**
+1. `read()` and `write()` are the most common operations
+2. They return concrete types (`Vec<u8>`, `()`)
+3. Zero overhead for the typical use case
+
+See [ADR-025](./adrs.md#adr-025-strategic-boxing-tower-style) and [Zero-Cost Alternatives](./zero-cost-alternatives.md) for full analysis.
+
+---
+
 ## Trait Architecture (in `anyfs-backend`)
 
 AnyFS uses **layered traits** for maximum flexibility with minimal complexity.
