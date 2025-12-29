@@ -753,4 +753,13 @@ pub struct SqliteBackend {
 | API simplicity | Simple | Slightly more complex backends |
 | Real-world match | Poor | Good |
 
-**Conclusion:** The benefits of matching filesystem semantics and enabling concurrent access outweigh the loss of compile-time single-writer enforcement. Backends are responsible for their own thread safety.
+**Backend implementer responsibility:**
+
+Backends MUST use interior mutability (`RwLock`, `Mutex`, etc.) to ensure thread-safe concurrent access. This guarantees:
+- Memory safety (no data corruption)
+- Atomic operations (a single `write()` won't produce partial results)
+
+This does NOT guarantee:
+- Order of concurrent writes to the same path (last write wins - standard FS behavior)
+
+**Conclusion:** The benefits of matching filesystem semantics and enabling concurrent access outweigh the loss of compile-time single-writer enforcement. Backends are responsible for their own thread safety via interior mutability.

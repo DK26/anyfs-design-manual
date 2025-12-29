@@ -40,6 +40,8 @@ AnyFS uses a **layered trait architecture** for maximum flexibility with minimal
 
 ## Layer 1: Core Traits (Required)
 
+> **Thread Safety:** All traits require `Send + Sync` and use `&self` for all methods. Backend implementers MUST use interior mutability (`RwLock`, `Mutex`, etc.) to ensure thread-safe concurrent access. See ADR-023 for rationale.
+
 ### FsRead
 
 ```rust

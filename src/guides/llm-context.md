@@ -24,6 +24,8 @@ FsRead + FsWrite + FsDir  ← Core traits
 
 ## Pattern 1: Implement a Backend
 
+> **Thread Safety:** All methods use `&self`. Backends MUST use interior mutability (`RwLock`, `Mutex`) for thread-safe concurrent access.
+
 ### Minimum: Implement `Fs` (3 traits)
 
 ```rust
