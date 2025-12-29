@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -203,7 +203,7 @@
 </span>use anyfs::{MemoryBackend, FileStorage};
 
 // Simple: just ergonomics (type inferred)
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>With middleware (layer-based):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -211,13 +211,15 @@ let mut fs = FileStorage::new(MemoryBackend::new());
 </span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Type is inferred - no need to write it out
-let mut fs = FileStorage::new(
+let fs = FileStorage::new(
     SqliteBackend::open("data.db")?
-        .layer(QuotaLayer::new()
-            .max_total_size(100 * 1024 * 1024))
-        .layer(RestrictionsLayer::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
             .deny_hard_links()
-            .deny_permissions())
+            .deny_permissions()
+            .build())
 );
 <span class="boring">}</span></code></pre>
 <hr>
@@ -394,10 +396,12 @@ type DynFileStorage&lt;M = ()&gt; = FileStorage&lt;Box&lt;dyn Fs&gt;, M&gt;;
 <p>If you don’t need the wrapper, use backends directly:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, Fs};
+</span>use anyfs::{MemoryBackend, QuotaLayer, Fs};
 
-let mut backend = Quota::new(MemoryBackend::new())
-    .with_max_total_size(100 * 1024 * 1024);
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build());
 
 // Use Fs trait methods directly
 backend.write("/file.txt", b"data")?;

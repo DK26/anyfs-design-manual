@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -211,6 +211,8 @@
 <tr><td>ADR-019</td><td>DryRun for testing and debugging</td><td>Accepted</td></tr>
 <tr><td>ADR-020</td><td>Cache for read performance</td><td>Accepted</td></tr>
 <tr><td>ADR-021</td><td>Overlay for union filesystem</td><td>Accepted</td></tr>
+<tr><td>ADR-022</td><td>Builder pattern for configurable middleware</td><td>Accepted</td></tr>
+<tr><td>ADR-023</td><td>Interior mutability for all trait methods</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -261,11 +263,14 @@
 <p><strong>Example:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = Tracing::new(
-    Restrictions::new(
-        Quota::new(SqliteBackend::open("data.db")?)
-    )
-);
+</span>let backend = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="adr-005-stdfs-aligned-method-names"><a class="header" href="#adr-005-stdfs-aligned-method-names">ADR-005: <code>std::fs</code>-aligned method names</a></h2>
@@ -433,9 +438,9 @@ pub trait AsyncFs: Send + Sync {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Tracing::new(backend)
+</span>backend.layer(TracingLayer::new()
     .with_target("anyfs")
-    .with_level(tracing::Level::DEBUG)
+    .with_level(tracing::Level::DEBUG))
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="adr-013-fsext-for-extension-methods"><a class="header" href="#adr-013-fsext-for-extension-methods">ADR-013: FsExt for extension methods</a></h2>
@@ -527,10 +532,12 @@ FsError::QuotaExceeded {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow workspace access
     .deny("**/.env")           // Deny .env files anywhere
     .deny("**/secrets/**")     // Deny secrets directories
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -578,9 +585,11 @@ FsError::QuotaExceeded {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>RateLimitLayer::builder()
     .max_ops(1000)
     .per_second()
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -636,10 +645,12 @@ let ops = dry_run.operations();         // ["write /test.txt (5 bytes)"]
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Cache::new(backend)
+</span>CacheLayer::builder()
     .max_entries(1000)
     .max_entry_size(1024 * 1024)  // 1MB max per entry
     .ttl(Duration::from_secs(60))
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -695,6 +706,220 @@ let overlay = Overlay::new(base, upper);
 <li>All writes go to upper layer; base is never modified.</li>
 <li>Consider <code>opaque</code> directories (<code>.wh..wh..opq</code>) to hide entire base directories.</li>
 </ul>
+<hr>
+<h2 id="adr-022-builder-pattern-for-configurable-middleware"><a class="header" href="#adr-022-builder-pattern-for-configurable-middleware">ADR-022: Builder pattern for configurable middleware</a></h2>
+<p><strong>Decision:</strong> Middleware that requires configuration MUST use a builder pattern that prevents construction without meaningful values. <code>::new()</code> constructors are NOT allowed for middleware where a default configuration is nonsensical.</p>
+<p><strong>Problem:</strong> A constructor like <code>QuotaLayer::new()</code> raises the question: “What quota?” An unlimited quota is pointless - you wouldn’t use <code>QuotaLayer</code> at all. Similarly, <code>RestrictionsLayer::new()</code> with no restrictions, <code>PathFilterLayer::new()</code> with no rules, and <code>RateLimitLayer::new()</code> with no rate limit are all nonsensical.</p>
+<p><strong>Solution:</strong> Use builders that enforce at least one meaningful configuration:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// QuotaLayer - requires at least one limit
+let quota = QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)
+    .build();
+
+// Can also set multiple limits
+let quota = QuotaLayer::builder()
+    .max_total_size(1_000_000)
+    .max_file_size(100_000)
+    .max_node_count(1000)
+    .build();
+
+// RestrictionsLayer - requires at least one restriction
+let restrictions = RestrictionsLayer::builder()
+    .deny_symlinks()
+    .build();
+
+// PathFilterLayer - requires at least one rule
+let filter = PathFilterLayer::builder()
+    .allow("/workspace/**")
+    .deny("**/.env")
+    .build();
+
+// RateLimitLayer - requires rate limit parameters
+let rate_limit = RateLimitLayer::builder()
+    .max_ops(1000)
+    .per_second()
+    .build();
+
+// CacheLayer - requires cache configuration
+let cache = CacheLayer::builder()
+    .max_entries(1000)
+    .build();
+<span class="boring">}</span></code></pre>
+<p><strong>Middleware that MAY keep <code>::new()</code>:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Middleware</th><th>Rationale</th></tr>
+</thead>
+<tbody>
+<tr><td><code>TracingLayer</code></td><td>Default (global tracing subscriber) is meaningful</td></tr>
+<tr><td><code>ReadOnlyLayer</code></td><td>No configuration needed</td></tr>
+<tr><td><code>DryRunLayer</code></td><td>No configuration needed</td></tr>
+<tr><td><code>OverlayLayer</code></td><td>Takes two backends as required params: <code>Overlay::new(lower, upper)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Implementation:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Builder with typestate pattern for compile-time enforcement
+pub struct QuotaLayerBuilder&lt;State = Unconfigured&gt; {
+    max_total_size: Option&lt;u64&gt;,
+    max_file_size: Option&lt;u64&gt;,
+    max_node_count: Option&lt;u64&gt;,
+    _state: PhantomData&lt;State&gt;,
+}
+
+pub struct Unconfigured;
+pub struct Configured;
+
+impl QuotaLayerBuilder&lt;Unconfigured&gt; {
+    pub fn max_total_size(mut self, bytes: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        self.max_total_size = Some(bytes);
+        QuotaLayerBuilder {
+            max_total_size: self.max_total_size,
+            max_file_size: self.max_file_size,
+            max_node_count: self.max_node_count,
+            _state: PhantomData,
+        }
+    }
+
+    pub fn max_file_size(mut self, bytes: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        // Similar transition to Configured state
+    }
+
+    pub fn max_node_count(mut self, count: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        // Similar transition to Configured state
+    }
+
+    // Note: NO build() method on Unconfigured state!
+}
+
+impl QuotaLayerBuilder&lt;Configured&gt; {
+    // Additional configuration methods stay in Configured state
+    pub fn max_total_size(mut self, bytes: u64) -&gt; Self {
+        self.max_total_size = Some(bytes);
+        self
+    }
+
+    // Only Configured state has build()
+    pub fn build(self) -&gt; QuotaLayer {
+        QuotaLayer { /* ... */ }
+    }
+}
+
+impl QuotaLayer {
+    pub fn builder() -&gt; QuotaLayerBuilder&lt;Unconfigured&gt; {
+        QuotaLayerBuilder {
+            max_total_size: None,
+            max_file_size: None,
+            max_node_count: None,
+            _state: PhantomData,
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why:</strong></p>
+<ul>
+<li><strong>Compile-time safety:</strong> Invalid configurations don’t compile.</li>
+<li><strong>Self-documenting API:</strong> Users must explicitly choose configuration.</li>
+<li><strong>No meaningless defaults:</strong> Eliminates “what does this default to?” confusion.</li>
+<li><strong>IDE guidance:</strong> Autocomplete shows required methods before <code>build()</code>.</li>
+<li><strong>Familiar pattern:</strong> Rust builders are idiomatic and widely understood.</li>
+</ul>
+<p><strong>Error prevention:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This won't compile - no build() on Unconfigured
+let quota = QuotaLayer::builder().build();  // ❌ Error!
+
+// This compiles - at least one limit set
+let quota = QuotaLayer::builder()
+    .max_total_size(1_000_000)
+    .build();  // ✅ OK
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="adr-023-interior-mutability-for-all-trait-methods"><a class="header" href="#adr-023-interior-mutability-for-all-trait-methods">ADR-023: Interior mutability for all trait methods</a></h2>
+<p><strong>Decision:</strong> All <code>Fs</code> trait methods use <code>&amp;self</code>, not <code>&amp;mut self</code>. Backends manage their own synchronization internally (interior mutability).</p>
+<p><strong>Previous design:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+}
+
+pub trait FsWrite: Send {
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>New design:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+}
+
+pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why:</strong></p>
+<ol>
+<li>
+<p><strong>Filesystems are conceptually always mutable.</strong> A filesystem doesn’t become “borrowed” when you write to it - the underlying storage manages concurrency itself.</p>
+</li>
+<li>
+<p><strong>Enables concurrent access patterns.</strong> With <code>&amp;mut self</code>, you cannot have concurrent readers and writers even when the backend supports it (e.g., SQLite with WAL mode, real filesystems).</p>
+</li>
+<li>
+<p><strong>Matches real-world filesystem semantics.</strong> <code>std::fs::write()</code> takes a path, not a mutable reference to some filesystem object. Files are shared resources.</p>
+</li>
+<li>
+<p><strong>Simplifies middleware implementation.</strong> Middleware no longer needs to worry about propagating mutability - all operations use <code>&amp;self</code>.</p>
+</li>
+<li>
+<p><strong>Common pattern in Rust.</strong> Many I/O abstractions use interior mutability: <code>std::io::Write</code> for <code>File</code> (via OS handles), <code>tokio::fs</code>, database connection pools, etc.</p>
+</li>
+</ol>
+<p><strong>Implementation:</strong></p>
+<p>Backends use appropriate synchronization primitives:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MemoryBackend {
+    // Interior mutability via Mutex/RwLock
+    data: RwLock&lt;HashMap&lt;PathBuf, Vec&lt;u8&gt;&gt;&gt;,
+}
+
+impl FsWrite for MemoryBackend {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        let mut guard = self.data.write().unwrap();
+        guard.insert(path.as_ref().to_path_buf(), data.to_vec());
+        Ok(())
+    }
+}
+
+pub struct SqliteBackend {
+    // SQLite handles its own locking
+    conn: Connection,  // rusqlite::Connection is internally synchronized
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Trade-offs:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>&amp;mut self</th><th>&amp;self (interior mutability)</th></tr>
+</thead>
+<tbody>
+<tr><td>Compile-time safety</td><td>Single writer enforced</td><td>Runtime synchronization</td></tr>
+<tr><td>Concurrent access</td><td>Not possible</td><td>Backend decides</td></tr>
+<tr><td>API simplicity</td><td>Simple</td><td>Slightly more complex backends</td></tr>
+<tr><td>Real-world match</td><td>Poor</td><td>Good</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Conclusion:</strong> The benefits of matching filesystem semantics and enabling concurrent access outweigh the loss of compile-time single-writer enforcement. Backends are responsible for their own thread safety.</p>
 
                     </main>
 

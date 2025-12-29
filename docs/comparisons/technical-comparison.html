@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -246,21 +246,23 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 <p>Tower-style middleware + pluggable backends:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing, FileStorage};
+</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Compose middleware stack
-let backend = Tracing::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(SqliteBackend::open("data.db")?)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-    )
-    .allow("/workspace/**")
-    .deny("**/.env")
-);
+let backend = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .build())
+    .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <p><strong>Advantages:</strong></p>
 <ul>
@@ -320,11 +322,11 @@ let mut fs = FileStorage::new(backend);
 <h2 id="4-backend-trait"><a class="header" href="#4-backend-trait">4. Backend Trait</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait Fs: Send {
+</span>pub trait Fs: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
     fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
     // ... methods aligned with std::fs
 }
 <span class="boring">}</span></code></pre>

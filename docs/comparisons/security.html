@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -223,33 +223,38 @@
 <p>Security policies are composable middleware layers:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, RateLimitLayer, TracingLayer};
 
-let secure_backend = Tracing::new(           // Audit trail
-    RateLimit::new(                          // Throttle operations
-        PathFilter::new(                     // Sandbox paths
-            Restrictions::new(               // Block dangerous features
-                Quota::new(MemoryBackend::new())  // Limit resources
-                    .with_max_total_size(100 * 1024 * 1024)
-            )
-        )
+let secure_backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()              // Limit resources
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()       // Block dangerous features
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(PathFilterLayer::builder()         // Sandbox paths
         .allow("/workspace/**")
         .deny("**/.env")
         .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
+        .build())
+    .layer(RateLimitLayer::builder()          // Throttle operations
+        .max_ops(1000)
+        .per_second()
+        .build())
+    .layer(TracingLayer::new());              // Audit trail
 <span class="boring">}</span></code></pre>
 <h3 id="2-path-sandboxing-pathfilter"><a class="header" href="#2-path-sandboxing-pathfilter">2. Path Sandboxing (PathFilter)</a></h3>
 <p><code>PathFilter</code> middleware restricts path access using glob patterns:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow workspace access
     .deny("**/.env")           // Block .env files
     .deny("**/secrets/**")     // Block secrets directories
     .deny("**/*.key")          // Block key files
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -261,10 +266,12 @@ let secure_backend = Tracing::new(           // Audit trail
 <p>By default, all operations work. Use <code>Restrictions</code> middleware to <strong>opt-in to restrictions</strong>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Restrictions::new(backend)
+</span>RestrictionsLayer::builder()
     .deny_hard_links()         // Block hard_link() calls
     .deny_permissions()        // Block set_permissions() calls
     .deny_symlinks()           // Block symlink() calls
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Use cases:</strong></p>
 <ul>
@@ -277,12 +284,14 @@ let secure_backend = Tracing::new(           // Audit trail
 <p><code>Quota</code> middleware enforces capacity limits:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Quota::new(backend)
-    .with_max_total_size(100 * 1024 * 1024)  // 100 MB total
-    .with_max_file_size(10 * 1024 * 1024)    // 10 MB per file
-    .with_max_node_count(10_000)             // Max files/dirs
-    .with_max_dir_entries(1_000)             // Max per directory
-    .with_max_path_depth(64)                 // Max nesting
+</span>QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)  // 100 MB total
+    .max_file_size(10 * 1024 * 1024)    // 10 MB per file
+    .max_node_count(10_000)             // Max files/dirs
+    .max_dir_entries(1_000)             // Max per directory
+    .max_path_depth(64)                 // Max nesting
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -293,9 +302,11 @@ let secure_backend = Tracing::new(           // Audit trail
 <p><code>RateLimit</code> middleware throttles operations:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>RateLimitLayer::builder()
     .max_ops(1000)
     .per_second()
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -353,7 +364,7 @@ the virtual structure. There is no host filesystem to escape to.
 <p>Virtual backends always support symlinks. They also provide control over symlink following:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut backend = MemoryBackend::new();
+</span>let backend = MemoryBackend::new();
 backend.set_follow_symlinks(false);  // Don't follow symlinks during path resolution
 <span class="boring">}</span></code></pre>
 <p>When following is disabled:</p>
@@ -390,26 +401,29 @@ strict-path: /etc/passwd is NOT within /sandbox → DENIED
 <h3 id="ai-agent-sandbox"><a class="header" href="#ai-agent-sandbox">AI Agent Sandbox</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, RateLimitLayer, TracingLayer, FileStorage};
 
-let sandbox = Tracing::new(
-    RateLimit::new(
-        PathFilter::new(
-            Restrictions::new(
-                Quota::new(MemoryBackend::new())
-                    .with_max_total_size(50 * 1024 * 1024)
-                    .with_max_file_size(5 * 1024 * 1024)
-            )
-        )
+let sandbox = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(50 * 1024 * 1024)
+        .max_file_size(5 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
         .deny("**/.env")
         .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
+        .build())
+    .layer(RateLimitLayer::builder()
+        .max_ops(1000)
+        .per_second()
+        .build())
+    .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(sandbox);
+let fs = FileStorage::new(sandbox);
 // Agent code can only access /workspace, limited resources, audited
 <span class="boring">}</span></code></pre>
 <h3 id="multi-tenant-isolation"><a class="header" href="#multi-tenant-isolation">Multi-Tenant Isolation</a></h3>
@@ -419,8 +433,10 @@ let mut fs = FileStorage::new(sandbox);
 
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorage&lt;impl Fs&gt; {
     let db_path = format!("tenants/{}.db", tenant_id);
-    let backend = Quota::new(SqliteBackend::open(&amp;db_path).unwrap())
-        .with_max_total_size(quota_bytes);
+    let backend = QuotaLayer::builder()
+        .max_total_size(quota_bytes)
+        .build()
+        .layer(SqliteBackend::open(&amp;db_path).unwrap());
 
     FileStorage::new(backend)
 }
@@ -576,7 +592,7 @@ pub struct FileEncryption&lt;B&gt; {
 }
 
 impl&lt;B: Fs&gt; FsWrite for FileEncryption&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         // Encrypt content with authenticated encryption (AES-GCM)
         let nonce = generate_nonce();
         let ciphertext = aes_gcm_encrypt(&amp;self.key, &amp;nonce, data)?;
@@ -618,7 +634,7 @@ pub struct IntegrityVerified&lt;B&gt; {
 }
 
 impl&lt;B: Fs&gt; FsWrite for IntegrityVerified&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let mac = hmac_sha256(&amp;self.key, data);
         let protected = [data, mac.as_slice()].concat();
         self.inner.write(path, &amp;protected)
@@ -654,7 +670,10 @@ impl&lt;B: Fs&gt; FsRead for IntegrityVerified&lt;B&gt; {
 </tbody>
 </table>
 </div>
-<h4 id="encrypted-memory-backend"><a class="header" href="#encrypted-memory-backend">Encrypted Memory Backend</a></h4>
+<h4 id="encrypted-memory-backend-illustrative-pattern"><a class="header" href="#encrypted-memory-backend-illustrative-pattern">Encrypted Memory Backend (Illustrative Pattern)</a></h4>
+<blockquote>
+<p><strong>Note:</strong> <code>EncryptedMemoryBackend</code> is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend in v1. Users can implement this pattern using the guidance below.</p>
+</blockquote>
 <p>Keep data encrypted even in RAM - decrypt only during active use:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -691,7 +710,7 @@ impl FsRead for EncryptedMemoryBackend {
 }
 
 impl FsWrite for EncryptedMemoryBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         // Encrypt immediately - plaintext never stored
         let encrypted = self.encrypt(data)?;
 
@@ -772,7 +791,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <tbody>
 <tr><td><code>SqliteCipherBackend</code></td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
 <tr><td><code>FileEncryption&lt;B&gt;</code> middleware</td><td>Yes</td><td>No</td><td>Depends on B</td><td>Depends on B</td></tr>
-<tr><td><code>EncryptedMemoryBackend</code></td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
+<tr><td><code>EncryptedMemoryBackend</code> (illustrative)</td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
 <tr><td><code>IntegrityVerified&lt;B&gt;</code> middleware</td><td>No</td><td>No (files only)</td><td>No</td><td>Depends on B</td></tr>
 </tbody>
 </table>
@@ -785,10 +804,11 @@ mimalloc = { version = "0.1", features = ["secure"] }
 let backend = SqliteCipherBackend::open("secure.db", password)?;
 let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
-<h4 id="high-security-ram-processing"><a class="header" href="#high-security-ram-processing">High-Security RAM Processing</a></h4>
+<h4 id="high-security-ram-processing-illustrative"><a class="header" href="#high-security-ram-processing-illustrative">High-Security RAM Processing (Illustrative)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Data never plaintext at rest (RAM or disk)
+// Note: EncryptedMemoryBackend is user-implemented (see pattern above)
 let backend = EncryptedMemoryBackend::new(derive_key(password));
 // ... use fs ...
 backend.save_to_file("snapshot.enc")?;  // Persists encrypted
@@ -925,7 +945,7 @@ impl SqliteCipherBackend {
     /// Create new encrypted database with password.
     pub fn create(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
         if path.as_ref().exists() {
-            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf() });
+            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf(), operation: "create" });
         }
         Self::open(path, password)
     }

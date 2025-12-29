@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -227,25 +227,25 @@ impl FsRead for MyBackend {
 }
 
 impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!("create or overwrite file")
     }
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!("append to file")
     }
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("delete file")
     }
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("move/rename")
     }
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("copy file")
     }
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         todo!("resize file")
     }
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
         todo!("return writer")
     }
 }
@@ -254,16 +254,16 @@ impl FsDir for MyBackend {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
         todo!("return Vec&lt;DirEntry { name, inode, file_type }&gt;")
     }
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create single directory")
     }
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create directory and parents")
     }
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("remove empty directory")
     }
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("remove directory recursively")
     }
 }
@@ -273,10 +273,10 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLink for MyBackend {
-    fn symlink(&amp;mut self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn symlink(&amp;self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create symlink pointing to target")
     }
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create hard link (same inode)")
     }
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;std::path::PathBuf, FsError&gt; {
@@ -288,16 +288,16 @@ impl FsDir for MyBackend {
 }
 
 impl FsPermissions for MyBackend {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt; {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt; {
         todo!("set file permissions")
     }
 }
 
 impl FsSync for MyBackend {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt; {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt; {
         todo!("flush all writes to storage")
     }
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("flush writes for one file")
     }
 }
@@ -401,10 +401,10 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
-    fn write(&amp;mut self, _: impl AsRef&lt;Path&gt;, _: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, _: impl AsRef&lt;Path&gt;, _: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "write" })
     }
-    fn remove_file(&amp;mut self, _: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, _: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
     // ... all write methods return ReadOnly error
@@ -421,7 +421,7 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 }
 
 impl&lt;B: FsWrite&gt; FsWrite for Encrypted&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let encrypted = self.encrypt(data);
         self.inner.write(path, &amp;encrypted)
     }
@@ -500,19 +500,16 @@ FsError::Backend(String)                   // Backend-specific error
 <h3 id="create-a-backend-stack"><a class="header" href="#create-a-backend-stack">Create a backend stack</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Tracing, Fs};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, TracingLayer};
 
-let backend = MemoryBackend::new();
-let limited = Quota::new(backend).with_max_total_size(100 * 1024 * 1024);
-let filtered = PathFilter::new(limited).allow("/workspace/**").deny("**/.env");
-let traced = Tracing::new(filtered);
-<span class="boring">}</span></code></pre>
-<h3 id="using-layer-syntax"><a class="header" href="#using-layer-syntax">Using Layer syntax</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let backend = MemoryBackend::new()
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(PathFilterLayer::new().allow("/workspace/**"))
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <h3 id="with-filestorage-wrapper"><a class="header" href="#with-filestorage-wrapper">With FileStorage wrapper</a></h3>
@@ -520,7 +517,7 @@ let traced = Tracing::new(filtered);
 </span><span class="boring">fn main() {
 </span>use anyfs::FileStorage;
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 fs.write("/file.txt", b"hello")?;
 let data = fs.read("/file.txt")?;
 <span class="boring">}</span></code></pre>

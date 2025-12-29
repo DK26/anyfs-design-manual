@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -243,11 +243,11 @@ let entry = self.entries.get(&amp;path)
 </span><span class="boring">fn main() {
 </span>#[derive(Debug, thiserror::Error)]
 pub enum FsError {
-    #[error("not found: {path}")]
-    NotFound { path: PathBuf },
+    #[error("{operation}: not found: {path}")]
+    NotFound { path: PathBuf, operation: &amp;'static str },
 
-    #[error("already exists: {path}")]
-    AlreadyExists { path: PathBuf },
+    #[error("{operation}: already exists: {path}")]
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
 
     #[error("quota exceeded: limit {limit}, attempted {attempted}")]
     QuotaExceeded { limit: u64, attempted: u64 },
@@ -535,7 +535,7 @@ fn no_panic_on_missing_file() {
 
 #[test]
 fn no_panic_on_invalid_operation() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
     // Try to read directory on a file
     let result = backend.read_dir("/file.txt");
@@ -548,7 +548,7 @@ fn no_panic_on_invalid_operation() {
 </span>#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 fn memory_backend_works_in_wasm() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.write("/test.txt", b"hello").unwrap();
     // Should not panic
 }
@@ -787,12 +787,15 @@ impl&lt;B: Fs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <p>Expose any <code>Fs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
 use anyfs_s3_server::S3Server;
 
 // Your storage backend with quotas and audit logging
-let backend = Quota::new(Tracing::new(SqliteBackend::open("storage.db")?))
-    .with_max_total_size(100 * 1024 * 1024 * 1024);  // 100GB
+let backend = SqliteBackend::open("storage.db")?
+    .layer(TracingLayer::new())
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024 * 1024)  // 100GB
+        .build());
 
 S3Server::new(backend)
     .with_auth(auth_provider)       // Your auth implementation
@@ -824,7 +827,7 @@ let remote = RemoteBackend::connect("https://api.yourservice.com")
     .await?;
 
 // Use like any other backend
-let mut fs = FileStorage::new(remote);
+let fs = FileStorage::new(remote);
 fs.write("/documents/report.pdf", data)?;
 <span class="boring">}</span></code></pre>
 <p><strong>Combined with FUSE for transparent mount:</strong></p>
@@ -861,27 +864,28 @@ GrpcServer::new(backend)
 </span>use anyfs_grpc::GrpcBackend;
 
 let backend = GrpcBackend::connect("http://[::1]:50051").await?;
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <h4 id="multi-tenant-cloud-storage-example"><a class="header" href="#multi-tenant-cloud-storage-example">Multi-Tenant Cloud Storage Example</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer};
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; impl Fs {
     let db_path = format!("/data/tenants/{}.db", tenant_id);
 
-    Quota::new(
-        PathFilter::new(
-            Tracing::new(SqliteBackend::open(&amp;db_path).unwrap())
-                .with_target(&amp;format!("tenant.{}", tenant_id))
-        )
-        .allow("/**")
-        .deny("../**")  // No path traversal
-    )
-    .with_max_total_size(quota_bytes)
+    SqliteBackend::open(&amp;db_path).unwrap()
+        .layer(TracingLayer::new()
+            .with_target(&amp;format!("tenant.{}", tenant_id)))
+        .layer(PathFilterLayer::builder()
+            .allow("/**")
+            .deny("../**")  // No path traversal
+            .build())
+        .layer(QuotaLayer::builder()
+            .max_total_size(quota_bytes)
+            .build())
 }
 
 // Tenant-aware S3 server
@@ -918,18 +922,19 @@ S3Server::new_multi_tenant(|request| {
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
 fn get_user_storage(username: &amp;str) -&gt; impl FsFull {
     let db_path = format!("/data/users/{}.db", username);
 
-    Quota::new(
-        Tracing::new(SqliteBackend::open(&amp;db_path).unwrap())
-            .with_target(&amp;format!("user.{}", username))
-    )
-    .with_max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per user
+    SqliteBackend::open(&amp;db_path).unwrap()
+        .layer(TracingLayer::new()
+            .with_target(&amp;format!("user.{}", username)))
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per user
+            .build())
 }
 
 SftpServer::new(get_user_storage)
@@ -968,8 +973,10 @@ use anyfs_ssh_shell::SshShellServer;
 // On user login, mount their isolated storage as $HOME
 fn on_user_login(username: &amp;str) -&gt; Result&lt;(), Error&gt; {
     let db_path = format!("/data/users/{}.db", username);
-    let backend = Quota::new(SqliteBackend::open(&amp;db_path)?)
-        .with_max_total_size(10 * 1024 * 1024 * 1024);
+    let backend = SqliteBackend::open(&amp;db_path)?
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024 * 1024)
+            .build());
 
     let mount_point = format!("/home/{}", username);
     FuseMount::mount(backend, &amp;mount_point)?;

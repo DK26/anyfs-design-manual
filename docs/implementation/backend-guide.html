@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -202,6 +202,7 @@ FsRead + FsWrite + FsDir (core)
 <li>Backends handle <strong>storage only</strong> - just store/retrieve bytes at given paths</li>
 <li>Policy (limits, feature gates) is handled by middleware, not backends</li>
 <li>Implement only the traits your backend supports</li>
+<li><strong>Backends must be thread-safe</strong> - all trait methods use <code>&amp;self</code>, so backends must use interior mutability (e.g., <code>RwLock</code>, <code>Mutex</code>) for synchronization</li>
 </ul>
 <hr>
 <h2 id="dependency"><a class="header" href="#dependency">Dependency</a></h2>
@@ -268,31 +269,31 @@ impl FsRead for MyBackend {
 
 // Implement FsWrite
 impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
         todo!()
     }
 }
@@ -303,19 +304,19 @@ impl FsDir for MyBackend {
         todo!()
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 }
@@ -373,13 +374,13 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Note on truncate:</strong></p>
@@ -393,10 +394,10 @@ impl FsDir for MyBackend {
 </span><span class="boring">fn main() {
 </span>impl FsDir for MyBackend {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Congratulations!</strong> After implementing <code>FsRead</code>, <code>FsWrite</code>, and <code>FsDir</code>, your backend implements <code>Fs</code> automatically (blanket impl). This covers 90% of use cases.</p>
@@ -407,8 +408,8 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLink for MyBackend {
-    fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn symlink(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
@@ -421,15 +422,15 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsPermissions for MyBackend {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fssync---durability"><a class="header" href="#fssync---durability"><code>FsSync</code> - Durability</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsSync for MyBackend {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <ul>
@@ -505,7 +506,7 @@ impl FsInode for MemoryBackend {
 }
 
 impl FsLink for MemoryBackend {
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let inode = self.path_to_inode(&amp;original)?;
         self.paths.insert(link.as_ref().to_path_buf(), inode);
         self.nodes.get_mut(&amp;inode).unwrap().nlink += 1;
@@ -575,19 +576,19 @@ impl FsLink for MemoryBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsHandles for MyBackend {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fslock---file-locking"><a class="header" href="#fslock---file-locking"><code>FsLock</code> - File Locking</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLock for MyBackend {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsxattr---extended-attributes"><a class="header" href="#fsxattr---extended-attributes"><code>FsXattr</code> - Extended Attributes</a></h3>
@@ -595,8 +596,8 @@ impl FsLink for MemoryBackend {
 </span><span class="boring">fn main() {
 </span>impl FsXattr for MyBackend {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -610,12 +611,12 @@ impl FsLink for MemoryBackend {
 <tr><th>Situation</th><th>Error</th></tr>
 </thead>
 <tbody>
-<tr><td>Path doesn’t exist</td><td><code>FsError::NotFound(path)</code></td></tr>
-<tr><td>Path already exists</td><td><code>FsError::AlreadyExists(path)</code></td></tr>
-<tr><td>Expected file, got dir</td><td><code>FsError::NotAFile(path)</code></td></tr>
-<tr><td>Expected dir, got file</td><td><code>FsError::NotADirectory(path)</code></td></tr>
-<tr><td>Remove non-empty dir</td><td><code>FsError::DirectoryNotEmpty(path)</code></td></tr>
-<tr><td>Internal error</td><td><code>FsError::Backend(message)</code></td></tr>
+<tr><td>Path doesn’t exist</td><td><code>FsError::NotFound { path, operation }</code></td></tr>
+<tr><td>Path already exists</td><td><code>FsError::AlreadyExists { path, operation }</code></td></tr>
+<tr><td>Expected file, got dir</td><td><code>FsError::NotAFile { path }</code></td></tr>
+<tr><td>Expected dir, got file</td><td><code>FsError::NotADirectory { path }</code></td></tr>
+<tr><td>Remove non-empty dir</td><td><code>FsError::DirectoryNotEmpty { path }</code></td></tr>
+<tr><td>Internal error</td><td><code>FsError::Backend { message }</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -651,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut backend = create_backend();
+        let backend = create_backend();
         backend.write("/test.txt", b"hello").unwrap();
         let content = backend.read("/test.txt").unwrap();
         assert_eq!(content, b"hello");
@@ -659,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_create_dir() {
-        let mut backend = create_backend();
+        let backend = create_backend();
         backend.create_dir("/foo").unwrap();
         assert!(backend.exists("/foo").unwrap());
     }
@@ -707,7 +708,7 @@ impl&lt;W: Write + Send&gt; Write for CountingWriter&lt;W&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: Fs&gt; Fs for Quota&lt;B&gt; {
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
         // Check if we're at quota before opening
         if self.usage.total_bytes &gt;= self.limits.max_total_size {
             return Err(FsError::QuotaExceeded { ... });
@@ -799,7 +800,7 @@ impl&lt;B: FsRead&gt; FsRead for Counter&lt;B&gt; {
 }
 
 impl&lt;B: FsWrite&gt; FsWrite for Counter&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         self.count.fetch_add(1, Ordering::Relaxed);  // Count it
         self.inner.write(path, data)                  // Delegate
     }
@@ -883,30 +884,30 @@ impl&lt;B: FsDir&gt; FsDir for ReadOnly&lt;B&gt; {
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "create_dir" })
     }
 
-    fn create_dir_all(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "create_dir_all" })
     }
 
-    fn remove_dir(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_dir" })
     }
 
-    fn remove_dir_all(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_dir_all" })
     }
 }
 
 // FsWrite: block all operations
 impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
-    fn write(&amp;mut self, _path: impl AsRef&lt;Path&gt;, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, _path: impl AsRef&lt;Path&gt;, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "write" })
     }
 
-    fn remove_file(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
 
@@ -916,7 +917,7 @@ impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut backend = ReadOnly::new(MemoryBackend::new());
+</span>let backend = ReadOnly::new(MemoryBackend::new());
 
 backend.read("/file.txt");       // OK (if file exists)
 backend.write("/file.txt", b""); // Error: ReadOnly
@@ -1010,7 +1011,7 @@ impl&lt;B: FsRead&gt; FsRead for Encrypted&lt;B&gt; {
 
 // FsWrite: encrypt on write
 impl&lt;B: FsWrite&gt; FsWrite for Encrypted&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let encrypted = self.encrypt(data);
         self.inner.write(path, &amp;encrypted)
     }
@@ -1024,7 +1025,7 @@ impl&lt;B: FsDir&gt; FsDir for Encrypted&lt;B&gt; {
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         self.inner.create_dir(path)
     }
 
@@ -1121,8 +1122,29 @@ fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, 
 <li>Trying to list a file as a directory</li>
 <li>Concurrent access conflicts</li>
 </ul>
-<h3 id="2-thread-safety"><a class="header" href="#2-thread-safety">2. Thread Safety</a></h3>
-<p>Backends must be safe for concurrent access. Use appropriate synchronization:</p>
+<h3 id="2-thread-safety-required"><a class="header" href="#2-thread-safety-required">2. Thread Safety (Required)</a></h3>
+<p><strong>All trait methods use <code>&amp;self</code>, not <code>&amp;mut self</code>.</strong> This means backends MUST use interior mutability for thread-safe concurrent access.</p>
+<p><strong>Why <code>&amp;self</code>?</strong></p>
+<ul>
+<li>Enables concurrent access patterns (multiple readers, concurrent operations)</li>
+<li>Matches real filesystem semantics (concurrent access is normal)</li>
+<li>More flexible API (can share references without exclusive ownership)</li>
+</ul>
+<p><strong>Backend implementer responsibility:</strong></p>
+<ul>
+<li>Use <code>RwLock</code>, <code>Mutex</code>, or similar for internal state</li>
+<li>Ensure operations are atomic (a single <code>write()</code> call shouldn’t produce partial results)</li>
+<li>Handle lock poisoning gracefully</li>
+</ul>
+<p><strong>What the synchronization guarantees:</strong></p>
+<ul>
+<li>Memory safety (no data corruption)</li>
+<li>Atomic operations (writes don’t interleave)</li>
+</ul>
+<p><strong>What it does NOT guarantee:</strong></p>
+<ul>
+<li>Order of concurrent writes to the same path (last write wins - standard FS behavior)</li>
+</ul>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use std::sync::{Arc, RwLock};
@@ -1133,14 +1155,16 @@ pub struct MemoryBackend {
     entries: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, Entry&gt;&gt;&gt;,
 }
 
-impl Fs for MemoryBackend {
+impl FsRead for MemoryBackend {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
         let entries = self.entries.read()
             .map_err(|_| FsError::Backend("lock poisoned".into()))?;
         // ...
     }
+}
 
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+impl FsWrite for MemoryBackend {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let mut entries = self.entries.write()
             .map_err(|_| FsError::Backend("lock poisoned".into()))?;
         // ...
@@ -1260,7 +1284,7 @@ fn test_read_nonexistent_returns_error() {
 
 #[test]
 fn test_read_dir_on_file_returns_error() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
     assert!(matches!(
         backend.read_dir("/file.txt"),
@@ -1316,7 +1340,7 @@ fn test_concurrent_create_dir_all() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_path_with_dotdot() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.create_dir_all("/foo/bar").unwrap();
     backend.write("/foo/bar/test.txt", b"data").unwrap();
 
@@ -1367,7 +1391,7 @@ fs = snapshot;
 <h3 id="usage-1"><a class="header" href="#usage-1">Usage</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut fs = MemoryBackend::new();
+</span>let fs = MemoryBackend::new();
 fs.write("/data.txt", b"important")?;
 
 // Snapshot = clone

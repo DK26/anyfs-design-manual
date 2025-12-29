@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -376,11 +376,11 @@ let entry = self.entries.get(&amp;path)
 </span><span class="boring">fn main() {
 </span>#[derive(Debug, thiserror::Error)]
 pub enum FsError {
-    #[error("not found: {path}")]
-    NotFound { path: PathBuf },
+    #[error("{operation}: not found: {path}")]
+    NotFound { path: PathBuf, operation: &amp;'static str },
 
-    #[error("already exists: {path}")]
-    AlreadyExists { path: PathBuf },
+    #[error("{operation}: already exists: {path}")]
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
 
     #[error("quota exceeded: limit {limit}, attempted {attempted}")]
     QuotaExceeded { limit: u64, attempted: u64 },

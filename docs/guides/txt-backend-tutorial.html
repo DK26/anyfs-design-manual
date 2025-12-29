@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -509,7 +509,7 @@ impl FsRead for TxtBackend {
 </span>use anyfs_backend::FsWrite;
 
 impl FsWrite for TxtBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Ensure parent directory exists
@@ -544,7 +544,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -563,7 +563,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -582,7 +582,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
 
@@ -600,7 +600,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
 
@@ -627,7 +627,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -646,7 +646,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
         // For simplicity, we buffer writes and apply on drop
         // A real implementation would be more sophisticated
         let path = path.as_ref().to_path_buf();
@@ -744,7 +744,7 @@ impl FsDir for TxtBackend {
         Ok(children)
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Check parent exists
@@ -768,7 +768,7 @@ impl FsDir for TxtBackend {
 
         // Check if already exists
         if entries.contains_key(&amp;path) {
-            return Err(FsError::AlreadyExists { path });
+            return Err(FsError::AlreadyExists { path, operation: "create_dir" });
         }
 
         entries.insert(path.clone(), TxtEntry::new_dir(path));
@@ -779,7 +779,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Build list of directories to create
@@ -817,7 +817,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Can't remove root
@@ -857,7 +857,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Can't remove root
@@ -898,22 +898,21 @@ impl FsDir for TxtBackend {
 <hr>
 <h2 id="step-6-putting-it-all-together"><a class="header" href="#step-6-putting-it-all-together">Step 6: Putting It All Together</a></h2>
 <p>Now you have a complete <code>Fs</code> implementation! Let’s use it:</p>
-<pre class="playground"><code class="language-rust">use anyfs::{FileStorage, Quota, Tracing};
+<pre class="playground"><code class="language-rust">use anyfs::{FileStorage, QuotaLayer, TracingLayer};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Create our glorious TXT filesystem
-    let backend = TxtBackend::open("my_filesystem.txt")?;
-
-    // Wrap it with middleware to prevent the file from exploding
-    let backend = Quota::new(backend)
-        .with_max_total_size(10 * 1024 * 1024)  // 10 MB max
-        .with_max_file_size(1 * 1024 * 1024);   // 1 MB per file
-
-    // Add tracing because why not
-    let backend = Tracing::new(backend);
+    let backend = TxtBackend::open("my_filesystem.txt")?
+        // Wrap it with middleware to prevent the file from exploding
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024)  // 10 MB max
+            .max_file_size(1 * 1024 * 1024)    // 1 MB per file
+            .build())
+        // Add tracing because why not
+        .layer(TracingLayer::new());
 
     // Create the filesystem wrapper
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     // Use it like any other filesystem!
     fs.create_dir_all("/projects/secret")?;

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b60f0e7e.js"></script>
@@ -225,13 +225,15 @@
 
 // Layer-based composition
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new()
-        .max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
         .deny_hard_links()
-        .deny_permissions());
+        .deny_permissions()
+        .build());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 
 fs.create_dir_all("/data")?;
 fs.write("/data/file.txt", b"hello")?;
@@ -348,13 +350,15 @@ fs.write("/data/file.txt", b"hello")?;
 
 // Layer-based composition
 let backend = SqliteBackend::open("tenant.db")?
-    .layer(QuotaLayer::new()
-        .max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
         .deny_hard_links()
-        .deny_permissions());
+        .deny_permissions()
+        .build());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 
 fs.create_dir_all("/documents")?;
 fs.write("/documents/hello.txt", b"Hello!")?;
@@ -395,6 +399,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
     backends/
       memory.rs             # MemoryBackend [feature: memory, default]
       sqlite.rs             # SqliteBackend [feature: sqlite]
+      sqlite_cipher.rs      # SqliteCipherBackend [feature: sqlite-cipher]
       stdfs.rs              # StdFsBackend [feature: stdfs]
       vrootfs.rs            # VRootFsBackend [feature: vrootfs]
     middleware/
@@ -431,6 +436,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>sqlite</code> — SQLite-backed persistent storage</li>
+<li><code>sqlite-cipher</code> — Encrypted SQLite via SQLCipher (AES-256, mutually exclusive with <code>sqlite</code>)</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment (uses <code>strict-path</code>)</li>
 </ul>
@@ -469,7 +475,7 @@ anyfs = { version = "0.1", features = ["sqlite", "stdfs", "vrootfs"] }
 <pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("/hello.txt", b"Hello, AnyFS!")?;
     let content = fs.read("/hello.txt")?;
@@ -481,11 +487,13 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 <pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, Quota, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let backend = Quota::new(SqliteBackend::open_or_create("data.db")?)
-        .with_max_total_size(100 * 1024 * 1024)  // 100 MB
-        .with_max_file_size(10 * 1024 * 1024);   // 10 MB per file
+    let backend = QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)  // 100 MB
+        .max_file_size(10 * 1024 * 1024)    // 10 MB per file
+        .build()
+        .layer(SqliteBackend::open_or_create("data.db")?);
 
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     fs.create_dir_all("/documents")?;
     fs.write("/documents/notes.txt", b"Meeting notes")?;
@@ -497,11 +505,13 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Block specific operations for untrusted code
-    let backend = Restrictions::new(MemoryBackend::new())
+    let backend = RestrictionsLayer::builder()
         .deny_hard_links()    // Block hard_link() calls
-        .deny_permissions();  // Block set_permissions() calls
+        .deny_permissions()   // Block set_permissions() calls
+        .build()
+        .layer(MemoryBackend::new());
 
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     // Symlinks work (not blocked)
     fs.write("/original.txt", b"content")?;
@@ -514,15 +524,17 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let backend = SqliteBackend::open_or_create("data.db")?
-        .layer(QuotaLayer::new()
+        .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
-            .max_file_size(10 * 1024 * 1024))
-        .layer(RestrictionsLayer::new()
+            .max_file_size(10 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
             .deny_hard_links()
-            .deny_permissions())
+            .deny_permissions()
+            .build())
         .layer(TracingLayer::new());
 
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     fs.create_dir_all("/data")?;
     fs.write("/data/file.txt", b"hello")?;
@@ -582,12 +594,14 @@ fs.remove_dir_all("/old-folder")?;
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, Quota};
 
-let backend = Quota::new(MemoryBackend::new())
-    .with_max_total_size(500 * 1024 * 1024)  // 500 MB total
-    .with_max_file_size(50 * 1024 * 1024)    // 50 MB per file
-    .with_max_node_count(100_000)             // 100K files/dirs
-    .with_max_dir_entries(5_000)              // 5K per directory
-    .with_max_path_depth(32);                 // Max nesting
+let backend = QuotaLayer::builder()
+    .max_total_size(500 * 1024 * 1024)   // 500 MB total
+    .max_file_size(50 * 1024 * 1024)     // 50 MB per file
+    .max_node_count(100_000)             // 100K files/dirs
+    .max_dir_entries(5_000)              // 5K per directory
+    .max_path_depth(32)                  // Max nesting
+    .build()
+    .layer(MemoryBackend::new());
 
 // Check usage
 let usage = backend.usage();
@@ -605,20 +619,28 @@ if !remaining.can_write {
 </span>use anyfs::{MemoryBackend, Restrictions};
 
 // By default, all operations work. Use deny_*() to block specific ones.
-let backend = Restrictions::new(MemoryBackend::new())
+let backend = RestrictionsLayer::builder()
     .deny_symlinks()      // Block symlink() calls
     .deny_hard_links()    // Block hard_link() calls
-    .deny_permissions();  // Block set_permissions() calls
+    .deny_permissions()   // Block set_permissions() calls
+    .build()
+    .layer(MemoryBackend::new());
 
 // Blocked operations return FsError::FeatureNotEnabled
 <span class="boring">}</span></code></pre>
 <h3 id="tracing--instrumentation"><a class="header" href="#tracing--instrumentation">Tracing — Instrumentation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Tracing};
+</span>use anyfs::{MemoryBackend, TracingLayer};
 
-let backend = Tracing::new(MemoryBackend::new())
-    .with_logger(MyLogger::new());
+// TracingLayer uses the global tracing subscriber by default
+let backend = MemoryBackend::new().layer(TracingLayer::new());
+
+// Or configure with custom settings
+let backend = MemoryBackend::new()
+    .layer(TracingLayer::new()
+        .with_target("myapp::fs")
+        .with_level(tracing::Level::DEBUG));
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
@@ -629,10 +651,10 @@ let backend = Tracing::new(MemoryBackend::new())
 match fs.write("/file.txt", &amp;large_data) {
     Ok(()) =&gt; println!("Written"),
 
-    Err(FsError::NotFound(p)) =&gt; println!("Not found: {}", p),
-    Err(FsError::AlreadyExists(p)) =&gt; println!("Exists: {}", p),
-    Err(FsError::QuotaExceeded) =&gt; println!("Quota exceeded"),
-    Err(FsError::FeatureNotEnabled(f)) =&gt; println!("Feature disabled: {}", f),
+    Err(FsError::NotFound { path, .. }) =&gt; println!("Not found: {}", path.display()),
+    Err(FsError::AlreadyExists { path, .. }) =&gt; println!("Exists: {}", path.display()),
+    Err(FsError::QuotaExceeded { .. }) =&gt; println!("Quota exceeded"),
+    Err(FsError::FeatureNotEnabled { feature }) =&gt; println!("Feature disabled: {}", feature),
 
     Err(e) =&gt; println!("Error: {}", e),
 }
@@ -645,7 +667,7 @@ match fs.write("/file.txt", &amp;large_data) {
 
 #[test]
 fn test_write_and_read() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("/test.txt", b"test data").unwrap();
     let content = fs.read("/test.txt").unwrap();
@@ -660,9 +682,11 @@ fn test_write_and_read() {
 
 #[test]
 fn test_quota_exceeded() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_total_size(1024);  // 1 KB
-    let mut fs = FileStorage::new(backend);
+    let backend = QuotaLayer::builder()
+        .max_total_size(1024)  // 1 KB
+        .build()
+        .layer(MemoryBackend::new());
+    let fs = FileStorage::new(backend);
 
     let big_data = vec![0u8; 2048];  // 2 KB
     let result = fs.write("/big.bin", &amp;big_data);
@@ -695,18 +719,21 @@ let fs = FileStorage::new(MemoryBackend::new());
 // With limits (layer-based)
 let fs = FileStorage::new(
     MemoryBackend::new()
-        .layer(QuotaLayer::new()
-            .max_total_size(100 * 1024 * 1024))
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .build())
 );
 
 // Sandboxed (layer-based)
 let fs = FileStorage::new(
     SqliteBackend::open("data.db")?
-        .layer(QuotaLayer::new()
-            .max_total_size(100 * 1024 * 1024))
-        .layer(RestrictionsLayer::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
             .deny_hard_links()
-            .deny_permissions())
+            .deny_permissions()
+            .build())
 );
 <span class="boring">}</span></code></pre>
 <h3 id="3-handle-errors-gracefully"><a class="header" href="#3-handle-errors-gracefully">3. Handle Errors Gracefully</a></h3>
@@ -745,8 +772,10 @@ use anyfs_fuse::FuseMount;
 
 // Mount the drive
 let backend = SqliteBackend::open("tenant.db")?
-    .layer(TracingLayer::new())  // Logs operations to DB
-    .layer(QuotaLayer::new().max_total_size(1_000_000_000));
+    .layer(TracingLayer::new())  // Logs operations to tracing subscriber
+    .layer(QuotaLayer::builder()
+        .max_total_size(1_000_000_000)
+        .build());
 
 let mount = FuseMount::mount(backend, "/mnt/workspace")?;
 <span class="boring">}</span></code></pre>
@@ -808,7 +837,9 @@ use anyfs_fuse::FuseMount;
 // 4GB RAM drive
 let mount = FuseMount::mount(
     MemoryBackend::new()
-        .layer(QuotaLayer::new().max_total_size(4 * 1024 * 1024 * 1024)),
+        .layer(QuotaLayer::builder()
+            .max_total_size(4 * 1024 * 1024 * 1024)
+            .build()),
     "/mnt/ramdisk"
 )?;
 
@@ -823,16 +854,19 @@ use anyfs_fuse::FuseMount;
 
 let mount = FuseMount::mount(
     MemoryBackend::new()
-        .layer(PathFilterLayer::new()
+        .layer(PathFilterLayer::builder()
             .allow("/workspace/**")
             .deny("**/..*")           // No hidden files
-            .deny("**/.*"))           // No dotfiles
-        .layer(RestrictionsLayer::new()
+            .deny("**/.*")            // No dotfiles
+            .build())
+        .layer(RestrictionsLayer::builder()
             .deny_symlinks()          // Prevent symlink attacks
-            .deny_hard_links())
-        .layer(QuotaLayer::new()
+            .deny_hard_links()
+            .build())
+        .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
-            .max_file_size(10 * 1024 * 1024))
+            .max_file_size(10 * 1024 * 1024)
+            .build())
         .layer(TracingLayer::new()),  // Full audit trail
     "/mnt/agent"
 )?;
@@ -862,36 +896,31 @@ anyfs = "0.1"
 <h2 id="creating-a-backend-stack"><a class="header" href="#creating-a-backend-stack">Creating a Backend Stack</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
+</span>use anyfs::{MemoryBackend, SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Simple
 let fs = FileStorage::new(MemoryBackend::new());
 
 // With limits
 let fs = FileStorage::new(
-    Quota::new(SqliteBackend::open("data.db")?)
-        .with_max_total_size(100 * 1024 * 1024)
-        .with_max_file_size(10 * 1024 * 1024)
+    SqliteBackend::open("data.db")?
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .max_file_size(10 * 1024 * 1024)
+            .build())
 );
 
-// Full stack (manual composition)
-let fs = FileStorage::new(
-    Tracing::new(
-        Restrictions::new(
-            Quota::new(SqliteBackend::open("data.db")?)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-        .deny_permissions()  // Block set_permissions() calls
-    )
-);
-
-// Layer-based composition
-use anyfs::{QuotaLayer, RestrictionsLayer, TracingLayer};
-
+// Full stack (fluent composition)
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new().deny_permissions())
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_permissions()
+        .build())
     .layer(TracingLayer::new());
+
+let fs = FileStorage::new(backend);
 
 // BackendStack builder (fluent API)
 use anyfs::BackendStack;
@@ -906,12 +935,15 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 <h2 id="quota-methods"><a class="header" href="#quota-methods">Quota Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Quota::new(backend)
-    .with_max_total_size(bytes)      // Total storage limit
-    .with_max_file_size(bytes)       // Per-file limit
-    .with_max_node_count(count)      // Max files/dirs
-    .with_max_dir_entries(count)     // Max entries per dir
-    .with_max_path_depth(depth)      // Max nesting
+</span>// Builder pattern (required - at least one limit must be set)
+QuotaLayer::builder()
+    .max_total_size(bytes)      // Total storage limit
+    .max_file_size(bytes)       // Per-file limit
+    .max_node_count(count)      // Max files/dirs
+    .max_dir_entries(count)     // Max entries per dir
+    .max_path_depth(depth)      // Max nesting
+    .build()
+    .layer(backend)
 
 // Query
 backend.usage()        // -&gt; Usage { total_size, file_count, ... }
@@ -922,28 +954,38 @@ backend.remaining()    // -&gt; Remaining { bytes, can_write, ... }
 <h2 id="restrictions-methods"><a class="header" href="#restrictions-methods">Restrictions Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// By default, all operations work. Use deny_*() to block specific ones.
-Restrictions::new(backend)
+</span>// Builder pattern (required - at least one restriction must be set)
+// By default, all operations work. Use deny_*() to block specific ones.
+RestrictionsLayer::builder()
     .deny_symlinks()       // Block symlink() calls
     .deny_hard_links()     // Block hard_link() calls
     .deny_permissions()    // Block set_permissions() calls
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="tracing-methods"><a class="header" href="#tracing-methods">Tracing Methods</a></h2>
+<h2 id="tracinglayer-methods"><a class="header" href="#tracinglayer-methods">TracingLayer Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Tracing::new(backend)
-    .with_target("anyfs")             // tracing target
+</span>// TracingLayer configuration (applied via .layer())
+TracingLayer::new()
+    .with_target("anyfs")              // tracing target
     .with_level(tracing::Level::DEBUG)
+
+// Usage
+let backend = inner.layer(TracingLayer::new().with_target("anyfs"));
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="pathfilter-methods"><a class="header" href="#pathfilter-methods">PathFilter Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>// Builder pattern (required - at least one rule must be set)
+PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow glob pattern
     .deny("**/.env")           // Deny glob pattern
     .deny("**/secrets/**")
+    .build()
+    .layer(backend)
 
 // Rules evaluated in order; first match wins
 // No match = denied (deny by default)
@@ -961,11 +1003,14 @@ Restrictions::new(backend)
 <h2 id="ratelimit-methods"><a class="header" href="#ratelimit-methods">RateLimit Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>// Builder pattern (required - must set ops and window)
+RateLimitLayer::builder()
     .max_ops(1000)           // Operation limit
     .per_second()            // Window: 1 second
     // or
     .per_minute()            // Window: 60 seconds
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="dryrun-methods"><a class="header" href="#dryrun-methods">DryRun Methods</a></h2>
@@ -985,10 +1030,13 @@ dry_run.clear();                       // Clear the log
 <h2 id="cache-methods"><a class="header" href="#cache-methods">Cache Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Cache::new(backend)
-    .max_entries(1000)                     // LRU cache size
-    .max_entry_size(1024 * 1024)          // 1MB max per entry
-    .ttl(std::time::Duration::from_secs(60))  // Expiration
+</span>// Builder pattern (required - at least max_entries must be set)
+CacheLayer::builder()
+    .max_entries(1000)                          // LRU cache size
+    .max_entry_size(1024 * 1024)               // 1MB max per entry
+    .ttl(std::time::Duration::from_secs(60))   // Expiration
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="overlay-methods"><a class="header" href="#overlay-methods">Overlay Methods</a></h2>
@@ -1505,22 +1553,24 @@ backend.change_password("new-password")?;
 <p><strong>Example: Secure AI Agent Sandbox</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::FileStorage;
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, FileStorage};
 
 struct AiSandbox;  // Marker type
 
 // Application composes secure defaults (marker in type annotation)
 let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(MemoryBackend::new())
-                .with_max_total_size(50 * 1024 * 1024)
-        )
-        .deny_hard_links()
-        .deny_permissions()
-    )
-    .allow("/workspace/**")
-    .deny("**/.env")
+    MemoryBackend::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(50 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
+            .deny_hard_links()
+            .deny_permissions()
+            .build())
+        .layer(PathFilterLayer::builder()
+            .allow("/workspace/**")
+            .deny("**/.env")
+            .build())
 );
 <span class="boring">}</span></code></pre>
 <p>The backend is permissive. The application adds restrictions appropriate for its use case.</p>
@@ -1578,7 +1628,7 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
 <h3 id="fsread---read-operations"><a class="header" href="#fsread---read-operations">FsRead - Read Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsRead: Send {
+</span>pub trait FsRead: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
     fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt;;
     fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
@@ -1590,48 +1640,51 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
 <h3 id="fswrite---write-operations"><a class="header" href="#fswrite---write-operations">FsWrite - Write Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsWrite: Send {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+</span>pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> All methods use <code>&amp;self</code> (interior mutability). Backends manage their own synchronization. See ADR-023.</p>
+</blockquote>
 <h3 id="fsdir---directory-operations"><a class="header" href="#fsdir---directory-operations">FsDir - Directory Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsDir: Send {
+</span>pub trait FsDir: Send + Sync {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="extended-traits-layer-2---optional"><a class="header" href="#extended-traits-layer-2---optional">Extended Traits (Layer 2 - Optional)</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLink: Send {
-    fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLink: Send + Sync {
+    fn symlink(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
 
-pub trait FsPermissions: Send {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsPermissions: Send + Sync {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsSync: Send {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsSync: Send + Sync {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsStats: Send {
+pub trait FsStats: Send + Sync {
     fn statfs(&amp;self) -&gt; Result&lt;StatFs, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -1650,23 +1703,23 @@ pub trait FsStats: Send {
 <h2 id="posix-traits-layer-4---full-posix"><a class="header" href="#posix-traits-layer-4---full-posix">POSIX Traits (Layer 4 - Full POSIX)</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsHandles: Send {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+</span>pub trait FsHandles: Send + Sync {
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsLock: Send {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsLock: Send + Sync {
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsXattr: Send {
+pub trait FsXattr: Send + Sync {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -1845,12 +1898,14 @@ pub struct StatFs {
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, Quota};
 
-let backend = Quota::new(SqliteBackend::open("data.db")?)
-    .with_max_total_size(100 * 1024 * 1024)   // 100 MB
-    .with_max_file_size(10 * 1024 * 1024)     // 10 MB per file
-    .with_max_node_count(10_000)               // 10K files/dirs
-    .with_max_dir_entries(1_000)               // 1K entries per dir
-    .with_max_path_depth(64);
+let backend = QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)   // 100 MB
+    .max_file_size(10 * 1024 * 1024)     // 10 MB per file
+    .max_node_count(10_000)              // 10K files/dirs
+    .max_dir_entries(1_000)              // 1K entries per dir
+    .max_path_depth(64)
+    .build()
+    .layer(SqliteBackend::open("data.db")?);
 
 // Check usage
 let usage = backend.usage();
@@ -1863,21 +1918,24 @@ let remaining = backend.remaining();
 </span>use anyfs::{MemoryBackend, Restrictions};
 
 // By default, all operations work. Use deny_*() to block specific ones.
-let backend = Restrictions::new(MemoryBackend::new())
+let backend = RestrictionsLayer::builder()
     .deny_symlinks()       // Block symlink() calls
     .deny_hard_links()     // Block hard_link() calls
-    .deny_permissions();   // Block set_permissions() calls
+    .deny_permissions()    // Block set_permissions() calls
+    .build()
+    .layer(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>When blocked, operations return <code>FsError::FeatureNotEnabled</code>.</p>
 <h3 id="tracing"><a class="header" href="#tracing">Tracing<b></b></a></h3>
 <p>Integrates with the <a href="https://docs.rs/tracing">tracing</a> ecosystem for structured logging and instrumentation.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Tracing};
+</span>use anyfs::{SqliteBackend, TracingLayer};
 
-let backend = Tracing::new(SqliteBackend::open("data.db")?)
-    .with_target("anyfs")           // tracing target
-    .with_level(tracing::Level::DEBUG);
+let backend = SqliteBackend::open("data.db")?
+    .layer(TracingLayer::new()
+        .with_target("anyfs")
+        .with_level(tracing::Level::DEBUG));
 
 // Users configure tracing subscribers as they prefer
 tracing_subscriber::fmt::init();
@@ -1895,11 +1953,13 @@ tracing_subscriber::fmt::init();
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, PathFilter};
 
-let backend = PathFilter::new(MemoryBackend::new())
+let backend = PathFilterLayer::builder()
     .allow("/workspace/**")           // Allow all under /workspace
     .allow("/tmp/**")                  // Allow temp files
     .deny("/workspace/.env")           // But deny .env files
-    .deny("**/.git/**");               // Deny all .git directories
+    .deny("**/.git/**")               // Deny all .git directories
+    .build()
+    .layer(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>When a path is denied, operations return <code>FsError::AccessDenied</code>.</p>
 <h3 id="readonly"><a class="header" href="#readonly">ReadOnly<b></b></a></h3>
@@ -1921,10 +1981,12 @@ backend.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 </span>use anyfs::{MemoryBackend, RateLimit};
 use std::time::Duration;
 
-let backend = RateLimit::new(MemoryBackend::new())
-    .with_max_ops(100)                        // 100 ops per window
-    .with_window(Duration::from_secs(1))      // 1 second window
-    .with_max_burst(10);                      // Allow bursts up to 10
+let backend = RateLimitLayer::builder()
+    .max_ops(100)                        // 100 ops per window
+    .window(Duration::from_secs(1))      // 1 second window
+    .max_burst(10)                       // Allow bursts up to 10
+    .build()
+    .layer(MemoryBackend::new());
 
 // When rate exceeded: FsError::RateLimitExceeded
 <span class="boring">}</span></code></pre>
@@ -1934,7 +1996,7 @@ let backend = RateLimit::new(MemoryBackend::new())
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, DryRun};
 
-let mut backend = DryRun::new(MemoryBackend::new());
+let backend = DryRun::new(MemoryBackend::new());
 
 backend.write("/test.txt", b"hello")?;  // Logged but not written
 backend.read("/test.txt");               // Error: file doesn't exist
@@ -1949,10 +2011,12 @@ let ops = backend.operations();
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, Cache};
 
-let backend = Cache::new(SqliteBackend::open("data.db")?)
-    .with_max_size(100 * 1024 * 1024)  // 100 MB cache
-    .with_max_entries(10_000)           // Max 10K entries
-    .with_ttl(Duration::from_secs(300)); // 5 min TTL
+let backend = CacheLayer::builder()
+    .max_size(100 * 1024 * 1024)      // 100 MB cache
+    .max_entries(10_000)              // Max 10K entries
+    .ttl(Duration::from_secs(300))    // 5 min TTL
+    .build()
+    .layer(SqliteBackend::open("data.db")?);
 
 // First read: hits backend, caches result
 let data = backend.read("/file.txt")?;
@@ -1998,7 +2062,7 @@ let backend = Overlay::new(base, upper);
 </span>use anyfs::{MemoryBackend, FileStorage};
 
 // Type is inferred - no need to write it out
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 
 fs.create_dir_all("/documents")?;
 fs.write("/documents/hello.txt", b"Hello!")?;
@@ -2102,12 +2166,12 @@ pub trait Layer&lt;B: Fs&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// QuotaLayer, TracingLayer, RestrictionsLayer, etc.
-pub struct QuotaLayer { /* config */ }
+pub struct QuotaLayer { limits: QuotaLimits }
 
 impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
     type Backend = Quota&lt;B&gt;;
     fn layer(self, backend: B) -&gt; Self::Backend {
-        Quota::new(backend).with_limits(self.limits)
+        Quota::from_limits(self.limits).layer(backend)
     }
 }
 <span class="boring">}</span></code></pre>
@@ -2115,34 +2179,19 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
 <hr>
 <h2 id="composing-middleware"><a class="header" href="#composing-middleware">Composing Middleware</a></h2>
 <p>Middleware composes by wrapping. Order matters - innermost applies first.</p>
-<h3 id="manual-composition"><a class="header" href="#manual-composition">Manual Composition</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
-
-// Build from inside out:
-let backend = SqliteBackend::open("data.db")?;
-
-let limited = Quota::new(backend)
-    .with_max_total_size(100 * 1024 * 1024);
-
-let restricted = Restrictions::new(limited)
-    .deny_hard_links()
-    .deny_permissions();
-
-let traced = Tracing::new(restricted);
-
-let mut fs = FileStorage::new(traced);
-<span class="boring">}</span></code></pre>
-<h3 id="layer-based-composition"><a class="header" href="#layer-based-composition">Layer-based Composition</a></h3>
-<p>Use the <code>Layer</code> trait for Axum-style composition:</p>
+<h3 id="fluent-composition"><a class="header" href="#fluent-composition">Fluent Composition</a></h3>
+<p>Use the <code>.layer()</code> extension method for Axum-style composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new().deny_permissions())  // Block set_permissions()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_permissions()  // Block set_permissions()
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <h3 id="backendstack-builder"><a class="header" href="#backendstack-builder">BackendStack Builder</a></h3>
@@ -2393,9 +2442,9 @@ let path = simplified(Path::new(r"\\?\C:\Users\foo\bar.txt"));
 let linux_fs = MemoryBackend::new();
 assert!(linux_fs.exists("/Foo.txt")? != linux_fs.exists("/foo.txt")?);
 
-// Someone wants NTFS-like behavior? Middleware or custom backend:
-let ntfs_like = CaseInsensitive::new(
-    NtfsValidation::new(MemoryBackend::new())  // Blocks CON, NUL, ADS
+// Someone wants NTFS-like behavior? User-implemented middleware or custom backend:
+let ntfs_like = CaseInsensitive::new(           // (user-implemented middleware)
+    NtfsValidation::new(MemoryBackend::new())   // (user-implemented middleware)
 );
 
 // Or full custom implementation
@@ -2422,19 +2471,19 @@ impl Fs for NtfsEmulatingBackend {
 }
 <span class="boring">}</span></code></pre>
 <p>Windows respects these flags - a case-sensitive mounted filesystem works correctly (modern Windows/WSL handle this).</p>
-<h3 id="optional-middleware-for-windows-compatibility"><a class="header" href="#optional-middleware-for-windows-compatibility">Optional Middleware for Windows Compatibility</a></h3>
-<p>For users who need Windows-safe paths in virtual backends:</p>
+<h3 id="illustrative-custom-middleware-for-windows-compatibility"><a class="header" href="#illustrative-custom-middleware-for-windows-compatibility">Illustrative: Custom Middleware for Windows Compatibility</a></h3>
+<p>For users who need Windows-safe paths in virtual backends, here are example middleware patterns (not built-in - implement as needed):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Middleware that validates paths are Windows-compatible.
+</span>/// Example: Middleware that validates paths are Windows-compatible.
 /// Rejects: CON, PRN, NUL, COM1-9, LPT1-9, trailing dots/spaces, ADS.
-pub struct NtfsValidation&lt;B&gt; { /* ... */ }
+pub struct NtfsValidation&lt;B&gt; { /* user-implemented */ }
 
-/// Middleware that makes a backend case-insensitive.
+/// Example: Middleware that makes a backend case-insensitive.
 /// Stores canonical (lowercase) keys, preserves original case in metadata.
-pub struct CaseInsensitive&lt;B&gt; { /* ... */ }
+pub struct CaseInsensitive&lt;B&gt; { /* user-implemented */ }
 <span class="boring">}</span></code></pre>
-<p><strong>Not included by default</strong> - opt-in for users who need it.</p>
+<p><strong>Not built-in</strong> - these are illustrative patterns for users who need NTFS-like behavior.</p>
 <hr>
 <h2 id="security-model"><a class="header" href="#security-model">Security Model</a></h2>
 <p>Security is achieved through composition:</p>
@@ -2463,17 +2512,23 @@ pub struct CaseInsensitive&lt;B&gt; { /* ... */ }
 
 // Build a secure sandbox for an AI agent
 let sandbox = MemoryBackend::new()
-    .layer(QuotaLayer::new()
+    .layer(QuotaLayer::builder()
         .max_total_size(50 * 1024 * 1024)  // 50 MB
-        .max_file_size(5 * 1024 * 1024))   // 5 MB per file
-    .layer(PathFilterLayer::new()
+        .max_file_size(5 * 1024 * 1024)    // 5 MB per file
+        .build())
+    .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
         .deny("**/.env")
-        .deny("**/secrets/**"))
-    .layer(RestrictionsLayer::new())        // No symlinks, no hardlinks
-    .layer(RateLimitLayer::new()
+        .deny("**/secrets/**")
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(RateLimitLayer::builder()
         .max_ops(1000)
-        .per_second())
+        .per_second()
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <hr>
@@ -2497,7 +2552,7 @@ pub trait FsExt: Fs {
     #[cfg(feature = "serde")]
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
     #[cfg(feature = "serde")]
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
 }
 
 // Blanket implementation for all Fs backends
@@ -2518,7 +2573,7 @@ impl&lt;B: Fs&gt; FsExt for B {
         serde_json::from_slice(&amp;bytes).map_err(|e| FsError::Deserialization(e.to_string()))
     }
 
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
         let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
         self.write(path, &amp;bytes)
     }
@@ -2621,6 +2676,15 @@ let slice = data.slice(1000..2000);  // Zero-copy!
     /// Deserialization error (from FsExt).
     Deserialization(String),
 
+    /// Invalid password or encryption key (from SqliteCipherBackend).
+    InvalidPassword,
+
+    /// Data integrity verification failed (from encryption middleware).
+    /// AEAD tag mismatch, HMAC verification failure, etc.
+    IntegrityError {
+        path: PathBuf,
+    },
+
     /// Backend-specific error.
     Backend(String),
 
@@ -2675,7 +2739,7 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// This works identically on Windows, Linux, macOS, and WASM
-let mut fs = MemoryBackend::new();
+let fs = MemoryBackend::new();
 fs.symlink("/target", "/link")?;           // Just stores the link
 fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
 <span class="boring">}</span></code></pre>
@@ -2757,7 +2821,10 @@ pub fn symlinks_available() -&gt; bool {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[cfg(windows)]
-let backend = Restrictions::new(backend).deny_symlinks();
+let backend = RestrictionsLayer::builder()
+    .deny_symlinks()
+    .build()
+    .layer(backend);
 <span class="boring">}</span></code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="layered-design-backends--middleware--ergonomics"><a class="header" href="#layered-design-backends--middleware--ergonomics">Layered Design: Backends + Middleware + Ergonomics</a></h1>
@@ -2802,12 +2869,16 @@ let backend = Restrictions::new(backend).deny_symlinks();
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Middleware enforces policy
-let backend = PathFilter::new(
-    Restrictions::new(
-        Quota::new(MemoryBackend::new())
-    )
-)
-.allow("/workspace/**");
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .build());
 
 // FileStorage is just ergonomics
 let fs = FileStorage::new(backend);
@@ -2829,9 +2900,11 @@ let fs = FileStorage::new(backend);
 <p>For sandboxing across all backends, use <code>PathFilter</code> middleware:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>PathFilterLayer::builder()
     .allow("/workspace/**")
     .deny("**/.env")
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="why-this-matters"><a class="header" href="#why-this-matters">Why This Matters</a></h2>
@@ -2873,6 +2946,8 @@ let fs = FileStorage::new(backend);
 <tr><td>ADR-019</td><td>DryRun for testing and debugging</td><td>Accepted</td></tr>
 <tr><td>ADR-020</td><td>Cache for read performance</td><td>Accepted</td></tr>
 <tr><td>ADR-021</td><td>Overlay for union filesystem</td><td>Accepted</td></tr>
+<tr><td>ADR-022</td><td>Builder pattern for configurable middleware</td><td>Accepted</td></tr>
+<tr><td>ADR-023</td><td>Interior mutability for all trait methods</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2923,11 +2998,14 @@ let fs = FileStorage::new(backend);
 <p><strong>Example:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = Tracing::new(
-    Restrictions::new(
-        Quota::new(SqliteBackend::open("data.db")?)
-    )
-);
+</span>let backend = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="adr-005-stdfs-aligned-method-names"><a class="header" href="#adr-005-stdfs-aligned-method-names">ADR-005: <code>std::fs</code>-aligned method names</a></h2>
@@ -3095,9 +3173,9 @@ pub trait AsyncFs: Send + Sync {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Tracing::new(backend)
+</span>backend.layer(TracingLayer::new()
     .with_target("anyfs")
-    .with_level(tracing::Level::DEBUG)
+    .with_level(tracing::Level::DEBUG))
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="adr-013-fsext-for-extension-methods"><a class="header" href="#adr-013-fsext-for-extension-methods">ADR-013: FsExt for extension methods</a></h2>
@@ -3189,10 +3267,12 @@ FsError::QuotaExceeded {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow workspace access
     .deny("**/.env")           // Deny .env files anywhere
     .deny("**/secrets/**")     // Deny secrets directories
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -3240,9 +3320,11 @@ FsError::QuotaExceeded {
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>RateLimitLayer::builder()
     .max_ops(1000)
     .per_second()
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -3298,10 +3380,12 @@ let ops = dry_run.operations();         // ["write /test.txt (5 bytes)"]
 <p><strong>Configuration:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Cache::new(backend)
+</span>CacheLayer::builder()
     .max_entries(1000)
     .max_entry_size(1024 * 1024)  // 1MB max per entry
     .ttl(Duration::from_secs(60))
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
@@ -3357,6 +3441,220 @@ let overlay = Overlay::new(base, upper);
 <li>All writes go to upper layer; base is never modified.</li>
 <li>Consider <code>opaque</code> directories (<code>.wh..wh..opq</code>) to hide entire base directories.</li>
 </ul>
+<hr>
+<h2 id="adr-022-builder-pattern-for-configurable-middleware"><a class="header" href="#adr-022-builder-pattern-for-configurable-middleware">ADR-022: Builder pattern for configurable middleware</a></h2>
+<p><strong>Decision:</strong> Middleware that requires configuration MUST use a builder pattern that prevents construction without meaningful values. <code>::new()</code> constructors are NOT allowed for middleware where a default configuration is nonsensical.</p>
+<p><strong>Problem:</strong> A constructor like <code>QuotaLayer::new()</code> raises the question: “What quota?” An unlimited quota is pointless - you wouldn’t use <code>QuotaLayer</code> at all. Similarly, <code>RestrictionsLayer::new()</code> with no restrictions, <code>PathFilterLayer::new()</code> with no rules, and <code>RateLimitLayer::new()</code> with no rate limit are all nonsensical.</p>
+<p><strong>Solution:</strong> Use builders that enforce at least one meaningful configuration:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// QuotaLayer - requires at least one limit
+let quota = QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)
+    .build();
+
+// Can also set multiple limits
+let quota = QuotaLayer::builder()
+    .max_total_size(1_000_000)
+    .max_file_size(100_000)
+    .max_node_count(1000)
+    .build();
+
+// RestrictionsLayer - requires at least one restriction
+let restrictions = RestrictionsLayer::builder()
+    .deny_symlinks()
+    .build();
+
+// PathFilterLayer - requires at least one rule
+let filter = PathFilterLayer::builder()
+    .allow("/workspace/**")
+    .deny("**/.env")
+    .build();
+
+// RateLimitLayer - requires rate limit parameters
+let rate_limit = RateLimitLayer::builder()
+    .max_ops(1000)
+    .per_second()
+    .build();
+
+// CacheLayer - requires cache configuration
+let cache = CacheLayer::builder()
+    .max_entries(1000)
+    .build();
+<span class="boring">}</span></code></pre>
+<p><strong>Middleware that MAY keep <code>::new()</code>:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Middleware</th><th>Rationale</th></tr>
+</thead>
+<tbody>
+<tr><td><code>TracingLayer</code></td><td>Default (global tracing subscriber) is meaningful</td></tr>
+<tr><td><code>ReadOnlyLayer</code></td><td>No configuration needed</td></tr>
+<tr><td><code>DryRunLayer</code></td><td>No configuration needed</td></tr>
+<tr><td><code>OverlayLayer</code></td><td>Takes two backends as required params: <code>Overlay::new(lower, upper)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Implementation:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Builder with typestate pattern for compile-time enforcement
+pub struct QuotaLayerBuilder&lt;State = Unconfigured&gt; {
+    max_total_size: Option&lt;u64&gt;,
+    max_file_size: Option&lt;u64&gt;,
+    max_node_count: Option&lt;u64&gt;,
+    _state: PhantomData&lt;State&gt;,
+}
+
+pub struct Unconfigured;
+pub struct Configured;
+
+impl QuotaLayerBuilder&lt;Unconfigured&gt; {
+    pub fn max_total_size(mut self, bytes: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        self.max_total_size = Some(bytes);
+        QuotaLayerBuilder {
+            max_total_size: self.max_total_size,
+            max_file_size: self.max_file_size,
+            max_node_count: self.max_node_count,
+            _state: PhantomData,
+        }
+    }
+
+    pub fn max_file_size(mut self, bytes: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        // Similar transition to Configured state
+    }
+
+    pub fn max_node_count(mut self, count: u64) -&gt; QuotaLayerBuilder&lt;Configured&gt; {
+        // Similar transition to Configured state
+    }
+
+    // Note: NO build() method on Unconfigured state!
+}
+
+impl QuotaLayerBuilder&lt;Configured&gt; {
+    // Additional configuration methods stay in Configured state
+    pub fn max_total_size(mut self, bytes: u64) -&gt; Self {
+        self.max_total_size = Some(bytes);
+        self
+    }
+
+    // Only Configured state has build()
+    pub fn build(self) -&gt; QuotaLayer {
+        QuotaLayer { /* ... */ }
+    }
+}
+
+impl QuotaLayer {
+    pub fn builder() -&gt; QuotaLayerBuilder&lt;Unconfigured&gt; {
+        QuotaLayerBuilder {
+            max_total_size: None,
+            max_file_size: None,
+            max_node_count: None,
+            _state: PhantomData,
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why:</strong></p>
+<ul>
+<li><strong>Compile-time safety:</strong> Invalid configurations don’t compile.</li>
+<li><strong>Self-documenting API:</strong> Users must explicitly choose configuration.</li>
+<li><strong>No meaningless defaults:</strong> Eliminates “what does this default to?” confusion.</li>
+<li><strong>IDE guidance:</strong> Autocomplete shows required methods before <code>build()</code>.</li>
+<li><strong>Familiar pattern:</strong> Rust builders are idiomatic and widely understood.</li>
+</ul>
+<p><strong>Error prevention:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This won't compile - no build() on Unconfigured
+let quota = QuotaLayer::builder().build();  // ❌ Error!
+
+// This compiles - at least one limit set
+let quota = QuotaLayer::builder()
+    .max_total_size(1_000_000)
+    .build();  // ✅ OK
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="adr-023-interior-mutability-for-all-trait-methods"><a class="header" href="#adr-023-interior-mutability-for-all-trait-methods">ADR-023: Interior mutability for all trait methods</a></h2>
+<p><strong>Decision:</strong> All <code>Fs</code> trait methods use <code>&amp;self</code>, not <code>&amp;mut self</code>. Backends manage their own synchronization internally (interior mutability).</p>
+<p><strong>Previous design:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+}
+
+pub trait FsWrite: Send {
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>New design:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+}
+
+pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why:</strong></p>
+<ol>
+<li>
+<p><strong>Filesystems are conceptually always mutable.</strong> A filesystem doesn’t become “borrowed” when you write to it - the underlying storage manages concurrency itself.</p>
+</li>
+<li>
+<p><strong>Enables concurrent access patterns.</strong> With <code>&amp;mut self</code>, you cannot have concurrent readers and writers even when the backend supports it (e.g., SQLite with WAL mode, real filesystems).</p>
+</li>
+<li>
+<p><strong>Matches real-world filesystem semantics.</strong> <code>std::fs::write()</code> takes a path, not a mutable reference to some filesystem object. Files are shared resources.</p>
+</li>
+<li>
+<p><strong>Simplifies middleware implementation.</strong> Middleware no longer needs to worry about propagating mutability - all operations use <code>&amp;self</code>.</p>
+</li>
+<li>
+<p><strong>Common pattern in Rust.</strong> Many I/O abstractions use interior mutability: <code>std::io::Write</code> for <code>File</code> (via OS handles), <code>tokio::fs</code>, database connection pools, etc.</p>
+</li>
+</ol>
+<p><strong>Implementation:</strong></p>
+<p>Backends use appropriate synchronization primitives:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MemoryBackend {
+    // Interior mutability via Mutex/RwLock
+    data: RwLock&lt;HashMap&lt;PathBuf, Vec&lt;u8&gt;&gt;&gt;,
+}
+
+impl FsWrite for MemoryBackend {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        let mut guard = self.data.write().unwrap();
+        guard.insert(path.as_ref().to_path_buf(), data.to_vec());
+        Ok(())
+    }
+}
+
+pub struct SqliteBackend {
+    // SQLite handles its own locking
+    conn: Connection,  // rusqlite::Connection is internally synchronized
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Trade-offs:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>&amp;mut self</th><th>&amp;self (interior mutability)</th></tr>
+</thead>
+<tbody>
+<tr><td>Compile-time safety</td><td>Single writer enforced</td><td>Runtime synchronization</td></tr>
+<tr><td>Concurrent access</td><td>Not possible</td><td>Backend decides</td></tr>
+<tr><td>API simplicity</td><td>Simple</td><td>Slightly more complex backends</td></tr>
+<tr><td>Real-world match</td><td>Poor</td><td>Good</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Conclusion:</strong> The benefits of matching filesystem semantics and enabling concurrent access outweigh the loss of compile-time single-writer enforcement. Backends are responsible for their own thread safety.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="layered-traits-anyfs-backend"><a class="header" href="#layered-traits-anyfs-backend">Layered Traits (anyfs-backend)</a></h1>
 <p>AnyFS uses a <strong>layered trait architecture</strong> for maximum flexibility with minimal complexity.</p>
@@ -3394,7 +3692,7 @@ let overlay = Overlay::new(base, upper);
 <h3 id="fsread"><a class="header" href="#fsread">FsRead</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsRead: Send {
+</span>pub trait FsRead: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
     fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt;;
     fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
@@ -3406,25 +3704,25 @@ let overlay = Overlay::new(base, upper);
 <h3 id="fswrite"><a class="header" href="#fswrite">FsWrite</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsWrite: Send {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+</span>pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsdir"><a class="header" href="#fsdir">FsDir</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsDir: Send {
+</span>pub trait FsDir: Send + Sync {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
@@ -3432,9 +3730,9 @@ let overlay = Overlay::new(base, upper);
 <h3 id="fslink"><a class="header" href="#fslink">FsLink</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLink: Send {
-    fn symlink(&amp;mut self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLink: Send + Sync {
+    fn symlink(&amp;self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
@@ -3442,22 +3740,22 @@ let overlay = Overlay::new(base, upper);
 <h3 id="fspermissions"><a class="header" href="#fspermissions">FsPermissions</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsPermissions: Send {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsPermissions: Send + Sync {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fssync"><a class="header" href="#fssync">FsSync</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsSync: Send {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsSync: Send + Sync {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsstats"><a class="header" href="#fsstats">FsStats</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsStats: Send {
+</span>pub trait FsStats: Send + Sync {
     fn statfs(&amp;self) -&gt; Result&lt;StatFs, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -3466,7 +3764,7 @@ let overlay = Overlay::new(base, upper);
 <h3 id="fsinode"><a class="header" href="#fsinode">FsInode</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsInode: Send {
+</span>pub trait FsInode: Send + Sync {
     fn path_to_inode(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;u64, FsError&gt;;
     fn inode_to_path(&amp;self, inode: u64) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn lookup(&amp;self, parent_inode: u64, name: &amp;OsStr) -&gt; Result&lt;u64, FsError&gt;;
@@ -3508,29 +3806,29 @@ pub enum LockType {
 <h3 id="fshandles"><a class="header" href="#fshandles">FsHandles</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsHandles: Send {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+</span>pub trait FsHandles: Send + Sync {
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fslock"><a class="header" href="#fslock">FsLock</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLock: Send {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLock: Send + Sync {
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsxattr"><a class="header" href="#fsxattr">FsXattr</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsXattr: Send {
+</span>pub trait FsXattr: Send + Sync {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -3583,7 +3881,7 @@ fn process_files(fs: &amp;impl Fs) -&gt; Result&lt;(), FsError&gt; {
 }
 
 // Requires link support
-fn create_backup(fs: &amp;mut (impl Fs + FsLink)) -&gt; Result&lt;(), FsError&gt; {
+fn create_backup(fs: &amp;(impl Fs + FsLink)) -&gt; Result&lt;(), FsError&gt; {
     fs.hard_link("/data.txt", "/data.txt.bak")?;
     Ok(())
 }
@@ -3610,7 +3908,7 @@ fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), FsError&gt; {
     #[cfg(feature = "serde")]
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
     #[cfg(feature = "serde")]
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
 }
 
 // Blanket implementation
@@ -3640,7 +3938,7 @@ impl&lt;B: Fs&gt; FsExt for B {}
 </span>use anyfs::{MemoryBackend, FileStorage};
 
 // Simple: just ergonomics (type inferred)
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>With middleware (layer-based):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -3648,13 +3946,15 @@ let mut fs = FileStorage::new(MemoryBackend::new());
 </span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Type is inferred - no need to write it out
-let mut fs = FileStorage::new(
+let fs = FileStorage::new(
     SqliteBackend::open("data.db")?
-        .layer(QuotaLayer::new()
-            .max_total_size(100 * 1024 * 1024))
-        .layer(RestrictionsLayer::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
             .deny_hard_links()
-            .deny_permissions())
+            .deny_permissions()
+            .build())
 );
 <span class="boring">}</span></code></pre>
 <hr>
@@ -3831,10 +4131,12 @@ type DynFileStorage&lt;M = ()&gt; = FileStorage&lt;Box&lt;dyn Fs&gt;, M&gt;;
 <p>If you don’t need the wrapper, use backends directly:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, Fs};
+</span>use anyfs::{MemoryBackend, QuotaLayer, Fs};
 
-let mut backend = Quota::new(MemoryBackend::new())
-    .with_max_total_size(100 * 1024 * 1024);
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build());
 
 // Use Fs trait methods directly
 backend.write("/file.txt", b"data")?;
@@ -3866,43 +4168,30 @@ backend.write("/file.txt", b"data")?;
 </span>use anyfs::MemoryBackend;
 use anyfs::FileStorage;
 
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 fs.create_dir_all("/data")?;
 fs.write("/data/file.txt", b"hello")?;
 <span class="boring">}</span></code></pre>
 <h3 id="with-middleware-quotas-sandboxing-tracing"><a class="header" href="#with-middleware-quotas-sandboxing-tracing">With middleware (quotas, sandboxing, tracing)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Restrictions, PathFilter, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, TracingLayer};
 use anyfs::FileStorage;
 
-let backend = SqliteBackend::open("tenant.db")?;
-
-let stack = Tracing::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(backend)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-    )
-    .allow("/workspace/**")
-    .deny("**/.env")
-);
-
-let mut fs = FileStorage::new(stack);
-<span class="boring">}</span></code></pre>
-<h3 id="using-layer-trait-alternative-syntax"><a class="header" href="#using-layer-trait-alternative-syntax">Using Layer trait (alternative syntax)</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
-use anyfs::FileStorage;
-
-let backend = SqliteBackend::open("tenant.db")?
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new())
+let stack = SqliteBackend::open("tenant.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
     .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(stack);
 <span class="boring">}</span></code></pre>
 <h3 id="custom-backend-implementation"><a class="header" href="#custom-backend-implementation">Custom backend implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -3917,7 +4206,7 @@ impl Fs for MyBackend {
         todo!()
     }
 
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
@@ -4006,25 +4295,25 @@ impl FsRead for MyBackend {
 }
 
 impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!("create or overwrite file")
     }
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!("append to file")
     }
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("delete file")
     }
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("move/rename")
     }
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("copy file")
     }
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         todo!("resize file")
     }
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
         todo!("return writer")
     }
 }
@@ -4033,16 +4322,16 @@ impl FsDir for MyBackend {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
         todo!("return Vec&lt;DirEntry { name, inode, file_type }&gt;")
     }
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create single directory")
     }
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create directory and parents")
     }
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("remove empty directory")
     }
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("remove directory recursively")
     }
 }
@@ -4052,10 +4341,10 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLink for MyBackend {
-    fn symlink(&amp;mut self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn symlink(&amp;self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create symlink pointing to target")
     }
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create hard link (same inode)")
     }
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;std::path::PathBuf, FsError&gt; {
@@ -4067,16 +4356,16 @@ impl FsDir for MyBackend {
 }
 
 impl FsPermissions for MyBackend {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt; {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt; {
         todo!("set file permissions")
     }
 }
 
 impl FsSync for MyBackend {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt; {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt; {
         todo!("flush all writes to storage")
     }
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("flush writes for one file")
     }
 }
@@ -4180,10 +4469,10 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
-    fn write(&amp;mut self, _: impl AsRef&lt;Path&gt;, _: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, _: impl AsRef&lt;Path&gt;, _: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "write" })
     }
-    fn remove_file(&amp;mut self, _: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, _: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
     // ... all write methods return ReadOnly error
@@ -4200,7 +4489,7 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for MyMiddlewareLayer {
 }
 
 impl&lt;B: FsWrite&gt; FsWrite for Encrypted&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let encrypted = self.encrypt(data);
         self.inner.write(path, &amp;encrypted)
     }
@@ -4279,19 +4568,16 @@ FsError::Backend(String)                   // Backend-specific error
 <h3 id="create-a-backend-stack"><a class="header" href="#create-a-backend-stack">Create a backend stack</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Tracing, Fs};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, TracingLayer};
 
-let backend = MemoryBackend::new();
-let limited = Quota::new(backend).with_max_total_size(100 * 1024 * 1024);
-let filtered = PathFilter::new(limited).allow("/workspace/**").deny("**/.env");
-let traced = Tracing::new(filtered);
-<span class="boring">}</span></code></pre>
-<h3 id="using-layer-syntax"><a class="header" href="#using-layer-syntax">Using Layer syntax</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let backend = MemoryBackend::new()
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(PathFilterLayer::new().allow("/workspace/**"))
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <h3 id="with-filestorage-wrapper"><a class="header" href="#with-filestorage-wrapper">With FileStorage wrapper</a></h3>
@@ -4299,7 +4585,7 @@ let traced = Tracing::new(filtered);
 </span><span class="boring">fn main() {
 </span>use anyfs::FileStorage;
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 fs.write("/file.txt", b"hello")?;
 let data = fs.read("/file.txt")?;
 <span class="boring">}</span></code></pre>
@@ -4592,12 +4878,14 @@ fn to_ntstatus(e: FsError) -&gt; NTSTATUS {
 <h3 id="basic-mount"><a class="header" href="#basic-mount">Basic Mount</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota};
+</span>use anyfs::{MemoryBackend, QuotaLayer};
 use anyfs_mount::MountHandle;
 
 // Create backend with middleware
-let backend = Quota::new(MemoryBackend::new())
-    .with_max_total_size(100 * 1024 * 1024);
+let backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build());
 
 // Mount as drive
 let mount = MountHandle::mount(backend, "/mnt/ramdisk")?;
@@ -4681,14 +4969,17 @@ use anyfs_mount::MountHandle;
 
 // Build secure, audited, rate-limited mount
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new()
-        .max_total_size(1024 * 1024 * 1024))  // 1 GB
-    .layer(PathFilterLayer::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(1024 * 1024 * 1024)  // 1 GB
+        .build())
+    .layer(PathFilterLayer::builder()
         .deny("**/.git/**")
-        .deny("**/.env"))
-    .layer(RateLimitLayer::new()
+        .deny("**/.env")
+        .build())
+    .layer(RateLimitLayer::builder()
         .max_ops(10000)
-        .per_second())
+        .per_second()
+        .build())
     .layer(TracingLayer::new());
 
 let mount = MountHandle::mount(backend, "/mnt/secure")?;
@@ -4729,7 +5020,9 @@ let mount = MountHandle::mount(db, "U:")?;
 </span><span class="boring">fn main() {
 </span>// Remote backend (future anyfs-s3, anyfs-sftp, etc.)
 let remote = S3Backend::new("my-bucket")?;
-let cached = Cache::new(remote).with_max_size(100 * 1024 * 1024);
+let cached = remote.layer(CacheLayer::builder()
+    .max_size(100 * 1024 * 1024)
+    .build());
 let mount = MountHandle::mount(cached, "/mnt/cloud")?;
 
 // Local apps see /mnt/cloud as regular filesystem
@@ -5106,7 +5399,7 @@ impl FsRead for TxtBackend {
 </span>use anyfs_backend::FsWrite;
 
 impl FsWrite for TxtBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Ensure parent directory exists
@@ -5141,7 +5434,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -5160,7 +5453,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -5179,7 +5472,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
 
@@ -5197,7 +5490,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
 
@@ -5224,7 +5517,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
         let mut entries = self.entries.write().unwrap();
 
@@ -5243,7 +5536,7 @@ impl FsWrite for TxtBackend {
         Ok(())
     }
 
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn std::io::Write + Send&gt;, FsError&gt; {
         // For simplicity, we buffer writes and apply on drop
         // A real implementation would be more sophisticated
         let path = path.as_ref().to_path_buf();
@@ -5341,7 +5634,7 @@ impl FsDir for TxtBackend {
         Ok(children)
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Check parent exists
@@ -5365,7 +5658,7 @@ impl FsDir for TxtBackend {
 
         // Check if already exists
         if entries.contains_key(&amp;path) {
-            return Err(FsError::AlreadyExists { path });
+            return Err(FsError::AlreadyExists { path, operation: "create_dir" });
         }
 
         entries.insert(path.clone(), TxtEntry::new_dir(path));
@@ -5376,7 +5669,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Build list of directories to create
@@ -5414,7 +5707,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Can't remove root
@@ -5454,7 +5747,7 @@ impl FsDir for TxtBackend {
         Ok(())
     }
 
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let path = path.as_ref().to_path_buf();
 
         // Can't remove root
@@ -5495,22 +5788,21 @@ impl FsDir for TxtBackend {
 <hr>
 <h2 id="step-6-putting-it-all-together"><a class="header" href="#step-6-putting-it-all-together">Step 6: Putting It All Together</a></h2>
 <p>Now you have a complete <code>Fs</code> implementation! Let’s use it:</p>
-<pre class="playground"><code class="language-rust">use anyfs::{FileStorage, Quota, Tracing};
+<pre class="playground"><code class="language-rust">use anyfs::{FileStorage, QuotaLayer, TracingLayer};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Create our glorious TXT filesystem
-    let backend = TxtBackend::open("my_filesystem.txt")?;
-
-    // Wrap it with middleware to prevent the file from exploding
-    let backend = Quota::new(backend)
-        .with_max_total_size(10 * 1024 * 1024)  // 10 MB max
-        .with_max_file_size(1 * 1024 * 1024);   // 1 MB per file
-
-    // Add tracing because why not
-    let backend = Tracing::new(backend);
+    let backend = TxtBackend::open("my_filesystem.txt")?
+        // Wrap it with middleware to prevent the file from exploding
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024)  // 10 MB max
+            .max_file_size(1 * 1024 * 1024)    // 1 MB per file
+            .build())
+        // Add tracing because why not
+        .layer(TracingLayer::new());
 
     // Create the filesystem wrapper
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     // Use it like any other filesystem!
     fs.create_dir_all("/projects/secret")?;
@@ -5830,33 +6122,38 @@ fs.write(path, data)?;
 <p>Security policies are composable middleware layers:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, RateLimitLayer, TracingLayer};
 
-let secure_backend = Tracing::new(           // Audit trail
-    RateLimit::new(                          // Throttle operations
-        PathFilter::new(                     // Sandbox paths
-            Restrictions::new(               // Block dangerous features
-                Quota::new(MemoryBackend::new())  // Limit resources
-                    .with_max_total_size(100 * 1024 * 1024)
-            )
-        )
+let secure_backend = MemoryBackend::new()
+    .layer(QuotaLayer::builder()              // Limit resources
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()       // Block dangerous features
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(PathFilterLayer::builder()         // Sandbox paths
         .allow("/workspace/**")
         .deny("**/.env")
         .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
+        .build())
+    .layer(RateLimitLayer::builder()          // Throttle operations
+        .max_ops(1000)
+        .per_second()
+        .build())
+    .layer(TracingLayer::new());              // Audit trail
 <span class="boring">}</span></code></pre>
 <h3 id="2-path-sandboxing-pathfilter"><a class="header" href="#2-path-sandboxing-pathfilter">2. Path Sandboxing (PathFilter)</a></h3>
 <p><code>PathFilter</code> middleware restricts path access using glob patterns:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow workspace access
     .deny("**/.env")           // Block .env files
     .deny("**/secrets/**")     // Block secrets directories
     .deny("**/*.key")          // Block key files
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -5868,10 +6165,12 @@ let secure_backend = Tracing::new(           // Audit trail
 <p>By default, all operations work. Use <code>Restrictions</code> middleware to <strong>opt-in to restrictions</strong>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Restrictions::new(backend)
+</span>RestrictionsLayer::builder()
     .deny_hard_links()         // Block hard_link() calls
     .deny_permissions()        // Block set_permissions() calls
     .deny_symlinks()           // Block symlink() calls
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Use cases:</strong></p>
 <ul>
@@ -5884,12 +6183,14 @@ let secure_backend = Tracing::new(           // Audit trail
 <p><code>Quota</code> middleware enforces capacity limits:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Quota::new(backend)
-    .with_max_total_size(100 * 1024 * 1024)  // 100 MB total
-    .with_max_file_size(10 * 1024 * 1024)    // 10 MB per file
-    .with_max_node_count(10_000)             // Max files/dirs
-    .with_max_dir_entries(1_000)             // Max per directory
-    .with_max_path_depth(64)                 // Max nesting
+</span>QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)  // 100 MB total
+    .max_file_size(10 * 1024 * 1024)    // 10 MB per file
+    .max_node_count(10_000)             // Max files/dirs
+    .max_dir_entries(1_000)             // Max per directory
+    .max_path_depth(64)                 // Max nesting
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -5900,9 +6201,11 @@ let secure_backend = Tracing::new(           // Audit trail
 <p><code>RateLimit</code> middleware throttles operations:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>RateLimitLayer::builder()
     .max_ops(1000)
     .per_second()
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <p><strong>Guarantees:</strong></p>
 <ul>
@@ -5960,7 +6263,7 @@ the virtual structure. There is no host filesystem to escape to.
 <p>Virtual backends always support symlinks. They also provide control over symlink following:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut backend = MemoryBackend::new();
+</span>let backend = MemoryBackend::new();
 backend.set_follow_symlinks(false);  // Don't follow symlinks during path resolution
 <span class="boring">}</span></code></pre>
 <p>When following is disabled:</p>
@@ -5997,26 +6300,29 @@ strict-path: /etc/passwd is NOT within /sandbox → DENIED
 <h3 id="ai-agent-sandbox"><a class="header" href="#ai-agent-sandbox">AI Agent Sandbox</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Quota, PathFilter, Restrictions, RateLimit, Tracing, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, RateLimitLayer, TracingLayer, FileStorage};
 
-let sandbox = Tracing::new(
-    RateLimit::new(
-        PathFilter::new(
-            Restrictions::new(
-                Quota::new(MemoryBackend::new())
-                    .with_max_total_size(50 * 1024 * 1024)
-                    .with_max_file_size(5 * 1024 * 1024)
-            )
-        )
+let sandbox = MemoryBackend::new()
+    .layer(QuotaLayer::builder()
+        .max_total_size(50 * 1024 * 1024)
+        .max_file_size(5 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
         .deny("**/.env")
         .deny("**/secrets/**")
-    )
-    .max_ops(1000)
-    .per_second()
-);
+        .build())
+    .layer(RateLimitLayer::builder()
+        .max_ops(1000)
+        .per_second()
+        .build())
+    .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(sandbox);
+let fs = FileStorage::new(sandbox);
 // Agent code can only access /workspace, limited resources, audited
 <span class="boring">}</span></code></pre>
 <h3 id="multi-tenant-isolation"><a class="header" href="#multi-tenant-isolation">Multi-Tenant Isolation</a></h3>
@@ -6026,8 +6332,10 @@ let mut fs = FileStorage::new(sandbox);
 
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorage&lt;impl Fs&gt; {
     let db_path = format!("tenants/{}.db", tenant_id);
-    let backend = Quota::new(SqliteBackend::open(&amp;db_path).unwrap())
-        .with_max_total_size(quota_bytes);
+    let backend = QuotaLayer::builder()
+        .max_total_size(quota_bytes)
+        .build()
+        .layer(SqliteBackend::open(&amp;db_path).unwrap());
 
     FileStorage::new(backend)
 }
@@ -6183,7 +6491,7 @@ pub struct FileEncryption&lt;B&gt; {
 }
 
 impl&lt;B: Fs&gt; FsWrite for FileEncryption&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         // Encrypt content with authenticated encryption (AES-GCM)
         let nonce = generate_nonce();
         let ciphertext = aes_gcm_encrypt(&amp;self.key, &amp;nonce, data)?;
@@ -6225,7 +6533,7 @@ pub struct IntegrityVerified&lt;B&gt; {
 }
 
 impl&lt;B: Fs&gt; FsWrite for IntegrityVerified&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let mac = hmac_sha256(&amp;self.key, data);
         let protected = [data, mac.as_slice()].concat();
         self.inner.write(path, &amp;protected)
@@ -6261,7 +6569,10 @@ impl&lt;B: Fs&gt; FsRead for IntegrityVerified&lt;B&gt; {
 </tbody>
 </table>
 </div>
-<h4 id="encrypted-memory-backend"><a class="header" href="#encrypted-memory-backend">Encrypted Memory Backend</a></h4>
+<h4 id="encrypted-memory-backend-illustrative-pattern"><a class="header" href="#encrypted-memory-backend-illustrative-pattern">Encrypted Memory Backend (Illustrative Pattern)</a></h4>
+<blockquote>
+<p><strong>Note:</strong> <code>EncryptedMemoryBackend</code> is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend in v1. Users can implement this pattern using the guidance below.</p>
+</blockquote>
 <p>Keep data encrypted even in RAM - decrypt only during active use:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -6298,7 +6609,7 @@ impl FsRead for EncryptedMemoryBackend {
 }
 
 impl FsWrite for EncryptedMemoryBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         // Encrypt immediately - plaintext never stored
         let encrypted = self.encrypt(data)?;
 
@@ -6379,7 +6690,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <tbody>
 <tr><td><code>SqliteCipherBackend</code></td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
 <tr><td><code>FileEncryption&lt;B&gt;</code> middleware</td><td>Yes</td><td>No</td><td>Depends on B</td><td>Depends on B</td></tr>
-<tr><td><code>EncryptedMemoryBackend</code></td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
+<tr><td><code>EncryptedMemoryBackend</code> (illustrative)</td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
 <tr><td><code>IntegrityVerified&lt;B&gt;</code> middleware</td><td>No</td><td>No (files only)</td><td>No</td><td>Depends on B</td></tr>
 </tbody>
 </table>
@@ -6392,10 +6703,11 @@ mimalloc = { version = "0.1", features = ["secure"] }
 let backend = SqliteCipherBackend::open("secure.db", password)?;
 let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
-<h4 id="high-security-ram-processing"><a class="header" href="#high-security-ram-processing">High-Security RAM Processing</a></h4>
+<h4 id="high-security-ram-processing-illustrative"><a class="header" href="#high-security-ram-processing-illustrative">High-Security RAM Processing (Illustrative)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Data never plaintext at rest (RAM or disk)
+// Note: EncryptedMemoryBackend is user-implemented (see pattern above)
 let backend = EncryptedMemoryBackend::new(derive_key(password));
 // ... use fs ...
 backend.save_to_file("snapshot.enc")?;  // Persists encrypted
@@ -6532,7 +6844,7 @@ impl SqliteCipherBackend {
     /// Create new encrypted database with password.
     pub fn create(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
         if path.as_ref().exists() {
-            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf() });
+            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf(), operation: "create" });
         }
         Self::open(path, password)
     }
@@ -6889,21 +7201,23 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 <p>Tower-style middleware + pluggable backends:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing, FileStorage};
+</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Compose middleware stack
-let backend = Tracing::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(SqliteBackend::open("data.db")?)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-    )
-    .allow("/workspace/**")
-    .deny("**/.env")
-);
+let backend = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("**/.env")
+        .build())
+    .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <p><strong>Advantages:</strong></p>
 <ul>
@@ -6963,11 +7277,11 @@ let mut fs = FileStorage::new(backend);
 <h2 id="4-backend-trait"><a class="header" href="#4-backend-trait">4. Backend Trait</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait Fs: Send {
+</span>pub trait Fs: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
     fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
     // ... methods aligned with std::fs
 }
 <span class="boring">}</span></code></pre>
@@ -7200,19 +7514,21 @@ let vfs_fs: Box&lt;dyn vfs::FileSystem&gt; = Box::new(AnyFsCompat::new(anyfs_bac
 <p>The middleware pattern (like Tower/Axum) enables composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Restrictions, Tracing, FileStorage};
+</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
-let backend = Tracing::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(SqliteBackend::open("tenant.db")?)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-    )
-    .allow("/workspace/**")
-);
+let backend = SqliteBackend::open("tenant.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .build())
+    .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 fs.write("/workspace/doc.txt", b"hello")?;
 <span class="boring">}</span></code></pre>
 <hr>
@@ -7313,11 +7629,11 @@ let entry = self.entries.get(&amp;path)
 </span><span class="boring">fn main() {
 </span>#[derive(Debug, thiserror::Error)]
 pub enum FsError {
-    #[error("not found: {path}")]
-    NotFound { path: PathBuf },
+    #[error("{operation}: not found: {path}")]
+    NotFound { path: PathBuf, operation: &amp;'static str },
 
-    #[error("already exists: {path}")]
-    AlreadyExists { path: PathBuf },
+    #[error("{operation}: already exists: {path}")]
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
 
     #[error("quota exceeded: limit {limit}, attempted {attempted}")]
     QuotaExceeded { limit: u64, attempted: u64 },
@@ -7605,7 +7921,7 @@ fn no_panic_on_missing_file() {
 
 #[test]
 fn no_panic_on_invalid_operation() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
     // Try to read directory on a file
     let result = backend.read_dir("/file.txt");
@@ -7618,7 +7934,7 @@ fn no_panic_on_invalid_operation() {
 </span>#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 fn memory_backend_works_in_wasm() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.write("/test.txt", b"hello").unwrap();
     // Should not panic
 }
@@ -7857,12 +8173,15 @@ impl&lt;B: Fs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <p>Expose any <code>Fs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
 use anyfs_s3_server::S3Server;
 
 // Your storage backend with quotas and audit logging
-let backend = Quota::new(Tracing::new(SqliteBackend::open("storage.db")?))
-    .with_max_total_size(100 * 1024 * 1024 * 1024);  // 100GB
+let backend = SqliteBackend::open("storage.db")?
+    .layer(TracingLayer::new())
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024 * 1024)  // 100GB
+        .build());
 
 S3Server::new(backend)
     .with_auth(auth_provider)       // Your auth implementation
@@ -7894,7 +8213,7 @@ let remote = RemoteBackend::connect("https://api.yourservice.com")
     .await?;
 
 // Use like any other backend
-let mut fs = FileStorage::new(remote);
+let fs = FileStorage::new(remote);
 fs.write("/documents/report.pdf", data)?;
 <span class="boring">}</span></code></pre>
 <p><strong>Combined with FUSE for transparent mount:</strong></p>
@@ -7931,27 +8250,28 @@ GrpcServer::new(backend)
 </span>use anyfs_grpc::GrpcBackend;
 
 let backend = GrpcBackend::connect("http://[::1]:50051").await?;
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <h4 id="multi-tenant-cloud-storage-example"><a class="header" href="#multi-tenant-cloud-storage-example">Multi-Tenant Cloud Storage Example</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer};
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; impl Fs {
     let db_path = format!("/data/tenants/{}.db", tenant_id);
 
-    Quota::new(
-        PathFilter::new(
-            Tracing::new(SqliteBackend::open(&amp;db_path).unwrap())
-                .with_target(&amp;format!("tenant.{}", tenant_id))
-        )
-        .allow("/**")
-        .deny("../**")  // No path traversal
-    )
-    .with_max_total_size(quota_bytes)
+    SqliteBackend::open(&amp;db_path).unwrap()
+        .layer(TracingLayer::new()
+            .with_target(&amp;format!("tenant.{}", tenant_id)))
+        .layer(PathFilterLayer::builder()
+            .allow("/**")
+            .deny("../**")  // No path traversal
+            .build())
+        .layer(QuotaLayer::builder()
+            .max_total_size(quota_bytes)
+            .build())
 }
 
 // Tenant-aware S3 server
@@ -7988,18 +8308,19 @@ S3Server::new_multi_tenant(|request| {
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Tracing};
+</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
 fn get_user_storage(username: &amp;str) -&gt; impl FsFull {
     let db_path = format!("/data/users/{}.db", username);
 
-    Quota::new(
-        Tracing::new(SqliteBackend::open(&amp;db_path).unwrap())
-            .with_target(&amp;format!("user.{}", username))
-    )
-    .with_max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per user
+    SqliteBackend::open(&amp;db_path).unwrap()
+        .layer(TracingLayer::new()
+            .with_target(&amp;format!("user.{}", username)))
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per user
+            .build())
 }
 
 SftpServer::new(get_user_storage)
@@ -8038,8 +8359,10 @@ use anyfs_ssh_shell::SshShellServer;
 // On user login, mount their isolated storage as $HOME
 fn on_user_login(username: &amp;str) -&gt; Result&lt;(), Error&gt; {
     let db_path = format!("/data/users/{}.db", username);
-    let backend = Quota::new(SqliteBackend::open(&amp;db_path)?)
-        .with_max_total_size(10 * 1024 * 1024 * 1024);
+    let backend = SqliteBackend::open(&amp;db_path)?
+        .layer(QuotaLayer::builder()
+            .max_total_size(10 * 1024 * 1024 * 1024)
+            .build());
 
     let mount_point = format!("/home/{}", username);
     FuseMount::mount(backend, &amp;mount_point)?;
@@ -8153,6 +8476,7 @@ FsRead + FsWrite + FsDir (core)
 <li>Backends handle <strong>storage only</strong> - just store/retrieve bytes at given paths</li>
 <li>Policy (limits, feature gates) is handled by middleware, not backends</li>
 <li>Implement only the traits your backend supports</li>
+<li><strong>Backends must be thread-safe</strong> - all trait methods use <code>&amp;self</code>, so backends must use interior mutability (e.g., <code>RwLock</code>, <code>Mutex</code>) for synchronization</li>
 </ul>
 <hr>
 <h2 id="dependency"><a class="header" href="#dependency">Dependency</a></h2>
@@ -8219,31 +8543,31 @@ impl FsRead for MyBackend {
 
 // Implement FsWrite
 impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
         todo!()
     }
 }
@@ -8254,19 +8578,19 @@ impl FsDir for MyBackend {
         todo!()
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
 }
@@ -8324,13 +8648,13 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsWrite for MyBackend {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Note on truncate:</strong></p>
@@ -8344,10 +8668,10 @@ impl FsDir for MyBackend {
 </span><span class="boring">fn main() {
 </span>impl FsDir for MyBackend {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Congratulations!</strong> After implementing <code>FsRead</code>, <code>FsWrite</code>, and <code>FsDir</code>, your backend implements <code>Fs</code> automatically (blanket impl). This covers 90% of use cases.</p>
@@ -8358,8 +8682,8 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLink for MyBackend {
-    fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn symlink(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
@@ -8372,15 +8696,15 @@ impl FsDir for MyBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsPermissions for MyBackend {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fssync---durability"><a class="header" href="#fssync---durability"><code>FsSync</code> - Durability</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsSync for MyBackend {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <ul>
@@ -8456,7 +8780,7 @@ impl FsInode for MemoryBackend {
 }
 
 impl FsLink for MemoryBackend {
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         let inode = self.path_to_inode(&amp;original)?;
         self.paths.insert(link.as_ref().to_path_buf(), inode);
         self.nodes.get_mut(&amp;inode).unwrap().nlink += 1;
@@ -8526,19 +8850,19 @@ impl FsLink for MemoryBackend {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsHandles for MyBackend {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fslock---file-locking"><a class="header" href="#fslock---file-locking"><code>FsLock</code> - File Locking</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsLock for MyBackend {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsxattr---extended-attributes"><a class="header" href="#fsxattr---extended-attributes"><code>FsXattr</code> - Extended Attributes</a></h3>
@@ -8546,8 +8870,8 @@ impl FsLink for MemoryBackend {
 </span><span class="boring">fn main() {
 </span>impl FsXattr for MyBackend {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -8561,12 +8885,12 @@ impl FsLink for MemoryBackend {
 <tr><th>Situation</th><th>Error</th></tr>
 </thead>
 <tbody>
-<tr><td>Path doesn’t exist</td><td><code>FsError::NotFound(path)</code></td></tr>
-<tr><td>Path already exists</td><td><code>FsError::AlreadyExists(path)</code></td></tr>
-<tr><td>Expected file, got dir</td><td><code>FsError::NotAFile(path)</code></td></tr>
-<tr><td>Expected dir, got file</td><td><code>FsError::NotADirectory(path)</code></td></tr>
-<tr><td>Remove non-empty dir</td><td><code>FsError::DirectoryNotEmpty(path)</code></td></tr>
-<tr><td>Internal error</td><td><code>FsError::Backend(message)</code></td></tr>
+<tr><td>Path doesn’t exist</td><td><code>FsError::NotFound { path, operation }</code></td></tr>
+<tr><td>Path already exists</td><td><code>FsError::AlreadyExists { path, operation }</code></td></tr>
+<tr><td>Expected file, got dir</td><td><code>FsError::NotAFile { path }</code></td></tr>
+<tr><td>Expected dir, got file</td><td><code>FsError::NotADirectory { path }</code></td></tr>
+<tr><td>Remove non-empty dir</td><td><code>FsError::DirectoryNotEmpty { path }</code></td></tr>
+<tr><td>Internal error</td><td><code>FsError::Backend { message }</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -8602,7 +8926,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut backend = create_backend();
+        let backend = create_backend();
         backend.write("/test.txt", b"hello").unwrap();
         let content = backend.read("/test.txt").unwrap();
         assert_eq!(content, b"hello");
@@ -8610,7 +8934,7 @@ mod tests {
 
     #[test]
     fn test_create_dir() {
-        let mut backend = create_backend();
+        let backend = create_backend();
         backend.create_dir("/foo").unwrap();
         assert!(backend.exists("/foo").unwrap());
     }
@@ -8658,7 +8982,7 @@ impl&lt;W: Write + Send&gt; Write for CountingWriter&lt;W&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: Fs&gt; Fs for Quota&lt;B&gt; {
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
         // Check if we're at quota before opening
         if self.usage.total_bytes &gt;= self.limits.max_total_size {
             return Err(FsError::QuotaExceeded { ... });
@@ -8750,7 +9074,7 @@ impl&lt;B: FsRead&gt; FsRead for Counter&lt;B&gt; {
 }
 
 impl&lt;B: FsWrite&gt; FsWrite for Counter&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         self.count.fetch_add(1, Ordering::Relaxed);  // Count it
         self.inner.write(path, data)                  // Delegate
     }
@@ -8834,30 +9158,30 @@ impl&lt;B: FsDir&gt; FsDir for ReadOnly&lt;B&gt; {
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "create_dir" })
     }
 
-    fn create_dir_all(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir_all(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "create_dir_all" })
     }
 
-    fn remove_dir(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_dir" })
     }
 
-    fn remove_dir_all(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_dir_all(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_dir_all" })
     }
 }
 
 // FsWrite: block all operations
 impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
-    fn write(&amp;mut self, _path: impl AsRef&lt;Path&gt;, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, _path: impl AsRef&lt;Path&gt;, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "write" })
     }
 
-    fn remove_file(&amp;mut self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn remove_file(&amp;self, _path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
 
@@ -8867,7 +9191,7 @@ impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut backend = ReadOnly::new(MemoryBackend::new());
+</span>let backend = ReadOnly::new(MemoryBackend::new());
 
 backend.read("/file.txt");       // OK (if file exists)
 backend.write("/file.txt", b""); // Error: ReadOnly
@@ -8961,7 +9285,7 @@ impl&lt;B: FsRead&gt; FsRead for Encrypted&lt;B&gt; {
 
 // FsWrite: encrypt on write
 impl&lt;B: FsWrite&gt; FsWrite for Encrypted&lt;B&gt; {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let encrypted = self.encrypt(data);
         self.inner.write(path, &amp;encrypted)
     }
@@ -8975,7 +9299,7 @@ impl&lt;B: FsDir&gt; FsDir for Encrypted&lt;B&gt; {
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         self.inner.create_dir(path)
     }
 
@@ -9072,8 +9396,29 @@ fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, 
 <li>Trying to list a file as a directory</li>
 <li>Concurrent access conflicts</li>
 </ul>
-<h3 id="2-thread-safety"><a class="header" href="#2-thread-safety">2. Thread Safety</a></h3>
-<p>Backends must be safe for concurrent access. Use appropriate synchronization:</p>
+<h3 id="2-thread-safety-required"><a class="header" href="#2-thread-safety-required">2. Thread Safety (Required)</a></h3>
+<p><strong>All trait methods use <code>&amp;self</code>, not <code>&amp;mut self</code>.</strong> This means backends MUST use interior mutability for thread-safe concurrent access.</p>
+<p><strong>Why <code>&amp;self</code>?</strong></p>
+<ul>
+<li>Enables concurrent access patterns (multiple readers, concurrent operations)</li>
+<li>Matches real filesystem semantics (concurrent access is normal)</li>
+<li>More flexible API (can share references without exclusive ownership)</li>
+</ul>
+<p><strong>Backend implementer responsibility:</strong></p>
+<ul>
+<li>Use <code>RwLock</code>, <code>Mutex</code>, or similar for internal state</li>
+<li>Ensure operations are atomic (a single <code>write()</code> call shouldn’t produce partial results)</li>
+<li>Handle lock poisoning gracefully</li>
+</ul>
+<p><strong>What the synchronization guarantees:</strong></p>
+<ul>
+<li>Memory safety (no data corruption)</li>
+<li>Atomic operations (writes don’t interleave)</li>
+</ul>
+<p><strong>What it does NOT guarantee:</strong></p>
+<ul>
+<li>Order of concurrent writes to the same path (last write wins - standard FS behavior)</li>
+</ul>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use std::sync::{Arc, RwLock};
@@ -9084,14 +9429,16 @@ pub struct MemoryBackend {
     entries: Arc&lt;RwLock&lt;HashMap&lt;PathBuf, Entry&gt;&gt;&gt;,
 }
 
-impl Fs for MemoryBackend {
+impl FsRead for MemoryBackend {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
         let entries = self.entries.read()
             .map_err(|_| FsError::Backend("lock poisoned".into()))?;
         // ...
     }
+}
 
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+impl FsWrite for MemoryBackend {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         let mut entries = self.entries.write()
             .map_err(|_| FsError::Backend("lock poisoned".into()))?;
         // ...
@@ -9211,7 +9558,7 @@ fn test_read_nonexistent_returns_error() {
 
 #[test]
 fn test_read_dir_on_file_returns_error() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
     assert!(matches!(
         backend.read_dir("/file.txt"),
@@ -9267,7 +9614,7 @@ fn test_concurrent_create_dir_all() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_path_with_dotdot() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.create_dir_all("/foo/bar").unwrap();
     backend.write("/foo/bar/test.txt", b"data").unwrap();
 
@@ -9318,7 +9665,7 @@ fs = snapshot;
 <h3 id="usage-1-1"><a class="header" href="#usage-1-1">Usage</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut fs = MemoryBackend::new();
+</span>let fs = MemoryBackend::new();
 fs.write("/data.txt", b"important")?;
 
 // Snapshot = clone
@@ -9412,7 +9759,7 @@ Fs       ──▶ FsRead, FsWrite, FsDir tests (REQUIRED for all)
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_write_and_read() {
-    let mut backend = create_backend();
+    let backend = create_backend();
 
     backend.write("/file.txt", b"hello world").unwrap();
     let content = backend.read("/file.txt").unwrap();
@@ -9431,7 +9778,7 @@ fn test_read_nonexistent_returns_not_found() {
 
 #[test]
 fn test_create_dir_and_list() {
-    let mut backend = create_backend();
+    let backend = create_backend();
 
     backend.create_dir("/mydir").unwrap();
     backend.write("/mydir/file.txt", b"data").unwrap();
@@ -9443,7 +9790,7 @@ fn test_create_dir_and_list() {
 
 #[test]
 fn test_create_dir_all() {
-    let mut backend = create_backend();
+    let backend = create_backend();
 
     backend.create_dir_all("/a/b/c/d").unwrap();
 
@@ -9452,7 +9799,7 @@ fn test_create_dir_all() {
 
 #[test]
 fn test_remove_file() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
 
     backend.remove_file("/file.txt").unwrap();
@@ -9462,7 +9809,7 @@ fn test_remove_file() {
 
 #[test]
 fn test_remove_dir_all() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.create_dir_all("/a/b/c").unwrap();
     backend.write("/a/b/c/file.txt", b"data").unwrap();
 
@@ -9473,7 +9820,7 @@ fn test_remove_dir_all() {
 
 #[test]
 fn test_rename() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/old.txt", b"data").unwrap();
 
     backend.rename("/old.txt", "/new.txt").unwrap();
@@ -9484,7 +9831,7 @@ fn test_rename() {
 
 #[test]
 fn test_copy() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/original.txt", b"data").unwrap();
 
     backend.copy("/original.txt", "/copy.txt").unwrap();
@@ -9495,7 +9842,7 @@ fn test_copy() {
 
 #[test]
 fn test_metadata() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"hello").unwrap();
 
     let meta = backend.metadata("/file.txt").unwrap();
@@ -9506,7 +9853,7 @@ fn test_metadata() {
 
 #[test]
 fn test_append() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"hello").unwrap();
 
     backend.append("/file.txt", b" world").unwrap();
@@ -9516,7 +9863,7 @@ fn test_append() {
 
 #[test]
 fn test_truncate() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"hello world").unwrap();
 
     backend.truncate("/file.txt", 5).unwrap();
@@ -9526,7 +9873,7 @@ fn test_truncate() {
 
 #[test]
 fn test_read_range() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"hello world").unwrap();
 
     let partial = backend.read_range("/file.txt", 6, 5).unwrap();
@@ -9539,7 +9886,7 @@ fn test_read_range() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_symlink() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/target.txt", b"data").unwrap();
 
     backend.symlink("/target.txt", "/link.txt").unwrap();
@@ -9553,7 +9900,7 @@ fn test_symlink() {
 
 #[test]
 fn test_hard_link() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/original.txt", b"data").unwrap();
 
     backend.hard_link("/original.txt", "/hardlink.txt").unwrap();
@@ -9568,7 +9915,7 @@ fn test_hard_link() {
 
 #[test]
 fn test_symlink_metadata() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/target.txt", b"data").unwrap();
     backend.symlink("/target.txt", "/link.txt").unwrap();
 
@@ -9579,7 +9926,7 @@ fn test_symlink_metadata() {
 
 #[test]
 fn test_set_permissions() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
 
     backend.set_permissions("/file.txt", Permissions::from_mode(0o644)).unwrap();
@@ -9590,7 +9937,7 @@ fn test_set_permissions() {
 
 #[test]
 fn test_sync() {
-    let mut backend = create_backend();
+    let backend = create_backend();
     backend.write("/file.txt", b"data").unwrap();
 
     // Should not error
@@ -9615,9 +9962,9 @@ fn test_statfs() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_quota_blocks_when_exceeded() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_total_size(100);
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_total_size(100).build());
+    let fs = FileStorage::new(backend);
 
     let result = fs.write("/big.txt", &amp;[0u8; 200]);
 
@@ -9626,9 +9973,9 @@ fn test_quota_blocks_when_exceeded() {
 
 #[test]
 fn test_quota_allows_within_limit() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_total_size(1000);
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_total_size(1000).build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/small.txt", &amp;[0u8; 100]).unwrap();
 
@@ -9637,9 +9984,9 @@ fn test_quota_allows_within_limit() {
 
 #[test]
 fn test_quota_tracks_deletes() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_total_size(100);
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_total_size(100).build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", &amp;[0u8; 50]).unwrap();
     fs.remove_file("/file.txt").unwrap();
@@ -9650,9 +9997,9 @@ fn test_quota_tracks_deletes() {
 
 #[test]
 fn test_quota_max_file_size() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_file_size(50);
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_file_size(50).build());
+    let fs = FileStorage::new(backend);
 
     let result = fs.write("/big.txt", &amp;[0u8; 100]);
 
@@ -9661,9 +10008,9 @@ fn test_quota_max_file_size() {
 
 #[test]
 fn test_quota_streaming_write() {
-    let backend = Quota::new(MemoryBackend::new())
-        .with_max_total_size(100);
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_total_size(100).build());
+    let fs = FileStorage::new(backend);
 
     let mut writer = fs.open_write("/file.txt").unwrap();
     writer.write_all(&amp;[0u8; 50]).unwrap();
@@ -9680,9 +10027,9 @@ fn test_quota_streaming_write() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_restrictions_blocks_symlinks() {
-    let backend = Restrictions::new(MemoryBackend::new())
-        .deny_symlinks();
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RestrictionsLayer::builder().deny_symlinks().build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/target.txt", b"data").unwrap();
     let result = fs.symlink("/target.txt", "/link.txt");
@@ -9692,9 +10039,9 @@ fn test_restrictions_blocks_symlinks() {
 
 #[test]
 fn test_restrictions_allows_non_blocked() {
-    let backend = Restrictions::new(MemoryBackend::new())
-        .deny_symlinks();  // Only block symlinks
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RestrictionsLayer::builder().deny_symlinks().build());  // Only block symlinks
+    let fs = FileStorage::new(backend);
 
     // Hard links should still work
     fs.write("/target.txt", b"data").unwrap();
@@ -9703,9 +10050,9 @@ fn test_restrictions_allows_non_blocked() {
 
 #[test]
 fn test_restrictions_blocks_permissions() {
-    let backend = Restrictions::new(MemoryBackend::new())
-        .deny_permissions();
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RestrictionsLayer::builder().deny_permissions().build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();
     let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o777));
@@ -9718,9 +10065,9 @@ fn test_restrictions_blocks_permissions() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_pathfilter_allows_matching() {
-    let backend = PathFilter::new(MemoryBackend::new())
-        .allow("/workspace/**");
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(PathFilterLayer::builder().allow("/workspace/**").build());
+    let fs = FileStorage::new(backend);
 
     fs.create_dir_all("/workspace/project").unwrap();
     fs.write("/workspace/project/file.txt", b"data").unwrap();
@@ -9728,9 +10075,9 @@ fn test_pathfilter_allows_matching() {
 
 #[test]
 fn test_pathfilter_blocks_non_matching() {
-    let backend = PathFilter::new(MemoryBackend::new())
-        .allow("/workspace/**");
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(PathFilterLayer::builder().allow("/workspace/**").build());
+    let fs = FileStorage::new(backend);
 
     let result = fs.write("/etc/passwd", b"data");
 
@@ -9739,10 +10086,12 @@ fn test_pathfilter_blocks_non_matching() {
 
 #[test]
 fn test_pathfilter_deny_overrides_allow() {
-    let backend = PathFilter::new(MemoryBackend::new())
-        .allow("/workspace/**")
-        .deny("**/.env");
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(PathFilterLayer::builder()
+            .allow("/workspace/**")
+            .deny("**/.env")
+            .build());
+    let fs = FileStorage::new(backend);
 
     let result = fs.write("/workspace/.env", b"SECRET=xxx");
 
@@ -9755,9 +10104,11 @@ fn test_pathfilter_read_dir_filters() {
     inner.write("/workspace/allowed.txt", b"data").unwrap();
     inner.write("/workspace/.env", b"secret").unwrap();
 
-    let backend = PathFilter::new(inner)
-        .allow("/workspace/**")
-        .deny("**/.env");
+    let backend = inner
+        .layer(PathFilterLayer::builder()
+            .allow("/workspace/**")
+            .deny("**/.env")
+            .build());
     let fs = FileStorage::new(backend);
 
     let entries = fs.read_dir("/workspace").unwrap();
@@ -9776,7 +10127,7 @@ fn test_readonly_blocks_writes() {
     inner.write("/file.txt", b"original").unwrap();
 
     let backend = ReadOnly::new(inner);
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     let result = fs.write("/file.txt", b"modified");
     assert!(matches!(result, Err(FsError::ReadOnly { .. })));
@@ -9803,12 +10154,11 @@ fn test_readonly_allows_reads() {
 fn test_middleware_composition_order() {
     // Quota inside, Restrictions outside
     // Quota should be checked before restrictions
-    let backend = Restrictions::new(
-        Quota::new(MemoryBackend::new())
-            .with_max_total_size(100)
-    ).deny_symlinks();
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder().max_total_size(100).build())
+        .layer(RestrictionsLayer::builder().deny_symlinks().build());
 
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     // Write should hit quota first
     let result = fs.write("/big.txt", &amp;[0u8; 200]);
@@ -9822,7 +10172,7 @@ fn test_layer_syntax() {
         .layer(RestrictionsLayer::new().deny_symlinks())
         .layer(TracingLayer::new());
 
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
     fs.write("/test.txt", b"data").unwrap();
 }
 <span class="boring">}</span></code></pre>
@@ -9879,7 +10229,7 @@ fn test_error_not_found() {
 
 #[test]
 fn test_error_already_exists() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     fs.create_dir("/mydir").unwrap();
 
     match fs.create_dir("/mydir") {
@@ -9892,7 +10242,7 @@ fn test_error_already_exists() {
 
 #[test]
 fn test_error_not_a_directory() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     fs.write("/file.txt", b"data").unwrap();
 
     match fs.read_dir("/file.txt") {
@@ -9905,7 +10255,7 @@ fn test_error_not_a_directory() {
 
 #[test]
 fn test_error_directory_not_empty() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     fs.create_dir("/mydir").unwrap();
     fs.write("/mydir/file.txt", b"data").unwrap();
 
@@ -9923,7 +10273,7 @@ fn test_error_directory_not_empty() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_concurrent_reads() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.write("/file.txt", b"data").unwrap();
     let backend = Arc::new(RwLock::new(backend));
 
@@ -9992,7 +10342,7 @@ fn stress_test_concurrent_operations() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_path_normalization() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("/a/b/../c/file.txt", b"data").unwrap();
 
@@ -10002,7 +10352,7 @@ fn test_path_normalization() {
 
 #[test]
 fn test_double_slashes() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("//a//b//file.txt", b"data").unwrap();
 
@@ -10027,7 +10377,7 @@ fn test_empty_path_returns_error() {
 
 #[test]
 fn test_unicode_paths() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("/文件/データ.txt", b"data").unwrap();
 
@@ -10036,7 +10386,7 @@ fn test_unicode_paths() {
 
 #[test]
 fn test_paths_with_spaces() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
 
     fs.write("/my folder/my file.txt", b"data").unwrap();
 
@@ -10055,20 +10405,20 @@ fn no_panic_missing_file() {
 
 #[test]
 fn no_panic_missing_parent() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     let _ = fs.write("/missing/parent/file.txt", b"data");  // Should return Err
 }
 
 #[test]
 fn no_panic_read_dir_on_file() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     fs.write("/file.txt", b"data").unwrap();
     let _ = fs.read_dir("/file.txt");  // Should return Err, not panic
 }
 
 #[test]
 fn no_panic_remove_nonempty_dir() {
-    let mut fs = FileStorage::new(MemoryBackend::new());
+    let fs = FileStorage::new(MemoryBackend::new());
     fs.create_dir("/dir").unwrap();
     fs.write("/dir/file.txt", b"data").unwrap();
     let _ = fs.remove_dir("/dir");  // Should return Err, not panic
@@ -10081,7 +10431,7 @@ fn no_panic_remove_nonempty_dir() {
 </span>// Virtual backend symlink following control
 #[test]
 fn test_virtual_backend_follow_symlinks_enabled() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.write("/target.txt", b"secret").unwrap();
     backend.symlink("/target.txt", "/link.txt").unwrap();
 
@@ -10091,7 +10441,7 @@ fn test_virtual_backend_follow_symlinks_enabled() {
 
 #[test]
 fn test_virtual_backend_follow_symlinks_disabled() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.set_follow_symlinks(false);
     backend.write("/target.txt", b"secret").unwrap();
     backend.symlink("/target.txt", "/link.txt").unwrap();
@@ -10103,7 +10453,7 @@ fn test_virtual_backend_follow_symlinks_disabled() {
 
 #[test]
 fn test_symlink_chain_resolution() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.write("/target.txt", b"data").unwrap();
     backend.symlink("/target.txt", "/link1.txt").unwrap();
     backend.symlink("/link1.txt", "/link2.txt").unwrap();
@@ -10114,7 +10464,7 @@ fn test_symlink_chain_resolution() {
 
 #[test]
 fn test_symlink_loop_detection() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     backend.symlink("/link2.txt", "/link1.txt").unwrap();
     backend.symlink("/link1.txt", "/link2.txt").unwrap();
 
@@ -10124,7 +10474,7 @@ fn test_symlink_loop_detection() {
 
 #[test]
 fn test_virtual_symlink_cannot_escape() {
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     // Create a symlink pointing "outside" - but in virtual backend, paths are just keys
     backend.symlink("../../../etc/passwd", "/link.txt").unwrap();
 
@@ -10183,7 +10533,7 @@ fn test_vroot_allows_internal_symlinks() {
 fn test_vroot_canonicalizes_paths() {
     let temp = tempfile::tempdir().unwrap();
     let backend = VRootFsBackend::new(temp.path()).unwrap();
-    let mut fs = FileStorage::new(backend);
+    let fs = FileStorage::new(backend);
 
     fs.create_dir("/a").unwrap();
     fs.write("/a/file.txt", b"data").unwrap();
@@ -10198,10 +10548,9 @@ fn test_vroot_canonicalizes_paths() {
 </span><span class="boring">fn main() {
 </span>#[test]
 fn test_ratelimit_allows_within_limit() {
-    let backend = RateLimit::new(MemoryBackend::new())
-        .max_ops(10)
-        .per_second();
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RateLimitLayer::builder().max_ops(10).per_second().build());
+    let fs = FileStorage::new(backend);
 
     // Should succeed within limit
     for i in 0..5 {
@@ -10211,10 +10560,9 @@ fn test_ratelimit_allows_within_limit() {
 
 #[test]
 fn test_ratelimit_blocks_when_exceeded() {
-    let backend = RateLimit::new(MemoryBackend::new())
-        .max_ops(3)
-        .per_second();
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RateLimitLayer::builder().max_ops(3).per_second().build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/file1.txt", b"data").unwrap();
     fs.write("/file2.txt", b"data").unwrap();
@@ -10226,10 +10574,9 @@ fn test_ratelimit_blocks_when_exceeded() {
 
 #[test]
 fn test_ratelimit_resets_after_window() {
-    let backend = RateLimit::new(MemoryBackend::new())
-        .max_ops(2)
-        .per(Duration::from_millis(100));
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RateLimitLayer::builder().max_ops(2).per(Duration::from_millis(100)).build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/file1.txt", b"data").unwrap();
     fs.write("/file2.txt", b"data").unwrap();
@@ -10243,10 +10590,9 @@ fn test_ratelimit_resets_after_window() {
 
 #[test]
 fn test_ratelimit_counts_all_operations() {
-    let backend = RateLimit::new(MemoryBackend::new())
-        .max_ops(3)
-        .per_second();
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(RateLimitLayer::builder().max_ops(3).per_second().build());
+    let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();  // 1
     let _ = fs.read("/file.txt");              // 2
@@ -10278,11 +10624,12 @@ fn test_tracing_logs_operations() {
     let logger = TestLogger::default();
     let logs = Arc::clone(&amp;logger.logs);
 
-    let backend = Tracing::new(MemoryBackend::new())
-        .with_logger(move |op| {
-            logs.lock().unwrap().push(op.to_string());
-        });
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(TracingLayer::new()
+            .with_logger(move |op| {
+                logs.lock().unwrap().push(op.to_string());
+            }));
+    let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();
     fs.read("/file.txt").unwrap();
@@ -10297,11 +10644,12 @@ fn test_tracing_includes_path() {
     let logger = TestLogger::default();
     let logs = Arc::clone(&amp;logger.logs);
 
-    let backend = Tracing::new(MemoryBackend::new())
-        .with_logger(move |op| {
-            logs.lock().unwrap().push(op.to_string());
-        });
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new()
+        .layer(TracingLayer::new()
+            .with_logger(move |op| {
+                logs.lock().unwrap().push(op.to_string());
+            }));
+    let fs = FileStorage::new(backend);
 
     fs.write("/important/secret.txt", b"data").unwrap();
 
@@ -10314,10 +10662,11 @@ fn test_tracing_logs_errors() {
     let logger = TestLogger::default();
     let logs = Arc::clone(&amp;logger.logs);
 
-    let backend = Tracing::new(MemoryBackend::new())
-        .with_logger(move |op| {
-            logs.lock().unwrap().push(op.to_string());
-        });
+    let backend = MemoryBackend::new()
+        .layer(TracingLayer::new()
+            .with_logger(move |op| {
+                logs.lock().unwrap().push(op.to_string());
+            }));
     let fs = FileStorage::new(backend);
 
     let _ = fs.read("/nonexistent.txt");
@@ -10330,8 +10679,8 @@ fn test_tracing_logs_errors() {
 fn test_tracing_with_span_context() {
     use tracing::{info_span, Instrument};
 
-    let backend = Tracing::new(MemoryBackend::new());
-    let mut fs = FileStorage::new(backend);
+    let backend = MemoryBackend::new().layer(TracingLayer::new());
+    let fs = FileStorage::new(backend);
 
     async {
         fs.write("/async.txt", b"data").unwrap();
@@ -10373,10 +10722,11 @@ fn test_vroot_backend_interchangeable() {
 
 #[test]
 fn test_middleware_stack_interchangeable() {
-    let backend = Tracing::new(
-        Quota::new(MemoryBackend::new())
-            .with_max_total_size(1024 * 1024)
-    );
+    let backend = MemoryBackend::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(1024 * 1024)
+            .build())
+        .layer(TracingLayer::new());
     generic_filesystem_test(backend);
 }
 <span class="boring">}</span></code></pre>
@@ -10389,7 +10739,7 @@ fn test_middleware_stack_interchangeable() {
 proptest! {
     #[test]
     fn prop_write_read_roundtrip(data: Vec&lt;u8&gt;) {
-        let mut backend = MemoryBackend::new();
+        let backend = MemoryBackend::new();
         backend.write("/file.bin", &amp;data).unwrap();
         let read_data = backend.read("/file.bin").unwrap();
         prop_assert_eq!(data, read_data);
@@ -10397,7 +10747,7 @@ proptest! {
 
     #[test]
     fn prop_path_normalization_idempotent(path in "[a-z/]{1,50}") {
-        let mut backend = MemoryBackend::new();
+        let backend = MemoryBackend::new();
         if let Ok(()) = backend.create_dir_all(&amp;path) {
             // Creating again should either succeed or return AlreadyExists
             let result = backend.create_dir_all(&amp;path);
@@ -10411,9 +10761,9 @@ proptest! {
         file_sizes in prop::collection::vec(1..100usize, 1..10)
     ) {
         let limit = 500usize;
-        let backend = Quota::new(MemoryBackend::new())
-            .with_max_total_size(limit as u64);
-        let mut fs = FileStorage::new(backend);
+        let backend = MemoryBackend::new()
+            .layer(QuotaLayer::builder().max_total_size(limit as u64).build());
+        let fs = FileStorage::new(backend);
 
         let mut total_written = 0usize;
         for (i, size) in file_sizes.into_iter().take(file_count).enumerate() {
@@ -10452,7 +10802,7 @@ fn test_clone_creates_independent_copy() {
 
 #[test]
 fn test_checkpoint_and_rollback() {
-    let mut fs = MemoryBackend::new();
+    let fs = MemoryBackend::new();
     fs.write("/important.txt", b"original").unwrap();
 
     // Checkpoint = clone
@@ -10471,7 +10821,7 @@ fn test_persistence_roundtrip() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("state.bin");
 
-    let mut fs = MemoryBackend::new();
+    let fs = MemoryBackend::new();
     fs.write("/data.txt", b"persisted").unwrap();
 
     // Save
@@ -10484,7 +10834,7 @@ fn test_persistence_roundtrip() {
 
 #[test]
 fn test_to_bytes_from_bytes() {
-    let mut fs = MemoryBackend::new();
+    let fs = MemoryBackend::new();
     fs.create_dir_all("/a/b/c").unwrap();
     fs.write("/a/b/c/file.txt", b"nested").unwrap();
 
@@ -10548,7 +10898,7 @@ where
     F: Fn(&amp;mut dyn Fs),
 {
     // Memory
-    let mut backend = MemoryBackend::new();
+    let backend = MemoryBackend::new();
     test(&amp;mut backend);
 
     // SQLite
@@ -10753,11 +11103,11 @@ let entry = self.entries.get(&amp;path)
 </span><span class="boring">fn main() {
 </span>#[derive(Debug, thiserror::Error)]
 pub enum FsError {
-    #[error("not found: {path}")]
-    NotFound { path: PathBuf },
+    #[error("{operation}: not found: {path}")]
+    NotFound { path: PathBuf, operation: &amp;'static str },
 
-    #[error("already exists: {path}")]
-    AlreadyExists { path: PathBuf },
+    #[error("{operation}: already exists: {path}")]
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
 
     #[error("quota exceeded: limit {limit}, attempted {attempted}")]
     QuotaExceeded { limit: u64, attempted: u64 },
@@ -11033,7 +11383,7 @@ If we follow the symlink:
 </span><span class="boring">fn main() {
 </span>/// Virtual backends where we control everything
 pub trait VirtualFs: Fs {
-    fn set_symlink_resolution(&amp;mut self, enabled: bool);
+    fn set_symlink_resolution(&amp;self, enabled: bool);
 }
 
 /// Real filesystem backends where OS controls symlink resolution
@@ -11151,7 +11501,7 @@ strict-path: /escape is NOT within /root → DENIED
 <p><strong>Virtual backends provide <code>set_follow_symlinks(bool)</code></strong> - the actual security control:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let mut backend = MemoryBackend::new();
+</span>let backend = MemoryBackend::new();
 backend.set_follow_symlinks(false);  // Symlinks not resolved during path operations
 <span class="boring">}</span></code></pre>
 </li>

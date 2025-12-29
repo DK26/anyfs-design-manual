@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -216,7 +216,7 @@
 <h3 id="fsread"><a class="header" href="#fsread">FsRead</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsRead: Send {
+</span>pub trait FsRead: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
     fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt;;
     fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
@@ -228,25 +228,25 @@
 <h3 id="fswrite"><a class="header" href="#fswrite">FsWrite</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsWrite: Send {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+</span>pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsdir"><a class="header" href="#fsdir">FsDir</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsDir: Send {
+</span>pub trait FsDir: Send + Sync {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
@@ -254,9 +254,9 @@
 <h3 id="fslink"><a class="header" href="#fslink">FsLink</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLink: Send {
-    fn symlink(&amp;mut self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLink: Send + Sync {
+    fn symlink(&amp;self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
@@ -264,22 +264,22 @@
 <h3 id="fspermissions"><a class="header" href="#fspermissions">FsPermissions</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsPermissions: Send {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsPermissions: Send + Sync {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fssync"><a class="header" href="#fssync">FsSync</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsSync: Send {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsSync: Send + Sync {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsstats"><a class="header" href="#fsstats">FsStats</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsStats: Send {
+</span>pub trait FsStats: Send + Sync {
     fn statfs(&amp;self) -&gt; Result&lt;StatFs, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -288,7 +288,7 @@
 <h3 id="fsinode"><a class="header" href="#fsinode">FsInode</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsInode: Send {
+</span>pub trait FsInode: Send + Sync {
     fn path_to_inode(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;u64, FsError&gt;;
     fn inode_to_path(&amp;self, inode: u64) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn lookup(&amp;self, parent_inode: u64, name: &amp;OsStr) -&gt; Result&lt;u64, FsError&gt;;
@@ -330,29 +330,29 @@ pub enum LockType {
 <h3 id="fshandles"><a class="header" href="#fshandles">FsHandles</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsHandles: Send {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+</span>pub trait FsHandles: Send + Sync {
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fslock"><a class="header" href="#fslock">FsLock</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLock: Send {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLock: Send + Sync {
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fsxattr"><a class="header" href="#fsxattr">FsXattr</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsXattr: Send {
+</span>pub trait FsXattr: Send + Sync {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -405,7 +405,7 @@ fn process_files(fs: &amp;impl Fs) -&gt; Result&lt;(), FsError&gt; {
 }
 
 // Requires link support
-fn create_backup(fs: &amp;mut (impl Fs + FsLink)) -&gt; Result&lt;(), FsError&gt; {
+fn create_backup(fs: &amp;(impl Fs + FsLink)) -&gt; Result&lt;(), FsError&gt; {
     fs.hard_link("/data.txt", "/data.txt.bak")?;
     Ok(())
 }
@@ -432,7 +432,7 @@ fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), FsError&gt; {
     #[cfg(feature = "serde")]
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
     #[cfg(feature = "serde")]
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
 }
 
 // Blanket implementation

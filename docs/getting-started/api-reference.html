@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -194,36 +194,31 @@ anyfs = "0.1"
 <h2 id="creating-a-backend-stack"><a class="header" href="#creating-a-backend-stack">Creating a Backend Stack</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
+</span>use anyfs::{MemoryBackend, SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Simple
 let fs = FileStorage::new(MemoryBackend::new());
 
 // With limits
 let fs = FileStorage::new(
-    Quota::new(SqliteBackend::open("data.db")?)
-        .with_max_total_size(100 * 1024 * 1024)
-        .with_max_file_size(10 * 1024 * 1024)
+    SqliteBackend::open("data.db")?
+        .layer(QuotaLayer::builder()
+            .max_total_size(100 * 1024 * 1024)
+            .max_file_size(10 * 1024 * 1024)
+            .build())
 );
 
-// Full stack (manual composition)
-let fs = FileStorage::new(
-    Tracing::new(
-        Restrictions::new(
-            Quota::new(SqliteBackend::open("data.db")?)
-                .with_max_total_size(100 * 1024 * 1024)
-        )
-        .deny_permissions()  // Block set_permissions() calls
-    )
-);
-
-// Layer-based composition
-use anyfs::{QuotaLayer, RestrictionsLayer, TracingLayer};
-
+// Full stack (fluent composition)
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new().deny_permissions())
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_permissions()
+        .build())
     .layer(TracingLayer::new());
+
+let fs = FileStorage::new(backend);
 
 // BackendStack builder (fluent API)
 use anyfs::BackendStack;
@@ -238,12 +233,15 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 <h2 id="quota-methods"><a class="header" href="#quota-methods">Quota Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Quota::new(backend)
-    .with_max_total_size(bytes)      // Total storage limit
-    .with_max_file_size(bytes)       // Per-file limit
-    .with_max_node_count(count)      // Max files/dirs
-    .with_max_dir_entries(count)     // Max entries per dir
-    .with_max_path_depth(depth)      // Max nesting
+</span>// Builder pattern (required - at least one limit must be set)
+QuotaLayer::builder()
+    .max_total_size(bytes)      // Total storage limit
+    .max_file_size(bytes)       // Per-file limit
+    .max_node_count(count)      // Max files/dirs
+    .max_dir_entries(count)     // Max entries per dir
+    .max_path_depth(depth)      // Max nesting
+    .build()
+    .layer(backend)
 
 // Query
 backend.usage()        // -&gt; Usage { total_size, file_count, ... }
@@ -254,28 +252,38 @@ backend.remaining()    // -&gt; Remaining { bytes, can_write, ... }
 <h2 id="restrictions-methods"><a class="header" href="#restrictions-methods">Restrictions Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// By default, all operations work. Use deny_*() to block specific ones.
-Restrictions::new(backend)
+</span>// Builder pattern (required - at least one restriction must be set)
+// By default, all operations work. Use deny_*() to block specific ones.
+RestrictionsLayer::builder()
     .deny_symlinks()       // Block symlink() calls
     .deny_hard_links()     // Block hard_link() calls
     .deny_permissions()    // Block set_permissions() calls
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="tracing-methods"><a class="header" href="#tracing-methods">Tracing Methods</a></h2>
+<h2 id="tracinglayer-methods"><a class="header" href="#tracinglayer-methods">TracingLayer Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Tracing::new(backend)
-    .with_target("anyfs")             // tracing target
+</span>// TracingLayer configuration (applied via .layer())
+TracingLayer::new()
+    .with_target("anyfs")              // tracing target
     .with_level(tracing::Level::DEBUG)
+
+// Usage
+let backend = inner.layer(TracingLayer::new().with_target("anyfs"));
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="pathfilter-methods"><a class="header" href="#pathfilter-methods">PathFilter Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>PathFilter::new(backend)
+</span>// Builder pattern (required - at least one rule must be set)
+PathFilterLayer::builder()
     .allow("/workspace/**")    // Allow glob pattern
     .deny("**/.env")           // Deny glob pattern
     .deny("**/secrets/**")
+    .build()
+    .layer(backend)
 
 // Rules evaluated in order; first match wins
 // No match = denied (deny by default)
@@ -293,11 +301,14 @@ Restrictions::new(backend)
 <h2 id="ratelimit-methods"><a class="header" href="#ratelimit-methods">RateLimit Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>RateLimit::new(backend)
+</span>// Builder pattern (required - must set ops and window)
+RateLimitLayer::builder()
     .max_ops(1000)           // Operation limit
     .per_second()            // Window: 1 second
     // or
     .per_minute()            // Window: 60 seconds
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="dryrun-methods"><a class="header" href="#dryrun-methods">DryRun Methods</a></h2>
@@ -317,10 +328,13 @@ dry_run.clear();                       // Clear the log
 <h2 id="cache-methods"><a class="header" href="#cache-methods">Cache Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>Cache::new(backend)
-    .max_entries(1000)                     // LRU cache size
-    .max_entry_size(1024 * 1024)          // 1MB max per entry
-    .ttl(std::time::Duration::from_secs(60))  // Expiration
+</span>// Builder pattern (required - at least max_entries must be set)
+CacheLayer::builder()
+    .max_entries(1000)                          // LRU cache size
+    .max_entry_size(1024 * 1024)               // 1MB max per entry
+    .ttl(std::time::Duration::from_secs(60))   // Expiration
+    .build()
+    .layer(backend)
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="overlay-methods"><a class="header" href="#overlay-methods">Overlay Methods</a></h2>

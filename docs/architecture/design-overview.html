@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ed90c990.js";
+            window.path_to_searchindex_js = "../searchindex-48c63341.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b60f0e7e.js"></script>
@@ -270,22 +270,24 @@
 <p><strong>Example: Secure AI Agent Sandbox</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::FileStorage;
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, FileStorage};
 
 struct AiSandbox;  // Marker type
 
 // Application composes secure defaults (marker in type annotation)
 let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
-    PathFilter::new(
-        Restrictions::new(
-            Quota::new(MemoryBackend::new())
-                .with_max_total_size(50 * 1024 * 1024)
-        )
-        .deny_hard_links()
-        .deny_permissions()
-    )
-    .allow("/workspace/**")
-    .deny("**/.env")
+    MemoryBackend::new()
+        .layer(QuotaLayer::builder()
+            .max_total_size(50 * 1024 * 1024)
+            .build())
+        .layer(RestrictionsLayer::builder()
+            .deny_hard_links()
+            .deny_permissions()
+            .build())
+        .layer(PathFilterLayer::builder()
+            .allow("/workspace/**")
+            .deny("**/.env")
+            .build())
 );
 <span class="boring">}</span></code></pre>
 <p>The backend is permissive. The application adds restrictions appropriate for its use case.</p>
@@ -343,7 +345,7 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
 <h3 id="fsread---read-operations"><a class="header" href="#fsread---read-operations">FsRead - Read Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsRead: Send {
+</span>pub trait FsRead: Send + Sync {
     fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
     fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt;;
     fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
@@ -355,48 +357,51 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
 <h3 id="fswrite---write-operations"><a class="header" href="#fswrite---write-operations">FsWrite - Write Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsWrite: Send {
-    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;mut self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;mut self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
+</span>pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
+    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> All methods use <code>&amp;self</code> (interior mutability). Backends manage their own synchronization. See ADR-023.</p>
+</blockquote>
 <h3 id="fsdir---directory-operations"><a class="header" href="#fsdir---directory-operations">FsDir - Directory Operations</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsDir: Send {
+</span>pub trait FsDir: Send + Sync {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt;;
-    fn create_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="extended-traits-layer-2---optional"><a class="header" href="#extended-traits-layer-2---optional">Extended Traits (Layer 2 - Optional)</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLink: Send {
-    fn symlink(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;mut self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+</span>pub trait FsLink: Send + Sync {
+    fn symlink(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
     fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
     fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
 }
 
-pub trait FsPermissions: Send {
-    fn set_permissions(&amp;mut self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsPermissions: Send + Sync {
+    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsSync: Send {
-    fn sync(&amp;mut self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;mut self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsSync: Send + Sync {
+    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
+    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsStats: Send {
+pub trait FsStats: Send + Sync {
     fn statfs(&amp;self) -&gt; Result&lt;StatFs, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -415,23 +420,23 @@ pub trait FsStats: Send {
 <h2 id="posix-traits-layer-4---full-posix"><a class="header" href="#posix-traits-layer-4---full-posix">POSIX Traits (Layer 4 - Full POSIX)</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsHandles: Send {
-    fn open(&amp;mut self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
+</span>pub trait FsHandles: Send + Sync {
+    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
     fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;mut self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
+    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsLock: Send {
-    fn lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;mut self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;mut self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
+pub trait FsLock: Send + Sync {
+    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
+    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
+    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
 }
 
-pub trait FsXattr: Send {
+pub trait FsXattr: Send + Sync {
     fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;mut self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
+    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
     fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
@@ -610,12 +615,14 @@ pub struct StatFs {
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, Quota};
 
-let backend = Quota::new(SqliteBackend::open("data.db")?)
-    .with_max_total_size(100 * 1024 * 1024)   // 100 MB
-    .with_max_file_size(10 * 1024 * 1024)     // 10 MB per file
-    .with_max_node_count(10_000)               // 10K files/dirs
-    .with_max_dir_entries(1_000)               // 1K entries per dir
-    .with_max_path_depth(64);
+let backend = QuotaLayer::builder()
+    .max_total_size(100 * 1024 * 1024)   // 100 MB
+    .max_file_size(10 * 1024 * 1024)     // 10 MB per file
+    .max_node_count(10_000)              // 10K files/dirs
+    .max_dir_entries(1_000)              // 1K entries per dir
+    .max_path_depth(64)
+    .build()
+    .layer(SqliteBackend::open("data.db")?);
 
 // Check usage
 let usage = backend.usage();
@@ -628,21 +635,24 @@ let remaining = backend.remaining();
 </span>use anyfs::{MemoryBackend, Restrictions};
 
 // By default, all operations work. Use deny_*() to block specific ones.
-let backend = Restrictions::new(MemoryBackend::new())
+let backend = RestrictionsLayer::builder()
     .deny_symlinks()       // Block symlink() calls
     .deny_hard_links()     // Block hard_link() calls
-    .deny_permissions();   // Block set_permissions() calls
+    .deny_permissions()    // Block set_permissions() calls
+    .build()
+    .layer(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>When blocked, operations return <code>FsError::FeatureNotEnabled</code>.</p>
 <h3 id="tracing"><a class="header" href="#tracing">Tracing<b></b></a></h3>
 <p>Integrates with the <a href="https://docs.rs/tracing">tracing</a> ecosystem for structured logging and instrumentation.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Tracing};
+</span>use anyfs::{SqliteBackend, TracingLayer};
 
-let backend = Tracing::new(SqliteBackend::open("data.db")?)
-    .with_target("anyfs")           // tracing target
-    .with_level(tracing::Level::DEBUG);
+let backend = SqliteBackend::open("data.db")?
+    .layer(TracingLayer::new()
+        .with_target("anyfs")
+        .with_level(tracing::Level::DEBUG));
 
 // Users configure tracing subscribers as they prefer
 tracing_subscriber::fmt::init();
@@ -660,11 +670,13 @@ tracing_subscriber::fmt::init();
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, PathFilter};
 
-let backend = PathFilter::new(MemoryBackend::new())
+let backend = PathFilterLayer::builder()
     .allow("/workspace/**")           // Allow all under /workspace
     .allow("/tmp/**")                  // Allow temp files
     .deny("/workspace/.env")           // But deny .env files
-    .deny("**/.git/**");               // Deny all .git directories
+    .deny("**/.git/**")               // Deny all .git directories
+    .build()
+    .layer(MemoryBackend::new());
 <span class="boring">}</span></code></pre>
 <p>When a path is denied, operations return <code>FsError::AccessDenied</code>.</p>
 <h3 id="readonly"><a class="header" href="#readonly">ReadOnly<b></b></a></h3>
@@ -686,10 +698,12 @@ backend.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 </span>use anyfs::{MemoryBackend, RateLimit};
 use std::time::Duration;
 
-let backend = RateLimit::new(MemoryBackend::new())
-    .with_max_ops(100)                        // 100 ops per window
-    .with_window(Duration::from_secs(1))      // 1 second window
-    .with_max_burst(10);                      // Allow bursts up to 10
+let backend = RateLimitLayer::builder()
+    .max_ops(100)                        // 100 ops per window
+    .window(Duration::from_secs(1))      // 1 second window
+    .max_burst(10)                       // Allow bursts up to 10
+    .build()
+    .layer(MemoryBackend::new());
 
 // When rate exceeded: FsError::RateLimitExceeded
 <span class="boring">}</span></code></pre>
@@ -699,7 +713,7 @@ let backend = RateLimit::new(MemoryBackend::new())
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, DryRun};
 
-let mut backend = DryRun::new(MemoryBackend::new());
+let backend = DryRun::new(MemoryBackend::new());
 
 backend.write("/test.txt", b"hello")?;  // Logged but not written
 backend.read("/test.txt");               // Error: file doesn't exist
@@ -714,10 +728,12 @@ let ops = backend.operations();
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, Cache};
 
-let backend = Cache::new(SqliteBackend::open("data.db")?)
-    .with_max_size(100 * 1024 * 1024)  // 100 MB cache
-    .with_max_entries(10_000)           // Max 10K entries
-    .with_ttl(Duration::from_secs(300)); // 5 min TTL
+let backend = CacheLayer::builder()
+    .max_size(100 * 1024 * 1024)      // 100 MB cache
+    .max_entries(10_000)              // Max 10K entries
+    .ttl(Duration::from_secs(300))    // 5 min TTL
+    .build()
+    .layer(SqliteBackend::open("data.db")?);
 
 // First read: hits backend, caches result
 let data = backend.read("/file.txt")?;
@@ -763,7 +779,7 @@ let backend = Overlay::new(base, upper);
 </span>use anyfs::{MemoryBackend, FileStorage};
 
 // Type is inferred - no need to write it out
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 
 fs.create_dir_all("/documents")?;
 fs.write("/documents/hello.txt", b"Hello!")?;
@@ -867,12 +883,12 @@ pub trait Layer&lt;B: Fs&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// QuotaLayer, TracingLayer, RestrictionsLayer, etc.
-pub struct QuotaLayer { /* config */ }
+pub struct QuotaLayer { limits: QuotaLimits }
 
 impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
     type Backend = Quota&lt;B&gt;;
     fn layer(self, backend: B) -&gt; Self::Backend {
-        Quota::new(backend).with_limits(self.limits)
+        Quota::from_limits(self.limits).layer(backend)
     }
 }
 <span class="boring">}</span></code></pre>
@@ -880,34 +896,19 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
 <hr>
 <h2 id="composing-middleware"><a class="header" href="#composing-middleware">Composing Middleware</a></h2>
 <p>Middleware composes by wrapping. Order matters - innermost applies first.</p>
-<h3 id="manual-composition"><a class="header" href="#manual-composition">Manual Composition</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, Restrictions, Tracing, FileStorage};
-
-// Build from inside out:
-let backend = SqliteBackend::open("data.db")?;
-
-let limited = Quota::new(backend)
-    .with_max_total_size(100 * 1024 * 1024);
-
-let restricted = Restrictions::new(limited)
-    .deny_hard_links()
-    .deny_permissions();
-
-let traced = Tracing::new(restricted);
-
-let mut fs = FileStorage::new(traced);
-<span class="boring">}</span></code></pre>
-<h3 id="layer-based-composition"><a class="header" href="#layer-based-composition">Layer-based Composition</a></h3>
-<p>Use the <code>Layer</code> trait for Axum-style composition:</p>
+<h3 id="fluent-composition"><a class="header" href="#fluent-composition">Fluent Composition</a></h3>
+<p>Use the <code>.layer()</code> extension method for Axum-style composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new().max_total_size(100 * 1024 * 1024))
-    .layer(RestrictionsLayer::new().deny_permissions())  // Block set_permissions()
+    .layer(QuotaLayer::builder()
+        .max_total_size(100 * 1024 * 1024)
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_permissions()  // Block set_permissions()
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <h3 id="backendstack-builder"><a class="header" href="#backendstack-builder">BackendStack Builder</a></h3>
@@ -1158,9 +1159,9 @@ let path = simplified(Path::new(r"\\?\C:\Users\foo\bar.txt"));
 let linux_fs = MemoryBackend::new();
 assert!(linux_fs.exists("/Foo.txt")? != linux_fs.exists("/foo.txt")?);
 
-// Someone wants NTFS-like behavior? Middleware or custom backend:
-let ntfs_like = CaseInsensitive::new(
-    NtfsValidation::new(MemoryBackend::new())  // Blocks CON, NUL, ADS
+// Someone wants NTFS-like behavior? User-implemented middleware or custom backend:
+let ntfs_like = CaseInsensitive::new(           // (user-implemented middleware)
+    NtfsValidation::new(MemoryBackend::new())   // (user-implemented middleware)
 );
 
 // Or full custom implementation
@@ -1187,19 +1188,19 @@ impl Fs for NtfsEmulatingBackend {
 }
 <span class="boring">}</span></code></pre>
 <p>Windows respects these flags - a case-sensitive mounted filesystem works correctly (modern Windows/WSL handle this).</p>
-<h3 id="optional-middleware-for-windows-compatibility"><a class="header" href="#optional-middleware-for-windows-compatibility">Optional Middleware for Windows Compatibility</a></h3>
-<p>For users who need Windows-safe paths in virtual backends:</p>
+<h3 id="illustrative-custom-middleware-for-windows-compatibility"><a class="header" href="#illustrative-custom-middleware-for-windows-compatibility">Illustrative: Custom Middleware for Windows Compatibility</a></h3>
+<p>For users who need Windows-safe paths in virtual backends, here are example middleware patterns (not built-in - implement as needed):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Middleware that validates paths are Windows-compatible.
+</span>/// Example: Middleware that validates paths are Windows-compatible.
 /// Rejects: CON, PRN, NUL, COM1-9, LPT1-9, trailing dots/spaces, ADS.
-pub struct NtfsValidation&lt;B&gt; { /* ... */ }
+pub struct NtfsValidation&lt;B&gt; { /* user-implemented */ }
 
-/// Middleware that makes a backend case-insensitive.
+/// Example: Middleware that makes a backend case-insensitive.
 /// Stores canonical (lowercase) keys, preserves original case in metadata.
-pub struct CaseInsensitive&lt;B&gt; { /* ... */ }
+pub struct CaseInsensitive&lt;B&gt; { /* user-implemented */ }
 <span class="boring">}</span></code></pre>
-<p><strong>Not included by default</strong> - opt-in for users who need it.</p>
+<p><strong>Not built-in</strong> - these are illustrative patterns for users who need NTFS-like behavior.</p>
 <hr>
 <h2 id="security-model"><a class="header" href="#security-model">Security Model</a></h2>
 <p>Security is achieved through composition:</p>
@@ -1228,17 +1229,23 @@ pub struct CaseInsensitive&lt;B&gt; { /* ... */ }
 
 // Build a secure sandbox for an AI agent
 let sandbox = MemoryBackend::new()
-    .layer(QuotaLayer::new()
+    .layer(QuotaLayer::builder()
         .max_total_size(50 * 1024 * 1024)  // 50 MB
-        .max_file_size(5 * 1024 * 1024))   // 5 MB per file
-    .layer(PathFilterLayer::new()
+        .max_file_size(5 * 1024 * 1024)    // 5 MB per file
+        .build())
+    .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
         .deny("**/.env")
-        .deny("**/secrets/**"))
-    .layer(RestrictionsLayer::new())        // No symlinks, no hardlinks
-    .layer(RateLimitLayer::new()
+        .deny("**/secrets/**")
+        .build())
+    .layer(RestrictionsLayer::builder()
+        .deny_symlinks()
+        .deny_hard_links()
+        .build())
+    .layer(RateLimitLayer::builder()
         .max_ops(1000)
-        .per_second())
+        .per_second()
+        .build())
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <hr>
@@ -1262,7 +1269,7 @@ pub trait FsExt: Fs {
     #[cfg(feature = "serde")]
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
     #[cfg(feature = "serde")]
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
 }
 
 // Blanket implementation for all Fs backends
@@ -1283,7 +1290,7 @@ impl&lt;B: Fs&gt; FsExt for B {
         serde_json::from_slice(&amp;bytes).map_err(|e| FsError::Deserialization(e.to_string()))
     }
 
-    fn write_json&lt;T: Serialize&gt;(&amp;mut self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
+    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
         let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
         self.write(path, &amp;bytes)
     }
@@ -1386,6 +1393,15 @@ let slice = data.slice(1000..2000);  // Zero-copy!
     /// Deserialization error (from FsExt).
     Deserialization(String),
 
+    /// Invalid password or encryption key (from SqliteCipherBackend).
+    InvalidPassword,
+
+    /// Data integrity verification failed (from encryption middleware).
+    /// AEAD tag mismatch, HMAC verification failure, etc.
+    IntegrityError {
+        path: PathBuf,
+    },
+
     /// Backend-specific error.
     Backend(String),
 
@@ -1440,7 +1456,7 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// This works identically on Windows, Linux, macOS, and WASM
-let mut fs = MemoryBackend::new();
+let fs = MemoryBackend::new();
 fs.symlink("/target", "/link")?;           // Just stores the link
 fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
 <span class="boring">}</span></code></pre>
@@ -1522,7 +1538,10 @@ pub fn symlinks_available() -&gt; bool {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[cfg(windows)]
-let backend = Restrictions::new(backend).deny_symlinks();
+let backend = RestrictionsLayer::builder()
+    .deny_symlinks()
+    .build()
+    .layer(backend);
 <span class="boring">}</span></code></pre>
 
                     </main>
