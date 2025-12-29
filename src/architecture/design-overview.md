@@ -343,7 +343,7 @@ fn process_files(fs: &impl Fs) {
 ```rust
 use anyfs::{Fs, FsLink};
 
-fn with_symlinks(fs: &mut (impl Fs + FsLink)) {
+fn with_symlinks(fs: &(impl Fs + FsLink)) {
     fs.write("/target.txt", b"content")?;
     fs.symlink("/target.txt", "/link.txt")?;
 }
