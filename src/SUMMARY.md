@@ -61,6 +61,7 @@
 - [SQLite Operational Guide](./implementation/sqlite-operations.md)
 - [Security Model](./implementation/security-model.md)
 - [Testing Guide](./implementation/testing-guide.md)
+- [Conformance Test Suite](./implementation/conformance-tests.md)
 - [Lessons from Similar Projects](./implementation/lessons-learned.md)
 
 ---
