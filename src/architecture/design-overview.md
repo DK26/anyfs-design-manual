@@ -12,7 +12,7 @@ AnyFS is an **open standard** for pluggable virtual filesystem backends in Rust.
 Anyone can:
 - Implement a custom backend for their storage needs
 - Compose middleware to add limits, logging, feature gates
-- Use the ergonomic `FileStorage<M>` wrapper
+- Use the ergonomic `FileStorage<B, M>` wrapper
 
 ---
 
@@ -20,7 +20,7 @@ Anyone can:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<M>                         │  ← Ergonomics + type-safe marker
+│  FileStorage<B, M>                      │  ← Ergonomics + type-safe marker
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │                                         │
@@ -119,7 +119,7 @@ The backend is permissive. The application adds restrictions appropriate for its
 | Crate | Purpose | Contains |
 |-------|---------|----------|
 | `anyfs-backend` | Minimal contract | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt` |
-| `anyfs` | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<M>`, `BackendStack` builder |
+| `anyfs` | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<B, M>`, `BackendStack` builder |
 
 ### Dependency Graph
 
@@ -363,21 +363,16 @@ pub const ROOT_INODE: u64 = 1;
 
 ```rust
 /// File or directory metadata.
+#[derive(Debug, Clone)]
 pub struct Metadata {
-    /// Inode number (unique identifier for this file/directory).
-    pub inode: u64,
-
-    /// Number of hard links pointing to this inode.
-    pub nlink: u64,
-
     /// Type: File, Directory, or Symlink.
     pub file_type: FileType,
 
     /// Size in bytes (0 for directories).
     pub size: u64,
 
-    /// Permission bits.
-    pub permissions: Permissions,
+    /// Permission mode bits (e.g., 0o644). None if not supported.
+    pub permissions: Option<u32>,
 
     /// Creation time (if supported by backend).
     pub created: Option<SystemTime>,
@@ -387,6 +382,23 @@ pub struct Metadata {
 
     /// Last access time (if supported by backend).
     pub accessed: Option<SystemTime>,
+
+    /// Inode number (optional - for FsInode backends).
+    pub inode: Option<u64>,
+
+    /// Number of hard links (optional - for FsLink backends).
+    pub nlink: Option<u64>,
+}
+
+impl Metadata {
+    /// Check if this is a file.
+    pub fn is_file(&self) -> bool { self.file_type == FileType::File }
+
+    /// Check if this is a directory.
+    pub fn is_dir(&self) -> bool { self.file_type == FileType::Directory }
+
+    /// Check if this is a symlink.
+    pub fn is_symlink(&self) -> bool { self.file_type == FileType::Symlink }
 }
 ```
 
@@ -405,15 +417,22 @@ pub enum FileType {
 
 ```rust
 /// Entry in a directory listing.
+#[derive(Debug, Clone)]
 pub struct DirEntry {
     /// File or directory name (not full path).
-    pub name: OsString,
+    pub name: String,
 
-    /// Inode number (avoids extra stat calls).
-    pub inode: u64,
+    /// Full path to the entry.
+    pub path: PathBuf,
 
     /// Type: File, Directory, or Symlink.
     pub file_type: FileType,
+
+    /// Size in bytes (optional - avoids extra stat calls).
+    pub size: Option<u64>,
+
+    /// Inode number (optional - for FsInode backends).
+    pub inode: Option<u64>,
 }
 ```
 
@@ -421,15 +440,24 @@ pub struct DirEntry {
 
 ```rust
 /// Unix-style permission bits.
-pub struct Permissions {
-    /// Permission mode (e.g., 0o755).
-    pub mode: u32,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Permissions(u32);
 
 impl Permissions {
-    pub fn readonly() -> Self { Permissions { mode: 0o444 } }
-    pub fn default_file() -> Self { Permissions { mode: 0o644 } }
-    pub fn default_dir() -> Self { Permissions { mode: 0o755 } }
+    /// Create permissions from a mode (e.g., 0o755).
+    pub fn from_mode(mode: u32) -> Self { Permissions(mode) }
+
+    /// Get the mode bits.
+    pub fn mode(&self) -> u32 { self.0 }
+
+    /// Read-only permissions (0o444).
+    pub fn readonly() -> Self { Permissions(0o444) }
+
+    /// Default file permissions (0o644).
+    pub fn default_file() -> Self { Permissions(0o644) }
+
+    /// Default directory permissions (0o755).
+    pub fn default_dir() -> Self { Permissions(0o755) }
 }
 ```
 
@@ -437,21 +465,31 @@ impl Permissions {
 
 ```rust
 /// Filesystem statistics.
+#[derive(Debug, Clone)]
 pub struct StatFs {
-    /// Total size in bytes.
+    /// Total size in bytes (0 = unlimited).
     pub total_bytes: u64,
+
+    /// Used bytes.
+    pub used_bytes: u64,
 
     /// Available bytes.
     pub available_bytes: u64,
 
-    /// Total number of inodes.
+    /// Total number of inodes (0 = unlimited).
     pub total_inodes: u64,
+
+    /// Used inodes.
+    pub used_inodes: u64,
 
     /// Available inodes.
     pub available_inodes: u64,
 
     /// Filesystem block size.
     pub block_size: u64,
+
+    /// Maximum filename length.
+    pub max_name_len: u64,
 }
 ```
 
@@ -678,7 +716,7 @@ fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) {
     // Can only accept Sandbox-marked containers
 }
 
-fn save_user_file(fs: &mut FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
+fn save_user_file(fs: &FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
     // Can only accept UserData-marked containers
 }
 
@@ -1250,10 +1288,13 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 
 ```rust
 pub enum FsError {
+    // ========================================================================
+    // Path/File Errors
+    // ========================================================================
+
     /// Path not found.
     NotFound {
         path: PathBuf,
-        operation: &'static str,  // "read", "metadata", etc.
     },
 
     /// Path already exists.
@@ -1271,7 +1312,38 @@ pub enum FsError {
     /// Directory not empty (for remove_dir).
     DirectoryNotEmpty { path: PathBuf },
 
-    /// Quota exceeded.
+    // ========================================================================
+    // Permission/Access Errors
+    // ========================================================================
+
+    /// Permission denied (general filesystem permission error).
+    PermissionDenied {
+        path: PathBuf,
+        operation: &'static str,
+    },
+
+    /// Access denied (from PathFilter or RBAC).
+    AccessDenied {
+        path: PathBuf,
+        reason: String,  // Dynamic reason string
+    },
+
+    /// Read-only filesystem (from ReadOnly middleware).
+    ReadOnly {
+        operation: &'static str,
+    },
+
+    /// Feature not enabled (from Restrictions middleware).
+    FeatureNotEnabled {
+        feature: &'static str,  // "symlinks", "hard_links", "permissions"
+        operation: &'static str,
+    },
+
+    // ========================================================================
+    // Resource Limit Errors
+    // ========================================================================
+
+    /// Quota exceeded (total storage).
     QuotaExceeded {
         limit: u64,
         requested: u64,
@@ -1285,54 +1357,65 @@ pub enum FsError {
         limit: u64,
     },
 
-    /// Feature not enabled (from Restrictions).
-    FeatureNotEnabled {
-        feature: &'static str,  // "symlinks", "hard_links", "permissions"
-        operation: &'static str,
-    },
-
-    /// Access denied (from PathFilter).
-    AccessDenied {
-        path: PathBuf,
-        reason: &'static str,  // "path_denied", "pattern_blocked"
-    },
-
-    /// Read-only filesystem (from ReadOnly).
-    ReadOnly {
-        operation: &'static str,
-    },
-
-    /// Rate limit exceeded (from RateLimit).
+    /// Rate limit exceeded (from RateLimit middleware).
     RateLimitExceeded {
         limit: u32,
         window_secs: u64,
     },
+
+    // ========================================================================
+    // Data Errors
+    // ========================================================================
+
+    /// Invalid data (e.g., not valid UTF-8 when string expected).
+    InvalidData {
+        path: PathBuf,
+        details: String,
+    },
+
+    /// Corrupted data (e.g., failed checksum, parse error).
+    CorruptedData {
+        path: PathBuf,
+        details: String,
+    },
+
+    /// Data integrity verification failed (AEAD tag mismatch, HMAC failure).
+    IntegrityError {
+        path: PathBuf,
+    },
+
+    /// Serialization error (from FsExt JSON methods).
+    Serialization(String),
+
+    /// Deserialization error (from FsExt JSON methods).
+    Deserialization(String),
+
+    // ========================================================================
+    // Backend/Operation Errors
+    // ========================================================================
 
     /// Operation not supported by this backend.
     NotSupported {
         operation: &'static str,
     },
 
-    /// Serialization error (from FsExt).
-    Serialization(String),
-
-    /// Deserialization error (from FsExt).
-    Deserialization(String),
-
     /// Invalid password or encryption key (from SqliteCipherBackend).
     InvalidPassword,
 
-    /// Data integrity verification failed (from encryption middleware).
-    /// AEAD tag mismatch, HMAC verification failure, etc.
-    IntegrityError {
+    /// Conflict during sync (from offline mode).
+    Conflict {
         path: PathBuf,
     },
 
-    /// Backend-specific error.
+    /// Backend-specific error (catch-all for custom backends).
     Backend(String),
 
-    /// I/O error.
-    Io(std::io::Error),
+    /// I/O error wrapper.
+    Io {
+        operation: &'static str,
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 ```
 

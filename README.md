@@ -66,18 +66,21 @@ Stack capabilities like building blocks:
 
 ```rust
 let backend = MemoryBackend::new()
-    .layer(QuotaLayer::new()
+    .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
-        .max_file_size(10 * 1024 * 1024))
-    .layer(PathFilterLayer::new()
+        .max_file_size(10 * 1024 * 1024)
+        .build())
+    .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
-        .deny("**/.env"))
-    .layer(RestrictionsLayer::new()
+        .deny("**/.env")
+        .build())
+    .layer(RestrictionsLayer::builder()
         .deny_symlinks()
-        .deny_hard_links())
+        .deny_hard_links()
+        .build())
     .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 ```
 
 ### Layered Trait System

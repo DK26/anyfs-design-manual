@@ -31,6 +31,7 @@ This file captures the decisions for the current AnyFS design.
 | ADR-021 | Overlay for union filesystem | Accepted |
 | ADR-022 | Builder pattern for configurable middleware | Accepted |
 | ADR-023 | Interior mutability for all trait methods | Accepted |
+| ADR-024 | Async Strategy | Accepted |
 
 ---
 
@@ -49,7 +50,7 @@ This file captures the decisions for the current AnyFS design.
 | Crate | Purpose |
 |-------|---------|
 | `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types |
-| `anyfs` | Backends + middleware + ergonomics (`FileStorage<M>`, `BackendStack`) |
+| `anyfs` | Backends + middleware + ergonomics (`FileStorage<B, M>`, `BackendStack`) |
 
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
@@ -249,7 +250,9 @@ pub trait Layer<B: Fs> {
 **Example:**
 ```rust
 let backend = SqliteBackend::open("data.db")?
-    .layer(QuotaLayer::new().max_total_size(100_000))
+    .layer(QuotaLayer::builder()
+        .max_total_size(100_000)
+        .build())
     .layer(TracingLayer::new());
 ```
 
@@ -287,7 +290,7 @@ pub trait FsExt: Fs {
     #[cfg(feature = "serde")]
     fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError>;
     #[cfg(feature = "serde")]
-    fn write_json<T: Serialize>(&mut self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
+    fn write_json<T: Serialize>(&self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError>;
 }
 
 impl<B: Fs> FsExt for B {}

@@ -28,9 +28,15 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       vrootfs.rs            # VRootFsBackend [feature: vrootfs]
     middleware/
       quota.rs              # Quota<B>
-      tracing.rs            # Tracing<B>
       restrictions.rs       # Restrictions<B>
-    container.rs            # FileStorage<M>
+      path_filter.rs        # PathFilter<B>
+      read_only.rs          # ReadOnly<B>
+      rate_limit.rs         # RateLimit<B>
+      tracing.rs            # Tracing<B>
+      dry_run.rs            # DryRun<B>
+      cache.rs              # Cache<B>
+      overlay.rs            # Overlay<B1, B2>
+    container.rs            # FileStorage<B, M>
     stack.rs                # BackendStack builder
 ```
 
@@ -47,14 +53,14 @@ anyfs-backend (trait + types)
 
 **Key points:**
 - Custom backends depend only on `anyfs-backend`
-- `anyfs` provides built-in backends, middleware, and the ergonomic `FileStorage<M>` wrapper
+- `anyfs` provides built-in backends, middleware, and the ergonomic `FileStorage<B, M>` wrapper
 
 ---
 
 ## Middleware Pattern
 
 ```
-FileStorage<B>
+FileStorage<B, M>
     wraps -> Tracing<B>
         wraps -> Restrictions<B>
             wraps -> Quota<B>
@@ -81,7 +87,7 @@ Middleware is always available (no feature flags).
 
 ## Where To Start
 
-- Application usage: `book/src/getting-started/guide.md`
-- Trait details: `book/src/traits/layered-traits.md`
-- Middleware: `book/src/architecture/design-overview.md`
-- Decisions: `book/src/architecture/adrs.md`
+- Application usage: [Getting Started Guide](../getting-started/guide.md)
+- Trait details: [Layered Traits](../traits/layered-traits.md)
+- Middleware: [Design Overview](../architecture/design-overview.md)
+- Decisions: [Architecture Decision Records](../architecture/adrs.md)

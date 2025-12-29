@@ -118,8 +118,12 @@ FsRead + FsWrite + FsDir  ← Core traits
 
 ### Core Traits (FsRead + FsWrite + FsDir = Fs)
 
+> **Thread Safety:** All traits require `Send + Sync` and use `&self` for all methods.
+> Backends MUST use interior mutability (`RwLock`, `Mutex`) for thread-safe concurrent access.
+> See ADR-023 for rationale.
+
 ```rust
-pub trait FsRead: Send {
+pub trait FsRead: Send + Sync {
     fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
     fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError>;
     fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
@@ -128,22 +132,22 @@ pub trait FsRead: Send {
     fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
 }
 
-pub trait FsWrite: Send {
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn append(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn remove_file(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn truncate(&mut self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError>;
-    fn open_write(&mut self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+pub trait FsWrite: Send + Sync {
+    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
+    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
+    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError>;
+    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
 }
 
-pub trait FsDir: Send {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Vec<DirEntry>, FsError>;
-    fn create_dir(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
+pub trait FsDir: Send + Sync {
+    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
+    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
 }
 
 /// Basic filesystem - covers 90% of use cases
@@ -154,23 +158,23 @@ impl<T: FsRead + FsWrite + FsDir> Fs for T {}
 ### Extended Traits
 
 ```rust
-pub trait FsLink: Send {
-    fn symlink(&mut self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn hard_link(&mut self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
+pub trait FsLink: Send + Sync {
+    fn symlink(&self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
+    fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
     fn read_link(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
     fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
 }
 
-pub trait FsPermissions: Send {
-    fn set_permissions(&mut self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError>;
+pub trait FsPermissions: Send + Sync {
+    fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError>;
 }
 
-pub trait FsSync: Send {
-    fn sync(&mut self) -> Result<(), FsError>;
-    fn fsync(&mut self, path: impl AsRef<Path>) -> Result<(), FsError>;
+pub trait FsSync: Send + Sync {
+    fn sync(&self) -> Result<(), FsError>;
+    fn fsync(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
 }
 
-pub trait FsStats: Send {
+pub trait FsStats: Send + Sync {
     fn statfs(&self) -> Result<StatFs, FsError>;
 }
 
@@ -304,7 +308,7 @@ See `guides/mounting.md` for full details.
 ### Simple
 
 ```rust
-let mut fs = FileStorage::new(MemoryBackend::new());
+let fs = FileStorage::new(MemoryBackend::new());
 fs.write("/hello.txt", b"Hello!")?;
 ```
 
@@ -320,7 +324,7 @@ let backend = MemoryBackend::new()
         .build())
     .layer(TracingLayer::new());
 
-let mut fs = FileStorage::new(backend);
+let fs = FileStorage::new(backend);
 ```
 
 ### AI Agent Sandbox

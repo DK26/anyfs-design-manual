@@ -69,7 +69,7 @@ fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) {
     // Can only accept Sandbox-marked containers
 }
 
-fn save_user_file(fs: &mut FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
+fn save_user_file(fs: &FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
     // Can only accept UserData-marked containers
 }
 
