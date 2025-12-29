@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-48c63341.js";
+            window.path_to_searchindex_js = "../searchindex-7fb16bcb.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b60f0e7e.js"></script>
+        <script src="../toc-a022a4f5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -205,9 +205,15 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       vrootfs.rs            # VRootFsBackend [feature: vrootfs]
     middleware/
       quota.rs              # Quota&lt;B&gt;
-      tracing.rs            # Tracing&lt;B&gt;
       restrictions.rs       # Restrictions&lt;B&gt;
-    container.rs            # FileStorage&lt;M&gt;
+      path_filter.rs        # PathFilter&lt;B&gt;
+      read_only.rs          # ReadOnly&lt;B&gt;
+      rate_limit.rs         # RateLimit&lt;B&gt;
+      tracing.rs            # Tracing&lt;B&gt;
+      dry_run.rs            # DryRun&lt;B&gt;
+      cache.rs              # Cache&lt;B&gt;
+      overlay.rs            # Overlay&lt;B1, B2&gt;
+    container.rs            # FileStorage&lt;B, M&gt;
     stack.rs                # BackendStack builder
 </code></pre>
 <hr>
@@ -220,11 +226,11 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <p><strong>Key points:</strong></p>
 <ul>
 <li>Custom backends depend only on <code>anyfs-backend</code></li>
-<li><code>anyfs</code> provides built-in backends, middleware, and the ergonomic <code>FileStorage&lt;M&gt;</code> wrapper</li>
+<li><code>anyfs</code> provides built-in backends, middleware, and the ergonomic <code>FileStorage&lt;B, M&gt;</code> wrapper</li>
 </ul>
 <hr>
 <h2 id="middleware-pattern"><a class="header" href="#middleware-pattern">Middleware Pattern</a></h2>
-<pre><code>FileStorage&lt;B&gt;
+<pre><code>FileStorage&lt;B, M&gt;
     wraps -&gt; Tracing&lt;B&gt;
         wraps -&gt; Restrictions&lt;B&gt;
             wraps -&gt; Quota&lt;B&gt;
@@ -245,10 +251,10 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <hr>
 <h2 id="where-to-start"><a class="header" href="#where-to-start">Where To Start</a></h2>
 <ul>
-<li>Application usage: <code>book/src/getting-started/guide.md</code></li>
-<li>Trait details: <code>book/src/traits/layered-traits.md</code></li>
-<li>Middleware: <code>book/src/architecture/design-overview.md</code></li>
-<li>Decisions: <code>book/src/architecture/adrs.md</code></li>
+<li>Application usage: <a href="../getting-started/guide.html">Getting Started Guide</a></li>
+<li>Trait details: <a href="../traits/layered-traits.html">Layered Traits</a></li>
+<li>Middleware: <a href="../architecture/design-overview.html">Design Overview</a></li>
+<li>Decisions: <a href="../architecture/adrs.html">Architecture Decision Records</a></li>
 </ul>
 
                     </main>

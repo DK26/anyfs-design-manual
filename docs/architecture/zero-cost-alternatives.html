@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Layered Traits (anyfs-backend) - AnyFS Ecosystem Manual</title>
+        <title>Zero-Cost Alternatives - AnyFS Ecosystem Manual</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/DK26/vfs-design-manual" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/DK26/vfs-design-manual/edit/main/src/traits/layered-traits.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/DK26/vfs-design-manual/edit/main/src/architecture/zero-cost-alternatives.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,299 +180,436 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="layered-traits-anyfs-backend"><a class="header" href="#layered-traits-anyfs-backend">Layered Traits (anyfs-backend)</a></h1>
-<p>AnyFS uses a <strong>layered trait architecture</strong> for maximum flexibility with minimal complexity.</p>
-<hr>
-<h2 id="trait-hierarchy"><a class="header" href="#trait-hierarchy">Trait Hierarchy</a></h2>
-<pre><code>                    FsPosix
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-   FsHandles       FsLock        FsXattr
-        │              │              │
-        └──────────────┼──────────────┘
-                       │
-                    FsFuse
-                       │
-                   FsInode
-                       │
-                    FsFull
-                       │
-        ┌──────┬───────┼───────┬──────┐
-        │      │       │       │      │
-   FsLink   FsPerm  FsSync  FsStats   │
-        │      │       │       │      │
-        └──────┴───────┼───────┴──────┘
-                       │
-                      Fs   ← Most users only need this
-                       │
-           ┌───────────┼───────────┐
-           │           │           │
-        FsRead      FsWrite     FsDir
-</code></pre>
-<p><strong>Simple rule:</strong> Import <code>Fs</code> for basic use. Add traits as needed for advanced features.</p>
-<hr>
-<h2 id="layer-1-core-traits-required"><a class="header" href="#layer-1-core-traits-required">Layer 1: Core Traits (Required)</a></h2>
+                        <h1 id="zero-cost-alternatives-for-io-operations"><a class="header" href="#zero-cost-alternatives-for-io-operations">Zero-Cost Alternatives for I/O Operations</a></h1>
+<p>This document analyzes alternatives to dynamic dispatch (<code>Box&lt;dyn Trait&gt;</code>) for streaming I/O and directory iteration.</p>
 <blockquote>
-<p><strong>Thread Safety:</strong> All traits require <code>Send + Sync</code> and use <code>&amp;self</code> for all methods. Backend implementers MUST use interior mutability (<code>RwLock</code>, <code>Mutex</code>, etc.) to ensure thread-safe concurrent access. See ADR-023 for rationale.</p>
+<p><strong>Decision:</strong> See <a href="./adrs.html#adr-025-strategic-boxing-tower-style">ADR-025: Strategic Boxing</a> for the formal decision.</p>
+<p><strong>TL;DR:</strong> We follow Tower/Axum’s approach - zero-cost on hot path (<code>read()</code>, <code>write()</code>), box at cold path boundaries (<code>open_read()</code>, <code>read_dir()</code>). The boxing cost (&lt;1% of I/O time) is negligible; the ergonomic benefits are substantial.</p>
 </blockquote>
-<h3 id="fsread"><a class="header" href="#fsread">FsRead</a></h3>
+<hr>
+<h2 id="current-design-dynamic-dispatch"><a class="header" href="#current-design-dynamic-dispatch">Current Design (Dynamic Dispatch)</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub trait FsRead: Send + Sync {
-    fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn read_to_string(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;String, FsError&gt;;
-    fn read_range(&amp;self, path: impl AsRef&lt;Path&gt;, offset: u64, len: usize) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn exists(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt;;
-    fn metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
     fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt;;
 }
-<span class="boring">}</span></code></pre>
-<h3 id="fswrite"><a class="header" href="#fswrite">FsWrite</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsWrite: Send + Sync {
-    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn append(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn rename(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn copy(&amp;self, from: impl AsRef&lt;Path&gt;, to: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn truncate(&amp;self, path: impl AsRef&lt;Path&gt;, size: u64) -&gt; Result&lt;(), FsError&gt;;
-    fn open_write(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<h3 id="fsdir"><a class="header" href="#fsdir">FsDir</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsDir: Send + Sync {
+
+pub trait FsDir: Send + Sync {
     fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;ReadDirIter, FsError&gt;;
-    fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn create_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_dir_all(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
 }
 
-/// Iterator over directory entries. Wraps a boxed iterator for flexibility.
-///
-/// - Outer `Result` (from `read_dir()`) = "can I open this directory?"
-/// - Inner `Result` (per item) = "can I read this entry?"
-pub struct ReadDirIter(Box&lt;dyn Iterator&lt;Item = Result&lt;DirEntry, FsError&gt;&gt; + Send + 'static&gt;);
+// Where ReadDirIter is:
+pub struct ReadDirIter(Box&lt;dyn Iterator&lt;Item = Result&lt;DirEntry, FsError&gt;&gt; + Send&gt;);
+<span class="boring">}</span></code></pre>
+<p><strong>Cost:</strong> One heap allocation per <code>open_read()</code>, <code>open_write()</code>, or <code>read_dir()</code> call.</p>
+<hr>
+<h2 id="option-1-associated-types-classic-approach"><a class="header" href="#option-1-associated-types-classic-approach">Option 1: Associated Types (Classic Approach)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    type Reader: Read + Send;
 
-impl Iterator for ReadDirIter {
-    type Item = Result&lt;DirEntry, FsError&gt;;
-    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; { self.0.next() }
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader, FsError&gt;;
 }
 
-impl ReadDirIter {
-    pub fn new(iter: impl Iterator&lt;Item = Result&lt;DirEntry, FsError&gt;&gt; + Send + 'static) -&gt; Self {
-        Self(Box::new(iter))
+pub trait FsDir: Send + Sync {
+    type DirIter: Iterator&lt;Item = Result&lt;DirEntry, FsError&gt;&gt; + Send;
+
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::DirIter, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="implementation"><a class="header" href="#implementation">Implementation</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl FsRead for MemoryBackend {
+    type Reader = std::io::Cursor&lt;Vec&lt;u8&gt;&gt;;
+
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader, FsError&gt; {
+        let data = self.read(path)?;
+        Ok(std::io::Cursor::new(data))
     }
+}
 
-    /// Collect all entries, short-circuiting on first error.
-    pub fn collect_all(self) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
-        self.collect()
+impl FsDir for MemoryBackend {
+    type DirIter = std::vec::IntoIter&lt;Result&lt;DirEntry, FsError&gt;&gt;;
+
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::DirIter, FsError&gt; {
+        let entries = self.collect_entries(path)?;
+        Ok(entries.into_iter())
     }
 }
 <span class="boring">}</span></code></pre>
-<hr>
-<h2 id="layer-2-extended-traits-optional"><a class="header" href="#layer-2-extended-traits-optional">Layer 2: Extended Traits (Optional)</a></h2>
-<h3 id="fslink"><a class="header" href="#fslink">FsLink</a></h3>
+<h3 id="middleware-propagation-problem"><a class="header" href="#middleware-propagation-problem">Middleware Propagation Problem</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsLink: Send + Sync {
-    fn symlink(&amp;self, target: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn hard_link(&amp;self, original: impl AsRef&lt;Path&gt;, link: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-    fn read_link(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt;;
-    fn symlink_metadata(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Metadata, FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<h3 id="fspermissions"><a class="header" href="#fspermissions">FsPermissions</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsPermissions: Send + Sync {
-    fn set_permissions(&amp;self, path: impl AsRef&lt;Path&gt;, perm: Permissions) -&gt; Result&lt;(), FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<h3 id="fssync"><a class="header" href="#fssync">FsSync</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsSync: Send + Sync {
-    fn sync(&amp;self) -&gt; Result&lt;(), FsError&gt;;
-    fn fsync(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<h3 id="fsstats"><a class="header" href="#fsstats">FsStats</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsStats: Send + Sync {
-    fn statfs(&amp;self) -&gt; Result&lt;StatFs, FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="layer-3-inode-trait-for-fuse"><a class="header" href="#layer-3-inode-trait-for-fuse">Layer 3: Inode Trait (For FUSE)</a></h2>
-<h3 id="fsinode"><a class="header" href="#fsinode">FsInode</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsInode: Send + Sync {
-    fn path_to_inode(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;u64, FsError&gt;;
-    fn inode_to_path(&amp;self, inode: u64) -&gt; Result&lt;PathBuf, FsError&gt;;
-    fn lookup(&amp;self, parent_inode: u64, name: &amp;OsStr) -&gt; Result&lt;u64, FsError&gt;;
-    fn metadata_by_inode(&amp;self, inode: u64) -&gt; Result&lt;Metadata, FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="layer-4-posix-traits-full-posix"><a class="header" href="#layer-4-posix-traits-full-posix">Layer 4: POSIX Traits (Full POSIX)</a></h2>
-<h3 id="posix-types"><a class="header" href="#posix-types">POSIX Types</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>/// Opaque file handle (inode-based for efficiency)
-pub struct Handle(pub u64);
+</span>impl&lt;B: FsRead&gt; FsRead for Quota&lt;B&gt; {
+    // Must define our own Reader type that wraps B::Reader
+    type Reader = QuotaReader&lt;B::Reader&gt;;
 
-/// File open flags (mirrors POSIX)
-#[derive(Clone, Copy, Debug)]
-pub struct OpenFlags {
-    pub read: bool,
-    pub write: bool,
-    pub create: bool,
-    pub truncate: bool,
-    pub append: bool,
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader, FsError&gt; {
+        let inner = self.inner.open_read(path)?;
+        Ok(QuotaReader::new(inner, self.usage.clone()))
+    }
 }
 
-impl OpenFlags {
-    pub const READ: Self = Self { read: true, write: false, create: false, truncate: false, append: false };
-    pub const WRITE: Self = Self { read: false, write: true, create: true, truncate: true, append: false };
-    pub const READ_WRITE: Self = Self { read: true, write: true, create: false, truncate: false, append: false };
-    pub const APPEND: Self = Self { read: false, write: true, create: true, truncate: false, append: true };
+// Every middleware needs a custom wrapper type
+struct QuotaReader&lt;R&gt; {
+    inner: R,
+    usage: Arc&lt;RwLock&lt;QuotaUsage&gt;&gt;,
 }
 
-/// File lock type (mirrors POSIX flock)
-#[derive(Clone, Copy, Debug)]
-pub enum LockType {
-    Shared,     // Multiple readers
-    Exclusive,  // Single writer
+impl&lt;R: Read&gt; Read for QuotaReader&lt;R&gt; {
+    fn read(&amp;mut self, buf: &amp;mut [u8]) -&gt; std::io::Result&lt;usize&gt; {
+        // Track bytes read if needed
+        self.inner.read(buf)
+    }
 }
 <span class="boring">}</span></code></pre>
-<h3 id="fshandles"><a class="header" href="#fshandles">FsHandles</a></h3>
+<h3 id="the-type-explosion"><a class="header" href="#the-type-explosion">The Type Explosion</a></h3>
+<p>With a middleware stack like <code>Quota&lt;PathFilter&lt;Tracing&lt;MemoryBackend&gt;&gt;&gt;</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub trait FsHandles: Send + Sync {
-    fn open(&amp;self, path: impl AsRef&lt;Path&gt;, flags: OpenFlags) -&gt; Result&lt;Handle, FsError&gt;;
-    fn read_at(&amp;self, handle: Handle, buf: &amp;mut [u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn write_at(&amp;self, handle: Handle, data: &amp;[u8], offset: u64) -&gt; Result&lt;usize, FsError&gt;;
-    fn close(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
-}
+</span>type FinalReader = QuotaReader&lt;PathFilterReader&lt;TracingReader&lt;Cursor&lt;Vec&lt;u8&gt;&gt;&gt;&gt;&gt;;
+type FinalDirIter = QuotaIter&lt;PathFilterIter&lt;TracingIter&lt;IntoIter&lt;Result&lt;DirEntry, FsError&gt;&gt;&gt;&gt;&gt;;
 <span class="boring">}</span></code></pre>
-<h3 id="fslock"><a class="header" href="#fslock">FsLock</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsLock: Send + Sync {
-    fn lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;(), FsError&gt;;
-    fn try_lock(&amp;self, handle: Handle, lock: LockType) -&gt; Result&lt;bool, FsError&gt;;
-    fn unlock(&amp;self, handle: Handle) -&gt; Result&lt;(), FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<h3 id="fsxattr"><a class="header" href="#fsxattr">FsXattr</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsXattr: Send + Sync {
-    fn get_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
-    fn set_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str, value: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
-    fn remove_xattr(&amp;self, path: impl AsRef&lt;Path&gt;, name: &amp;str) -&gt; Result&lt;(), FsError&gt;;
-    fn list_xattr(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;String&gt;, FsError&gt;;
-}
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="convenience-supertraits"><a class="header" href="#convenience-supertraits">Convenience Supertraits</a></h2>
-<p>These are automatically implemented via blanket impls:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>/// Basic filesystem - covers 90% of use cases
-pub trait Fs: FsRead + FsWrite + FsDir {}
-impl&lt;T: FsRead + FsWrite + FsDir&gt; Fs for T {}
-
-/// Full filesystem with all std::fs features
-pub trait FsFull: Fs + FsLink + FsPermissions + FsSync + FsStats {}
-impl&lt;T: Fs + FsLink + FsPermissions + FsSync + FsStats&gt; FsFull for T {}
-
-/// FUSE-mountable filesystem
-pub trait FsFuse: FsFull + FsInode {}
-impl&lt;T: FsFull + FsInode&gt; FsFuse for T {}
-
-/// Full POSIX filesystem
-pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
-impl&lt;T: FsFuse + FsHandles + FsLock + FsXattr&gt; FsPosix for T {}
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="when-to-use-each-level"><a class="header" href="#when-to-use-each-level">When to Use Each Level</a></h2>
+<h3 id="verdict"><a class="header" href="#verdict">Verdict</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Level</th><th>Trait</th><th>Use When</th></tr>
+<tr><th>Aspect</th><th>Assessment</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td><code>Fs</code></td><td>Basic file operations (read, write, dirs)</td></tr>
-<tr><td>2</td><td><code>FsFull</code></td><td>Need links, permissions, sync, or stats</td></tr>
-<tr><td>3</td><td><code>FsFuse</code></td><td>FUSE mounting or hardlink support</td></tr>
-<tr><td>4</td><td><code>FsPosix</code></td><td>Full POSIX (file handles, locks, xattr)</td></tr>
+<tr><td>Heap allocations</td><td>✅ None</td></tr>
+<tr><td>Type complexity</td><td>❌ Exponential growth</td></tr>
+<tr><td>Middleware authoring</td><td>❌ Every middleware needs wrapper types</td></tr>
+<tr><td>User ergonomics</td><td>⚠️ Type annotations become unwieldy</td></tr>
+<tr><td>Compile times</td><td>❌ Longer due to monomorphization</td></tr>
 </tbody>
 </table>
 </div>
+<p><strong>Not recommended</strong> as the primary API due to complexity explosion.</p>
 <hr>
-<h2 id="implementing-functions"><a class="header" href="#implementing-functions">Implementing Functions</a></h2>
-<p>Use trait bounds to specify requirements:</p>
+<h2 id="option-2-rpitit-rust-175"><a class="header" href="#option-2-rpitit-rust-175">Option 2: RPITIT (Rust 1.75+)</a></h2>
+<p>Return Position Impl Trait in Traits allows:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Works with any backend
-fn process_files(fs: &amp;impl Fs) -&gt; Result&lt;(), FsError&gt; {
-    let data = fs.read("/input.txt")?;
-    fs.write("/output.txt", &amp;data)?;
-    Ok(())
+</span>pub trait FsRead: Send + Sync {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;impl Read + Send, FsError&gt;;
 }
 
-// Requires link support
-fn create_backup(fs: &amp;(impl Fs + FsLink)) -&gt; Result&lt;(), FsError&gt; {
-    fs.hard_link("/data.txt", "/data.txt.bak")?;
-    Ok(())
+pub trait FsDir: Send + Sync {
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;)
+        -&gt; Result&lt;impl Iterator&lt;Item = Result&lt;DirEntry, FsError&gt;&gt; + Send, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>The compiler infers a unique anonymous type for each implementor:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl FsRead for MemoryBackend {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;impl Read + Send, FsError&gt; {
+        let data = self.read(path)?;
+        Ok(std::io::Cursor::new(data))  // Returns Cursor&lt;Vec&lt;u8&gt;&gt;, but caller sees impl Read
+    }
 }
 
-// Requires FUSE-level support
-fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), FsError&gt; {
-    anyfs_mount::FuseMount::mount(fs, "/mnt/myfs")?;
-    Ok(())
+impl FsRead for SqliteBackend {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;impl Read + Send, FsError&gt; {
+        Ok(SqliteReader::new(self.conn.clone(), path))  // Different type, same interface
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="middleware-still-works"><a class="header" href="#middleware-still-works">Middleware Still Works</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl&lt;B: FsRead&gt; FsRead for Tracing&lt;B&gt; {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;impl Read + Send, FsError&gt; {
+        let span = tracing::span!(Level::DEBUG, "open_read");
+        let _guard = span.enter();
+        self.inner.open_read(path)  // Just forward - return type is inferred
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="the-catch-object-safety"><a class="header" href="#the-catch-object-safety">The Catch: Object Safety</a></h3>
+<p><strong>RPITIT makes traits non-object-safe.</strong> You cannot do:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This won't compile with RPITIT
+let backends: Vec&lt;Box&lt;dyn FsRead&gt;&gt; = vec![...];
+<span class="boring">}</span></code></pre>
+<h3 id="verdict-1"><a class="header" href="#verdict-1">Verdict</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Heap allocations</td><td>✅ None</td></tr>
+<tr><td>Type complexity</td><td>✅ Hidden behind <code>impl Trait</code></td></tr>
+<tr><td>Middleware authoring</td><td>✅ Simple forwarding</td></tr>
+<tr><td>User ergonomics</td><td>✅ Clean API</td></tr>
+<tr><td>Object safety</td><td>❌ Lost - can’t use <code>dyn FsRead</code></td></tr>
+<tr><td>Rust version</td><td>⚠️ Requires 1.75+</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Good for performance-critical paths</strong> but sacrifices <code>dyn</code> usage.</p>
+<hr>
+<h2 id="option-3-generic-associated-types-gats"><a class="header" href="#option-3-generic-associated-types-gats">Option 3: Generic Associated Types (GATs)</a></h2>
+<p>For readers that borrow from the backend:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    type Reader&lt;'a&gt;: Read + Send where Self: 'a;
+
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader&lt;'_&gt;, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="use-case-zero-copy-reads"><a class="header" href="#use-case-zero-copy-reads">Use Case: Zero-Copy Reads</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl FsRead for MemoryBackend {
+    type Reader&lt;'a&gt; = &amp;'a [u8];  // Borrow directly from internal storage!
+
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader&lt;'_&gt;, FsError&gt; {
+        let data = self.storage.read().unwrap();
+        let bytes = data.get(path.as_ref())
+            .ok_or(FsError::NotFound { path: path.as_ref().to_path_buf() })?;
+        Ok(bytes.as_slice())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
+<p>GATs are powerful but add significant complexity:</p>
+<ul>
+<li>Lifetime parameters propagate through middleware</li>
+<li>Not all backends can provide borrowed data (SQLite must copy)</li>
+<li>Makes trait definitions harder to understand</li>
+</ul>
+<h3 id="verdict-2"><a class="header" href="#verdict-2">Verdict</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Heap allocations</td><td>✅ Can be zero-copy</td></tr>
+<tr><td>Type complexity</td><td>❌ High (lifetimes everywhere)</td></tr>
+<tr><td>Middleware authoring</td><td>❌ Complex lifetime handling</td></tr>
+<tr><td>Use case fit</td><td>⚠️ Only benefits backends with owned data</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Overkill for most use cases.</strong> Consider only for specialized zero-copy scenarios.</p>
+<hr>
+<h2 id="option-4-hybrid-approach-recommended"><a class="header" href="#option-4-hybrid-approach-recommended">Option 4: Hybrid Approach (Recommended)</a></h2>
+<p>Provide <strong>both</strong> dynamic and static APIs:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    /// Dynamic dispatch version (simple, flexible)
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt;;
+}
+
+/// Extension trait for zero-cost static dispatch
+pub trait FsReadTyped: FsRead {
+    type Reader: Read + Send;
+
+    /// Static dispatch version (zero-cost, less flexible)
+    fn open_read_typed(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader, FsError&gt;;
+}
+
+// Blanket impl for convenience when types align
+impl&lt;T: FsReadTyped&gt; FsRead for T {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt; {
+        Ok(Box::new(self.open_read_typed(path)?))
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Default: dynamic dispatch (works everywhere)
+let reader = fs.open_read("/file.txt")?;
+
+// Performance-critical: static dispatch
+let reader: MemoryReader = fs.open_read_typed("/file.txt")?;
+<span class="boring">}</span></code></pre>
+<h3 id="verdict-3"><a class="header" href="#verdict-3">Verdict</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Heap allocations</td><td>✅ Optional (use <code>_typed</code> to avoid)</td></tr>
+<tr><td>Type complexity</td><td>✅ Hidden unless you opt-in</td></tr>
+<tr><td>Middleware authoring</td><td>✅ Only implement base trait</td></tr>
+<tr><td>User ergonomics</td><td>✅ Simple default, power when needed</td></tr>
+<tr><td>Object safety</td><td>✅ Base trait remains object-safe</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Best of both worlds</strong> - simple default, zero-cost opt-in.</p>
+<hr>
+<h2 id="option-5-callback-based-iteration"><a class="header" href="#option-5-callback-based-iteration">Option 5: Callback-Based Iteration</a></h2>
+<p>Avoid returning iterators entirely:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsDir: Send + Sync {
+    fn for_each_entry&lt;F&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, f: F) -&gt; Result&lt;(), FsError&gt;
+    where
+        F: FnMut(DirEntry) -&gt; ControlFlow&lt;(), ()&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="usage-1"><a class="header" href="#usage-1">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fs.for_each_entry("/dir", |entry| {
+    println!("{}", entry.name);
+    ControlFlow::Continue(())
+})?;
+<span class="boring">}</span></code></pre>
+<h3 id="verdict-4"><a class="header" href="#verdict-4">Verdict</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Heap allocations</td><td>✅ None</td></tr>
+<tr><td>Ergonomics</td><td>❌ Callbacks are awkward</td></tr>
+<tr><td>Early exit</td><td>✅ Via <code>ControlFlow::Break</code></td></tr>
+<tr><td>Composability</td><td>❌ Can’t chain iterator methods</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Not recommended</strong> as primary API. Could be added as optimization option.</p>
+<hr>
+<h2 id="option-6-stack-allocated-small-buffer"><a class="header" href="#option-6-stack-allocated-small-buffer">Option 6: Stack-Allocated Small Buffer</a></h2>
+<p>For directory iteration, most directories are small:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use smallvec::SmallVec;
+
+pub struct ReadDirIter {
+    // Stack-allocate up to 32 entries, heap only if larger
+    entries: SmallVec&lt;[Result&lt;DirEntry, FsError&gt;; 32]&gt;,
+    index: usize,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="verdict-5"><a class="header" href="#verdict-5">Verdict</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Heap allocations</td><td>⚠️ Avoided for small directories</td></tr>
+<tr><td>Memory overhead</td><td>⚠️ Larger stack frames</td></tr>
+<tr><td>Dependencies</td><td>⚠️ Adds <code>smallvec</code> crate</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Reasonable optimization</strong> for directory iteration specifically.</p>
+<hr>
+<h2 id="recommendation"><a class="header" href="#recommendation">Recommendation</a></h2>
+<h3 id="primary-api-keep-dynamic-dispatch"><a class="header" href="#primary-api-keep-dynamic-dispatch">Primary API: Keep Dynamic Dispatch</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsRead: Send + Sync {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Box&lt;dyn Read + Send&gt;, FsError&gt;;
+}
+
+pub trait FsDir: Send + Sync {
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;ReadDirIter, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why:</strong></p>
+<ol>
+<li><strong>Simplicity</strong> - One type to learn, one API</li>
+<li><strong>Object safety</strong> - Can use <code>Box&lt;dyn Fs&gt;</code> for runtime polymorphism</li>
+<li><strong>Middleware simplicity</strong> - No wrapper types needed</li>
+<li><strong>Actual cost is low</strong> - One allocation per stream open, not per read</li>
+</ol>
+<h3 id="optional-static-dispatch-extension"><a class="header" href="#optional-static-dispatch-extension">Optional: Static Dispatch Extension</a></h3>
+<p>For performance-critical code, offer typed variants:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsReadTyped: FsRead {
+    type Reader: Read + Send;
+    fn open_read_typed(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self::Reader, FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<h3 id="future-rpitit-when-object-safety-not-needed"><a class="header" href="#future-rpitit-when-object-safety-not-needed">Future: RPITIT When Object Safety Not Needed</a></h3>
+<p>If a user doesn’t need <code>dyn Fs</code>, they can define their own trait:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait FsReadStatic: Send + Sync {
+    fn open_read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;impl Read + Send, FsError&gt;;
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="extension-trait"><a class="header" href="#extension-trait">Extension Trait</a></h2>
-<p><code>FsExt</code> provides convenience methods for any <code>Fs</code> backend:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub trait FsExt: Fs {
-    /// Check if path is a file.
-    fn is_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt;;
-
-    /// Check if path is a directory.
-    fn is_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt;;
-
-    /// JSON methods (require `serde` feature in anyfs-backend)
-    #[cfg(feature = "serde")]
-    fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt;;
-    #[cfg(feature = "serde")]
-    fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt;;
-}
-
-// Blanket implementation
-impl&lt;B: Fs&gt; FsExt for B {}
-<span class="boring">}</span></code></pre>
+<h2 id="cost-analysis-is-it-actually-a-problem"><a class="header" href="#cost-analysis-is-it-actually-a-problem">Cost Analysis: Is It Actually a Problem?</a></h2>
+<h3 id="heap-allocation-cost"><a class="header" href="#heap-allocation-cost">Heap Allocation Cost</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Allocations</th><th>Typical Size</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td><code>open_read()</code></td><td>1</td><td>~24-48 bytes (vtable + pointer)</td><td>~20-50ns</td></tr>
+<tr><td><code>read()</code> (data)</td><td>0-1</td><td>File size</td><td>Dominates</td></tr>
+<tr><td><code>read_dir()</code></td><td>1</td><td>~24-48 bytes</td><td>~20-50ns</td></tr>
+<tr><td>Iteration</td><td>0</td><td>-</td><td>-</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>The allocation is dwarfed by actual I/O time.</strong> For a 4KB file read from SQLite or disk, the Box allocation is &lt;0.1% of total time.</p>
+<h3 id="when-it-matters"><a class="header" href="#when-it-matters">When It Matters</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Scenario</th><th>Matters?</th></tr>
+</thead>
+<tbody>
+<tr><td>Reading large files</td><td>No - I/O dominates</td></tr>
+<tr><td>Reading many small files</td><td>Maybe - consider batching</td></tr>
+<tr><td>Hot loop micro-benchmarks</td><td>Yes</td></tr>
+<tr><td>Real-world applications</td><td>Rarely</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="conclusion"><a class="header" href="#conclusion">Conclusion</a></h3>
+<p><strong>Dynamic dispatch is the right default.</strong> The cost is negligible for real workloads, and the ergonomic benefits are substantial. Offer static dispatch as an opt-in escape hatch for the rare cases where it matters.</p>
+<hr>
+<h2 id="summary-decision-matrix"><a class="header" href="#summary-decision-matrix">Summary Decision Matrix</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Approach</th><th>Alloc-Free</th><th>Simple</th><th>Object-Safe</th><th>Recommended</th></tr>
+</thead>
+<tbody>
+<tr><td>Current (<code>Box&lt;dyn&gt;</code>)</td><td>❌</td><td>✅</td><td>✅</td><td>✅ Default</td></tr>
+<tr><td>Associated Types</td><td>✅</td><td>❌</td><td>✅</td><td>❌ Too complex</td></tr>
+<tr><td>RPITIT</td><td>✅</td><td>✅</td><td>❌</td><td>⚠️ When no dyn needed</td></tr>
+<tr><td>GATs</td><td>✅</td><td>❌</td><td>❌</td><td>❌ Overkill</td></tr>
+<tr><td>Hybrid</td><td>✅ opt-in</td><td>✅</td><td>✅</td><td>✅ Best of both</td></tr>
+<tr><td>Callbacks</td><td>✅</td><td>❌</td><td>✅</td><td>❌ Awkward API</td></tr>
+<tr><td>SmallVec</td><td>⚠️</td><td>✅</td><td>✅</td><td>⚠️ For ReadDirIter</td></tr>
+</tbody>
+</table>
+</div>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../architecture/zero-cost-alternatives.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/hybrid-backend-design.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../traits/files-container.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../traits/layered-traits.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -482,11 +619,11 @@ impl&lt;B: Fs&gt; FsExt for B {}
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../architecture/zero-cost-alternatives.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/hybrid-backend-design.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../traits/files-container.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../traits/layered-traits.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

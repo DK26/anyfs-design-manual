@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-48c63341.js";
+            window.path_to_searchindex_js = "../searchindex-7fb16bcb.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b60f0e7e.js"></script>
+        <script src="../toc-a022a4f5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,6 +197,9 @@ FsRead + FsWrite + FsDir  ← Core traits
 <p><strong>Rule:</strong> Implement the lowest level you need. Higher levels include all below.</p>
 <hr>
 <h2 id="pattern-1-implement-a-backend"><a class="header" href="#pattern-1-implement-a-backend">Pattern 1: Implement a Backend</a></h2>
+<blockquote>
+<p><strong>Thread Safety:</strong> All methods use <code>&amp;self</code>. Backends MUST use interior mutability (<code>RwLock</code>, <code>Mutex</code>) for thread-safe concurrent access.</p>
+</blockquote>
 <h3 id="minimum-implement-fs-3-traits"><a class="header" href="#minimum-implement-fs-3-traits">Minimum: Implement <code>Fs</code> (3 traits)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -251,8 +254,8 @@ impl FsWrite for MyBackend {
 }
 
 impl FsDir for MyBackend {
-    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;DirEntry&gt;, FsError&gt; {
-        todo!("return Vec&lt;DirEntry { name, inode, file_type }&gt;")
+    fn read_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;ReadDirIter, FsError&gt; {
+        todo!("return ReadDirIter::new(entries.into_iter().map(Ok))")
     }
     fn create_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;(), FsError&gt; {
         todo!("create single directory")
