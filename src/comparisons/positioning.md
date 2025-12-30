@@ -1,180 +1,378 @@
-# AnyFS - Comparison and Positioning
+# AnyFS: Comparison, Positioning & Honest Assessment
 
-**How AnyFS compares to existing solutions**
-
-AnyFS is a **filesystem abstraction with composable middleware**. It separates storage (backends) from policy (middleware) using a Tower-style pattern. With the SQLite backend, a tenant's filesystem becomes a single portable `.db` file.
+**A comprehensive look at why AnyFS exists, how it compares, and where it falls short**
 
 ---
 
-## Executive Comparison
+## Origin Story
 
-| Solution | Type | Middleware | Backend Choice | Quotas | Portable Storage |
-|----------|------|:----------:|:--------------:|:------:|:----------------:|
-| **AnyFS** | Library | Yes | Yes | Yes | Yes (SQLite) |
-| `vfs` crate | Library | No | Yes | No | No |
-| AgentFS | Runtime | No | No (SQLite) | No | Yes |
-| SQLAR | Format | N/A | No (SQLite) | No | Yes |
-| libsqlfs | FUSE | N/A | No (SQLite) | No | Yes |
-| OpenDAL | Library | Yes | Yes (cloud) | No | No |
+AnyFS didn't start as a filesystem abstraction. It started as a security problem.
+
+### The Path Security Problem
+
+While exploring filesystem security, I created the [`strict-path`](https://github.com/DK26/strict-path-rs) crate to ensure that externally-sourced paths could never escape their boundaries. The approach: resolve a boundary path, resolve the provided path, and validate containment.
+
+This proved far more challenging than expected. Attack vectors kept appearing:
+
+- Symlinks pointing outside the boundary
+- Windows junction points
+- NTFS Alternate Data Streams (`file.txt:hidden:$DATA`)
+- Windows 8.3 short names (`PROGRA~1`)
+- Linux `/proc` magic symlinks that escape namespaces
+- Unicode normalization tricks (NFC vs NFD)
+- URL-encoded traversal (`%2e%2e`)
+- TOCTOU race conditions
+
+Eventually, `strict-path` addressed 19+ attack vectors, making it (apparently) comprehensive. But it came with costs:
+
+- **I/O overhead** - Real filesystem resolution is expensive
+- **Existing paths only** - `std::fs::canonicalize` requires paths to exist
+- **Residual TOCTOU risk** - A symlink created between verification and operation (extremely rare, but possible)
+
+### The SQLite Revelation
+
+Then a new idea emerged: *What if the filesystem didn't exist on disk at all?*
+
+A SQLite-backed virtual filesystem would:
+- **Eliminate path security issues** - Paths are just database keys, not real files
+- **Be fully portable** - A tenant's entire filesystem in one `.db` file
+- **Have no TOCTOU** - Database transactions are atomic
+- **Work on non-existing paths** - No canonicalization needed
+
+### The Abstraction Need
+
+But then: *What if I wanted to switch from SQLite to something else later?*
+
+I didn't want to rewrite code just to explore different backends. I needed an abstraction.
+
+### The Framework Vision
+
+Research revealed that existing VFS solutions were either:
+- **Too simple** - Just swappable backends, no policies
+- **Too fixed** - Specific to one use case (AI agents, archives, etc.)
+- **Insecure** - Basic `..` traversal prevention, missing 17+ attack vectors
+
+My niche is security: **isolating filesystems, limiting actions, controlling resources**.
+
+The Tower/Axum pattern for HTTP showed how to compose middleware elegantly. Why not apply the same pattern to filesystems?
+
+Thus AnyFS: **A composable middleware framework for filesystem operations.**
 
 ---
 
-## Detailed Comparisons
+## The Landscape: What Already Exists
 
-### vs. `vfs` crate (Rust)
+### Rust Ecosystem
 
-| Aspect | `vfs` crate | AnyFS |
-|--------|-------------|-------|
-| Middleware pattern | No | Yes (Tower-style) |
-| Quotas/limits | No | Yes (Quota middleware) |
-| Path sandboxing | Backend-dependent | Yes (PathFilter middleware) |
-| Feature gating | No | Yes (Restrictions middleware) |
-| SQLite backend | No | Yes (built-in) |
-| Path containment | Prefix-based (AltrootFS) | Canonicalization-based (`strict-path`) |
-| Third-party extensibility | Implement trait | Implement trait + Layer |
-| Path type | Custom `VfsPath` | `impl AsRef<Path>` (std-compatible) |
+| Library | Stars | Downloads | Purpose |
+|---------|-------|-----------|---------|
+| [`vfs`](https://github.com/manuel-woelker/rust-vfs) | 464 | 1,700+ deps | Swappable filesystem backends |
+| [`virtual-filesystem`](https://lib.rs/crates/virtual-filesystem) | ~30 | ~260/mo | Backends with basic sandboxing |
+| [`AgentFS`](https://github.com/tursodatabase/agentfs) | New | Alpha | AI agent state management |
 
-**Path containment difference:**
+### Other Languages
 
-The `vfs` crate's `AltrootFS` uses path prefix translation - it prepends a root path before delegating to the underlying filesystem. This is vulnerable to symlink-based escapes:
+| Library | Language | Strength |
+|---------|----------|----------|
+| [fsspec](https://filesystem-spec.readthedocs.io/) | Python | Async, caching, 20+ backends |
+| [PyFilesystem2](https://github.com/PyFilesystem/pyfilesystem2) | Python | Clean URL-based API |
+| [Afero](https://github.com/spf13/afero) | Go | Composition patterns |
+| [Apache Commons VFS](https://commons.apache.org/vfs/) | Java | Enterprise, many backends |
+| [System.IO.Abstractions](https://github.com/TestableIO/System.IO.Abstractions) | .NET | Testing, mirrors System.IO |
 
+---
+
+## Honest Comparison
+
+### What Others Do Well
+
+**`vfs` crate:**
+- Mature (464 stars, 1,700+ dependent projects)
+- Multiple backends (Memory, Physical, Overlay, Embedded)
+- Async support (though being sunset)
+- Simple, focused API
+
+**`virtual-filesystem`:**
+- ZIP/TAR archive support
+- Mountable filesystem
+- Basic sandboxing attempt
+
+**AgentFS:**
+- Purpose-built for AI agents
+- SQLite backend with FUSE mounting
+- Key-value store included
+- Audit trail built-in
+- Backed by Turso (funded company)
+- TypeScript/Python SDKs
+
+**fsspec (Python):**
+- Block-wise caching (not just whole-file)
+- Async-first design
+- Excellent data science integration
+
+### What Others Do Poorly
+
+**Security in existing solutions is inadequate.**
+
+I examined `virtual-filesystem`'s `SandboxedPhysicalFS`. Here's their **entire** security implementation:
+
+```rust
+impl PathResolver for SandboxedPathResolver {
+    fn resolve_path(root: &Path, path: &str) -> Result<PathBuf> {
+        let root = root.canonicalize()?;
+        let host_path = root.join(make_relative(path)).canonicalize()?;
+
+        if !host_path.starts_with(root) {
+            return Err(io::Error::new(ErrorKind::PermissionDenied, "Traversal prevented"));
+        }
+        Ok(host_path)
+    }
+}
 ```
-AltrootFS root: /data/tenant1/
-Symlink: /data/tenant1/link → ../tenant2/secrets.txt
-Access: /link → escapes to /data/tenant2/secrets.txt
+
+That's it. ~10 lines covering **2 out of 19+** attack vectors.
+
+| Attack Vector | virtual-filesystem | strict-path |
+|---------------|:------------------:|:-----------:|
+| Basic `..` traversal | ✅ | ✅ |
+| Symlink following | ✅ | ✅ |
+| NTFS Alternate Data Streams | ❌ | ✅ |
+| Windows 8.3 short names | ❌ | ✅ |
+| Unicode normalization | ❌ | ✅ |
+| TOCTOU race conditions | ❌ | ✅ |
+| Non-existing paths | ❌ FAILS | ✅ |
+| URL-encoded traversal | ❌ | ✅ |
+| Windows UNC paths | ❌ | ✅ |
+| Linux /proc magic symlinks | ❌ | ✅ |
+| Null byte injection | ❌ | ✅ |
+| Unicode direction override | ❌ | ✅ |
+| Windows reserved names | ❌ | ✅ |
+| Junction point escapes | ❌ | ✅ |
+| **Coverage** | **2/19** | **19/19** |
+
+The `vfs` crate's `AltrootFS` is similarly basic - just path prefix translation.
+
+**No middleware composition exists anywhere.**
+
+None of the filesystem libraries offer Tower-style middleware. You can't do:
+
+```rust
+backend
+    .layer(QuotaLayer::new())
+    .layer(RateLimitLayer::new())
+    .layer(TracingLayer::new())
 ```
 
-AnyFS's `VRootFsBackend` uses `strict-path` for full canonicalization. Symlinks are resolved and validated *before* any filesystem operation, preventing escapes.
-
-**Use `vfs` when:** You need simple VFS abstraction without policies or security-sensitive containment.
-
-**Use AnyFS when:** You need composable middleware (quotas, sandboxing, logging) or hardened path containment.
+If you want quotas in `vfs`, you'd have to build it INTO each backend. Then build it again for the next backend.
 
 ---
 
-### vs. AgentFS (Turso)
+## What Makes AnyFS Unique
 
-| Aspect | AgentFS | AnyFS |
-|--------|---------|-------|
-| Scope | Agent runtime (FS + KV + auditing) | Filesystem abstraction |
-| Backend choice | SQLite only | Memory, SQLite, RealFS, custom |
-| Middleware | No | Yes (composable) |
-| KV store | Included | Not included (different abstraction) |
-| Tool auditing | Built-in | Use Tracing middleware |
+### 1. Middleware Composition (Nobody Else Has This)
 
-**Use AgentFS when:** You need a complete AI agent runtime with KV and auditing.
+```rust
+let fs = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100_MB)
+        .max_file_count(1000)
+        .build())
+    .layer(RateLimitLayer::builder()
+        .max_ops_per_second(100)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("/workspace/.git/**")
+        .build())
+    .layer(TracingLayer::new());
+```
 
-**Use AnyFS when:** You need just filesystem with backend flexibility and composable policies.
+Add, remove, or reorder middleware without touching backends. Write middleware once, use with any backend.
+
+### 2. Type-Safe Domain Separation (Nobody Else Has This)
+
+```rust
+struct Sandbox;
+struct UserData;
+
+let sandbox: FileStorage<_, Sandbox> = FileStorage::new(memory_backend);
+let userdata: FileStorage<_, UserData> = FileStorage::new(sqlite_backend);
+
+fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { ... }
+
+process_sandbox(&sandbox);   // OK
+process_sandbox(&userdata);  // COMPILE ERROR
+```
+
+Compile-time prevention of mixing storage domains.
+
+### 3. Backend-Agnostic Policies (Nobody Else Has This)
+
+| Middleware | Function | Works on ANY backend |
+|------------|----------|:--------------------:|
+| `Quota<B>` | Size/count limits | ✅ |
+| `RateLimit<B>` | Ops per second | ✅ |
+| `PathFilter<B>` | Path-based access control | ✅ |
+| `Restrictions<B>` | Disable operations | ✅ |
+| `Tracing<B>` | Audit logging | ✅ |
+| `ReadOnly<B>` | Block all writes | ✅ |
+| `Cache<B>` | LRU caching | ✅ |
+| `Overlay<B1,B2>` | Union filesystem | ✅ |
+
+### 4. Comprehensive Security Testing
+
+Our conformance test suite includes 50+ security tests covering:
+
+- Path traversal (URL-encoded, backslash, mixed)
+- Symlink attacks (escape, loops, TOCTOU)
+- Platform-specific (NTFS ADS, 8.3 names, /proc)
+- Unicode (normalization, RTL override, homoglyphs)
+- Resource exhaustion
+
+Derived from vulnerabilities in Apache Commons VFS, Afero, PyFilesystem2, and our own `strict-path` research.
 
 ---
 
-### vs. SQLAR (SQLite archive)
+## Honest Downsides of AnyFS
 
-| Aspect | SQLAR | AnyFS |
+### 1. We're New, They're Established
+
+| Metric | `vfs` | AnyFS |
 |--------|-------|-------|
-| API | SQL statements | Filesystem methods |
-| Quotas | No | Yes |
-| Middleware | No | Yes |
-| Streaming I/O | No | Yes |
+| Stars | 464 | 0 (new) |
+| Dependent projects | 1,700+ | 0 (new) |
+| Years maintained | 5+ | New |
+| Contributors | 17 | 1 |
 
-**Use SQLAR when:** You want a simple archive format.
+**Reality:** The `vfs` crate works fine for 90% of use cases. If you just need swappable backends for testing, `vfs` is battle-tested.
 
-**Use AnyFS when:** You need filesystem operations with policies.
+### 2. Complexity vs Simplicity
 
----
+```rust
+// vfs: Simple
+let fs = MemoryFS::new();
+fs.create_file("test.txt")?.write_all(b"hello")?;
 
-### vs. libsqlfs (Guardian Project)
+// AnyFS: More setup if you use middleware
+let fs = MemoryBackend::new()
+    .layer(QuotaLayer::builder().max_total_size(1_MB).build());
+fs.write("/test.txt", b"hello")?;
+```
 
-| Aspect | libsqlfs | AnyFS |
-|--------|----------|-------|
-| Interface | FUSE mount | Library API |
-| Deployment | Requires OS integration | No mount needed |
-| Backend choice | SQLite only | Multiple |
+If you don't need middleware, AnyFS adds conceptual overhead.
 
-**Use libsqlfs when:** You need a mounted filesystem.
+### 3. Sync-Only (For Now)
 
-**Use AnyFS when:** You want embedded storage without mounting.
+AnyFS is sync-first. In an async-dominated ecosystem (Tokio, etc.), this may limit adoption.
 
----
+`fsspec` (Python) and `OpenDAL` (Rust) are async-first. We're not.
 
-### vs. OpenDAL
+**Mitigation:** ADR-024 plans async support. Our `Send + Sync` bounds enable `spawn_blocking` wrappers today.
 
-| Aspect | OpenDAL | AnyFS |
-|--------|---------|-------|
-| Focus | Cloud object storage | Local/embedded filesystem |
-| Async | Yes (async-first) | Sync-first (async planned) |
-| Backends | Cloud services (S3, GCS, etc.) | Local (Memory, SQLite, RealFS) |
-| Middleware | Yes | Yes |
+### 4. AgentFS Has Momentum for AI Agents
 
-**Use OpenDAL when:** Your storage is cloud object storage.
+If you're building AI agents specifically:
 
-**Use AnyFS when:** Your storage is local/embedded.
+| Feature | AgentFS | AnyFS |
+|---------|---------|-------|
+| SQLite backend | ✅ | ✅ |
+| FUSE mounting | ✅ | Planned |
+| Key-value store | ✅ | ❌ (different abstraction) |
+| Tool call auditing | ✅ Built-in | Via Tracing middleware |
+| TypeScript SDK | ✅ | ❌ |
+| Python SDK | Coming | ❌ |
+| Corporate backing | Turso | None |
+
+AgentFS is purpose-built for AI agents with corporate resources. We're a general-purpose framework.
+
+### 5. Performance Overhead
+
+Middleware composition has costs:
+- Each layer adds a function call
+- Quota tracking requires size accounting
+- Rate limiting needs timestamp checks
+
+For hot paths with millions of ops/second, this matters. For normal usage, it doesn't.
+
+### 6. Real Filesystem Security Has Limits
+
+For `VRootFsBackend` (wrapping real filesystem):
+- Still has I/O costs for path resolution
+- Residual TOCTOU risk (extremely rare)
+- `strict-path` covers 19 vectors, but unknown unknowns exist
+
+**Virtual backends (Memory, SQLite) don't have these issues** - paths are just keys.
 
 ---
 
 ## Feature Matrix
 
-| Feature | AnyFS | `vfs` | AgentFS | OpenDAL |
-|---------|:-----:|:-----:|:-------:|:-------:|
-| Composable middleware | Yes | No | No | Yes |
-| Multiple backends | Yes | Yes | No | Yes |
-| SQLite backend | Yes | No | Yes | No |
-| Memory backend | Yes | Yes | No | Yes |
-| Real FS backend | Yes | Yes | No | No |
-| Quota enforcement | Yes | No | No | No |
-| Path sandboxing | Yes | Partial | No | No |
-| Symlink-safe containment | Yes | No | N/A | N/A |
-| Rate limiting | Yes | No | No | No |
-| Streaming I/O | Yes | Yes | Yes | Yes |
-| Async API | Planned | Partial | No | Yes |
-| FUSE mount | Possible | No | Yes | No |
+| Feature | AnyFS | `vfs` | `virtual-fs` | AgentFS | OpenDAL |
+|---------|:-----:|:-----:|:------------:|:-------:|:-------:|
+| Composable middleware | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Multiple backends | ✅ | ✅ | ✅ | ❌ | ✅ |
+| SQLite backend | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Memory backend | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Quota enforcement | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Rate limiting | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Type-safe markers | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Path sandboxing | ✅ (19 vectors) | Basic | Basic (2 vectors) | ❌ | ❌ |
+| Async API | Planned | Partial | ❌ | ❌ | ✅ |
+| std::fs-aligned API | ✅ | Custom | ✅ | ✅ | Custom |
+| FUSE mounting | Planned | ❌ | ❌ | ✅ | ❌ |
+| Conformance tests | 80+ | Unknown | Unknown | Unknown | Unknown |
 
 ---
 
 ## When to Use AnyFS
 
-**Good fit:**
-- Multi-tenant SaaS with per-tenant quotas
-- AI agent sandboxing with path restrictions
-- Desktop apps with portable user data
-- Plugin systems with isolated storage
-- Testing with deterministic isolated storage
-- Any case where you might swap backends later
+### Good Fit
 
-**Not a good fit:**
-- You must mount a filesystem (use FUSE solution)
-- You need full POSIX behavior (xattrs, ACLs)
-- Your storage is cloud object storage (use OpenDAL)
-- You need async-first design today (wait for AnyFS async)
+- **Multi-tenant SaaS** - Per-tenant quotas, path isolation, rate limiting
+- **Untrusted input sandboxing** - Comprehensive path security
+- **Policy-heavy environments** - When you need composable rules
+- **Backend flexibility** - When you might swap storage later
+- **Type-safe domain separation** - When mixing containers is dangerous
 
----
+### Not a Good Fit
 
-## Migration Examples
-
-### From `std::fs`
-
-```rust
-// Before: host filesystem
-std::fs::write("/data/file.txt", content)?;
-
-// After: AnyFS (can swap backend later)
-fs.write("/data/file.txt", content)?;
-```
-
-### From raw SQLite
-
-```rust
-// Before: raw SQL
-conn.execute("INSERT INTO files(path, data) VALUES (?, ?)", [path, data])?;
-
-// After: AnyFS with SQLite backend
-fs.write(path, data)?;
-```
+- **Simple testing** - `vfs` is simpler if you just need mock FS
+- **AI agent runtime** - AgentFS has more features for that specific use case
+- **Cloud storage** - OpenDAL is async-first with cloud backends
+- **Async-first codebases** - Wait for AnyFS async support
+- **Must mount filesystem** - Use FUSE solution directly
 
 ---
 
 ## Summary
 
-AnyFS is positioned as the **Tower/Axum of filesystems**: composable middleware over pluggable backends. It fills the gap between simple VFS abstractions (no policies) and complete runtimes (too much bundled together).
+**AnyFS exists because:**
 
-*For technical details, see [Design Overview](../architecture/design-overview.md).*
+1. Existing VFS libraries have basic, inadequate security (2/19 attack vectors)
+2. No filesystem library offers middleware composition
+3. No filesystem library offers type-safe domain separation
+4. Policy enforcement (quotas, rate limits, path filtering) doesn't exist elsewhere
+
+**AnyFS is honest about:**
+
+1. We're new, `vfs` is established
+2. We add complexity if you don't need middleware
+3. We're sync-only for now
+4. AgentFS has more resources for AI-specific use cases
+
+**AnyFS is positioned as:**
+
+> **"Tower for filesystems"** - Composable middleware over pluggable backends, with comprehensive security testing.
+
+---
+
+## Sources
+
+- [vfs crate](https://github.com/manuel-woelker/rust-vfs)
+- [virtual-filesystem crate](https://lib.rs/crates/virtual-filesystem)
+- [AgentFS](https://github.com/tursodatabase/agentfs)
+- [strict-path](https://github.com/DK26/strict-path-rs)
+- [soft-canonicalize](https://github.com/DK26/soft-canonicalize-rs)
+- [In-Memory Filesystems in Rust](https://andre.arko.net/2025/08/18/in-memory-filesystems-in-rust/) - Performance analysis
+- [Rust Forum: Virtual Filesystems](https://users.rust-lang.org/t/virtual-filesystems-for-rust/117173)
+- [Prior Art Analysis](./prior-art-analysis.md) - Detailed vulnerability research
