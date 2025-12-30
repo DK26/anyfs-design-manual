@@ -160,6 +160,180 @@ Detailed rationale lives in `src/comparisons/prior-art-analysis.md`.
 
 ---
 
+### Language Bindings (Python, C, etc.)
+
+The AnyFS design is **FFI-friendly** and can be exposed to other languages with minimal friction.
+
+**Why the design works well for FFI:**
+
+| Design Choice | FFI Benefit |
+|---------------|-------------|
+| `&self` methods (ADR-023) | Interior mutability allows holding a single `Arc<FileStorage<...>>` across FFI |
+| `Box<dyn Fs>` type erasure | `FileStorage::boxed()` provides a concrete type suitable for FFI |
+| Owned return types | `Vec<u8>`, `String`, `bool` - no lifetime issues across FFI boundary |
+| Simple structs | `Metadata`, `DirEntry`, `Permissions` map directly to Python/C structs |
+
+**Recommended approach for Python (PyO3):**
+
+```rust
+// anyfs-python/src/lib.rs
+use pyo3::prelude::*;
+use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs};
+
+#[pyclass]
+struct PyFileStorage {
+    inner: FileStorage<Box<dyn Fs>>,  // Type-erased for FFI
+}
+
+#[pymethods]
+impl PyFileStorage {
+    #[staticmethod]
+    fn memory() -> Self {
+        Self { inner: FileStorage::new(MemoryBackend::new()).boxed() }
+    }
+
+    #[staticmethod]
+    fn sqlite(path: &str) -> PyResult<Self> {
+        let backend = SqliteBackend::open(path)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+        Ok(Self { inner: FileStorage::new(backend).boxed() })
+    }
+
+    fn read(&self, path: &str) -> PyResult<Vec<u8>> {
+        self.inner.read(path)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> PyResult<()> {
+        self.inner.write(path, data)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+    }
+}
+
+#[pymodule]
+fn anyfs_python(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<PyFileStorage>()?;
+    Ok(())
+}
+```
+
+**Python usage:**
+
+```python
+from anyfs_python import PyFileStorage
+
+fs = PyFileStorage.memory()
+fs.write("/hello.txt", b"Hello from Python!")
+data = fs.read("/hello.txt")
+print(data)  # b"Hello from Python!"
+```
+
+**Key considerations for FFI:**
+
+| Concern | Solution |
+|---------|----------|
+| Generics (`FileStorage<B, M>`) | Use `FileStorage<Box<dyn Fs>>` (boxed form) for FFI layer |
+| Streaming (`Box<dyn Read>`) | Wrap in language-native class with `read(n)` method |
+| Middleware composition | Pre-build common stacks, expose as factory functions |
+| Error handling | Convert `FsError` to language-native exceptions |
+
+**Future crate:** `anyfs-python` (post-v1)
+
+### Dynamic Middleware
+
+The current design uses **compile-time generics** for zero-cost middleware composition:
+
+```rust
+// Static: type known at compile time
+let fs: Tracing<Quota<MemoryBackend>> = MemoryBackend::new()
+    .layer(QuotaLayer::builder().max_total_size(100).build())
+    .layer(TracingLayer::new());
+```
+
+For **runtime-configured** middleware (e.g., based on config files), use `Box<dyn Fs>`:
+
+```rust
+fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>> {
+    let mut backend: Box<dyn Fs> = Box::new(MemoryBackend::new());
+
+    if config.enable_quota {
+        backend = Box::new(Quota::new(backend, config.quota_limit));
+    }
+
+    if config.enable_antivirus {
+        backend = Box::new(AntivirusMiddleware::new(backend, config.av_scanner_path));
+    }
+
+    if config.enable_tracing {
+        backend = Box::new(Tracing::new(backend));
+    }
+
+    FileStorage::new(backend)
+}
+```
+
+**Trade-off:** One `Box` allocation per layer + vtable dispatch. For I/O-bound workloads, this overhead is negligible (<1% of operation time).
+
+**Example: Antivirus Middleware**
+
+```rust
+pub struct Antivirus<B> {
+    inner: B,
+    scanner: Arc<dyn VirusScanner + Send + Sync>,
+}
+
+pub trait VirusScanner: Send + Sync {
+    fn scan(&self, data: &[u8]) -> Option<String>;  // Returns threat name if detected
+}
+
+impl<B: FsWrite> FsWrite for Antivirus<B> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
+        if let Some(threat) = self.scanner.scan(data) {
+            return Err(FsError::ThreatDetected { 
+                path: path.to_path_buf(), 
+                threat_name: threat,
+            });
+        }
+        self.inner.write(path, data)
+    }
+
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError> {
+        let inner = self.inner.open_write(path)?;
+        Ok(Box::new(ScanningWriter::new(inner, self.scanner.clone())))
+    }
+}
+```
+
+**Future: Plugin System**
+
+For true runtime-loaded plugins (`.so`/`.dll`), a future `MiddlewarePlugin` trait could enable:
+
+```rust
+pub trait MiddlewarePlugin: Send + Sync {
+    fn name(&self) -> &str;
+    fn wrap(&self, backend: Box<dyn Fs>) -> Box<dyn Fs>;
+}
+
+// Load at runtime
+let plugin = libloading::Library::new("antivirus_plugin.so")?;
+let create_plugin: fn() -> Box<dyn MiddlewarePlugin> = plugin.get(b"create_plugin")?;
+let av_plugin = create_plugin();
+
+let backend = av_plugin.wrap(backend);
+```
+
+**When to use each approach:**
+
+| Scenario | Approach | Overhead |
+|----------|----------|----------|
+| Fixed middleware stack | Generics (compile-time) | Zero-cost |
+| Config-driven middleware | `Box<dyn Fs>` chaining | ~50ns per layer |
+| Runtime-loaded plugins | `MiddlewarePlugin` trait | ~50ns + plugin load |
+
+**Verdict:** The current design supports dynamic middleware via `Box<dyn Fs>`. A formal `MiddlewarePlugin` trait for hot-loading is a post-v1 enhancement.
+
+---
+
 ## Performance: Strategic Boxing (ADR-025)
 
 AnyFS follows Tower/Axum's approach to dynamic dispatch: **zero-cost on the hot path, box at boundaries where flexibility is needed**. We avoid heap allocations and dynamic dispatch unless they add flexibility without meaningful performance impact.

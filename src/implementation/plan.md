@@ -438,6 +438,8 @@ Required CI checks:
 - Archive backends (zip/tar) as separate crates
 - Indexing middleware (primary) with sidecar SQLite catalog and future pluggable engines
 - Companion shell (`anyfs-shell`) for interactive exploration of backends and middleware
+- **Language bindings** (`anyfs-python` via PyO3, C bindings) - see design-overview.md for approach
+- **Dynamic middleware plugin system** (`MiddlewarePlugin` trait for runtime-loaded `.so`/`.dll` plugins)
 
 ### `anyfs-shell` - Local Companion Shell
 
