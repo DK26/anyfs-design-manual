@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-7fb16bcb.js";
+            window.path_to_searchindex_js = "../searchindex-39540094.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a022a4f5.js"></script>
+        <script src="../toc-b1aa7698.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -270,8 +270,8 @@ type UserDataFs = FileStorage&lt;SecureBackend, UserData&gt;;
 type TenantFs&lt;T&gt; = FileStorage&lt;SecureBackend, T&gt;;
 
 // Now signatures are clean AND informative
-fn run_agent(fs: &amp;mut SandboxFs) { ... }
-fn save_document(fs: &amp;mut UserDataFs, doc: &amp;Document) { ... }
+fn run_agent(fs: &amp;SandboxFs) { ... }
+fn save_document(fs: &amp;UserDataFs, doc: &amp;Document) { ... }
 <span class="boring">}</span></code></pre>
 <h3 id="when-to-use-markers"><a class="header" href="#when-to-use-markers">When to Use Markers</a></h3>
 <div class="table-wrapper">

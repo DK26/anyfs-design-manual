@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-7fb16bcb.js";
+            window.path_to_searchindex_js = "../searchindex-39540094.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a022a4f5.js"></script>
+        <script src="../toc-b1aa7698.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,188 +180,371 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="anyfs---comparison-and-positioning"><a class="header" href="#anyfs---comparison-and-positioning">AnyFS - Comparison and Positioning</a></h1>
-<p><strong>How AnyFS compares to existing solutions</strong></p>
-<p>AnyFS is a <strong>filesystem abstraction with composable middleware</strong>. It separates storage (backends) from policy (middleware) using a Tower-style pattern. With the SQLite backend, a tenant’s filesystem becomes a single portable <code>.db</code> file.</p>
+                        <h1 id="anyfs-comparison-positioning--honest-assessment"><a class="header" href="#anyfs-comparison-positioning--honest-assessment">AnyFS: Comparison, Positioning &amp; Honest Assessment</a></h1>
+<p><strong>A comprehensive look at why AnyFS exists, how it compares, and where it falls short</strong></p>
 <hr>
-<h2 id="executive-comparison"><a class="header" href="#executive-comparison">Executive Comparison</a></h2>
+<h2 id="origin-story"><a class="header" href="#origin-story">Origin Story</a></h2>
+<p>AnyFS didn’t start as a filesystem abstraction. It started as a security problem.</p>
+<h3 id="the-path-security-problem"><a class="header" href="#the-path-security-problem">The Path Security Problem</a></h3>
+<p>While exploring filesystem security, I created the <a href="https://github.com/DK26/strict-path-rs"><code>strict-path</code></a> crate to ensure that externally-sourced paths could never escape their boundaries. The approach: resolve a boundary path, resolve the provided path, and validate containment.</p>
+<p>This proved far more challenging than expected. Attack vectors kept appearing:</p>
+<ul>
+<li>Symlinks pointing outside the boundary</li>
+<li>Windows junction points</li>
+<li>NTFS Alternate Data Streams (<code>file.txt:hidden:$DATA</code>)</li>
+<li>Windows 8.3 short names (<code>PROGRA~1</code>)</li>
+<li>Linux <code>/proc</code> magic symlinks that escape namespaces</li>
+<li>Unicode normalization tricks (NFC vs NFD)</li>
+<li>URL-encoded traversal (<code>%2e%2e</code>)</li>
+<li>TOCTOU race conditions</li>
+</ul>
+<p>Eventually, <code>strict-path</code> addressed 19+ attack vectors, making it (apparently) comprehensive. But it came with costs:</p>
+<ul>
+<li><strong>I/O overhead</strong> - Real filesystem resolution is expensive</li>
+<li><strong>Existing paths only</strong> - <code>std::fs::canonicalize</code> requires paths to exist</li>
+<li><strong>Residual TOCTOU risk</strong> - A symlink created between verification and operation (extremely rare, but possible)</li>
+</ul>
+<h3 id="the-sqlite-revelation"><a class="header" href="#the-sqlite-revelation">The SQLite Revelation</a></h3>
+<p>Then a new idea emerged: <em>What if the filesystem didn’t exist on disk at all?</em></p>
+<p>A SQLite-backed virtual filesystem would:</p>
+<ul>
+<li><strong>Eliminate path security issues</strong> - Paths are just database keys, not real files</li>
+<li><strong>Be fully portable</strong> - A tenant’s entire filesystem in one <code>.db</code> file</li>
+<li><strong>Have no TOCTOU</strong> - Database transactions are atomic</li>
+<li><strong>Work on non-existing paths</strong> - No canonicalization needed</li>
+</ul>
+<h3 id="the-abstraction-need"><a class="header" href="#the-abstraction-need">The Abstraction Need</a></h3>
+<p>But then: <em>What if I wanted to switch from SQLite to something else later?</em></p>
+<p>I didn’t want to rewrite code just to explore different backends. I needed an abstraction.</p>
+<h3 id="the-framework-vision"><a class="header" href="#the-framework-vision">The Framework Vision</a></h3>
+<p>Research revealed that existing VFS solutions were either:</p>
+<ul>
+<li><strong>Too simple</strong> - Just swappable backends, no policies</li>
+<li><strong>Too fixed</strong> - Specific to one use case (AI agents, archives, etc.)</li>
+<li><strong>Insecure</strong> - Basic <code>..</code> traversal prevention, missing 17+ attack vectors</li>
+</ul>
+<p>My niche is security: <strong>isolating filesystems, limiting actions, controlling resources</strong>.</p>
+<p>The Tower/Axum pattern for HTTP showed how to compose middleware elegantly. Why not apply the same pattern to filesystems?</p>
+<p>Thus AnyFS: <strong>A composable middleware framework for filesystem operations.</strong></p>
+<hr>
+<h2 id="the-landscape-what-already-exists"><a class="header" href="#the-landscape-what-already-exists">The Landscape: What Already Exists</a></h2>
+<h3 id="rust-ecosystem"><a class="header" href="#rust-ecosystem">Rust Ecosystem</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Solution</th><th>Type</th><th style="text-align: center">Middleware</th><th style="text-align: center">Backend Choice</th><th style="text-align: center">Quotas</th><th style="text-align: center">Portable Storage</th></tr>
+<tr><th>Library</th><th>Stars</th><th>Downloads</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>AnyFS</strong></td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (SQLite)</td></tr>
-<tr><td><code>vfs</code> crate</td><td>Library</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>AgentFS</td><td>Runtime</td><td style="text-align: center">No</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>SQLAR</td><td>Format</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>libsqlfs</td><td>FUSE</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>OpenDAL</td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (cloud)</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><a href="https://github.com/manuel-woelker/rust-vfs"><code>vfs</code></a></td><td>464</td><td>1,700+ deps</td><td>Swappable filesystem backends</td></tr>
+<tr><td><a href="https://lib.rs/crates/virtual-filesystem"><code>virtual-filesystem</code></a></td><td>~30</td><td>~260/mo</td><td>Backends with basic sandboxing</td></tr>
+<tr><td><a href="https://github.com/tursodatabase/agentfs"><code>AgentFS</code></a></td><td>New</td><td>Alpha</td><td>AI agent state management</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="other-languages"><a class="header" href="#other-languages">Other Languages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Library</th><th>Language</th><th>Strength</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://filesystem-spec.readthedocs.io/">fsspec</a></td><td>Python</td><td>Async, caching, 20+ backends</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2">PyFilesystem2</a></td><td>Python</td><td>Clean URL-based API</td></tr>
+<tr><td><a href="https://github.com/spf13/afero">Afero</a></td><td>Go</td><td>Composition patterns</td></tr>
+<tr><td><a href="https://commons.apache.org/vfs/">Apache Commons VFS</a></td><td>Java</td><td>Enterprise, many backends</td></tr>
+<tr><td><a href="https://github.com/TestableIO/System.IO.Abstractions">System.IO.Abstractions</a></td><td>.NET</td><td>Testing, mirrors System.IO</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="detailed-comparisons"><a class="header" href="#detailed-comparisons">Detailed Comparisons</a></h2>
-<h3 id="vs-vfs-crate-rust"><a class="header" href="#vs-vfs-crate-rust">vs. <code>vfs</code> crate (Rust)</a></h3>
+<h2 id="honest-comparison"><a class="header" href="#honest-comparison">Honest Comparison</a></h2>
+<h3 id="what-others-do-well"><a class="header" href="#what-others-do-well">What Others Do Well</a></h3>
+<p><strong><code>vfs</code> crate:</strong></p>
+<ul>
+<li>Mature (464 stars, 1,700+ dependent projects)</li>
+<li>Multiple backends (Memory, Physical, Overlay, Embedded)</li>
+<li>Async support (though being sunset)</li>
+<li>Simple, focused API</li>
+</ul>
+<p><strong><code>virtual-filesystem</code>:</strong></p>
+<ul>
+<li>ZIP/TAR archive support</li>
+<li>Mountable filesystem</li>
+<li>Basic sandboxing attempt</li>
+</ul>
+<p><strong>AgentFS:</strong></p>
+<ul>
+<li>Purpose-built for AI agents</li>
+<li>SQLite backend with FUSE mounting</li>
+<li>Key-value store included</li>
+<li>Audit trail built-in</li>
+<li>Backed by Turso (funded company)</li>
+<li>TypeScript/Python SDKs</li>
+</ul>
+<p><strong>fsspec (Python):</strong></p>
+<ul>
+<li>Block-wise caching (not just whole-file)</li>
+<li>Async-first design</li>
+<li>Excellent data science integration</li>
+</ul>
+<h3 id="what-others-do-poorly"><a class="header" href="#what-others-do-poorly">What Others Do Poorly</a></h3>
+<p><strong>Security in existing solutions is inadequate.</strong></p>
+<p>I examined <code>virtual-filesystem</code>’s <code>SandboxedPhysicalFS</code>. Here’s their <strong>entire</strong> security implementation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl PathResolver for SandboxedPathResolver {
+    fn resolve_path(root: &amp;Path, path: &amp;str) -&gt; Result&lt;PathBuf&gt; {
+        let root = root.canonicalize()?;
+        let host_path = root.join(make_relative(path)).canonicalize()?;
+
+        if !host_path.starts_with(root) {
+            return Err(io::Error::new(ErrorKind::PermissionDenied, "Traversal prevented"));
+        }
+        Ok(host_path)
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>That’s it. ~10 lines covering <strong>2 out of 19+</strong> attack vectors.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th><code>vfs</code> crate</th><th>AnyFS</th></tr>
+<tr><th>Attack Vector</th><th style="text-align: center">virtual-filesystem</th><th style="text-align: center">strict-path</th></tr>
 </thead>
 <tbody>
-<tr><td>Middleware pattern</td><td>No</td><td>Yes (Tower-style)</td></tr>
-<tr><td>Quotas/limits</td><td>No</td><td>Yes (Quota middleware)</td></tr>
-<tr><td>Path sandboxing</td><td>Backend-dependent</td><td>Yes (PathFilter middleware)</td></tr>
-<tr><td>Feature gating</td><td>No</td><td>Yes (Restrictions middleware)</td></tr>
-<tr><td>SQLite backend</td><td>No</td><td>Yes (built-in)</td></tr>
-<tr><td>Path containment</td><td>Prefix-based (AltrootFS)</td><td>Canonicalization-based (<code>strict-path</code>)</td></tr>
-<tr><td>Third-party extensibility</td><td>Implement trait</td><td>Implement trait + Layer</td></tr>
-<tr><td>Path type</td><td>Custom <code>VfsPath</code></td><td><code>impl AsRef&lt;Path&gt;</code> (std-compatible)</td></tr>
+<tr><td>Basic <code>..</code> traversal</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>Symlink following</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>NTFS Alternate Data Streams</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows 8.3 short names</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Unicode normalization</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>TOCTOU race conditions</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Non-existing paths</td><td style="text-align: center">❌ FAILS</td><td style="text-align: center">✅</td></tr>
+<tr><td>URL-encoded traversal</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows UNC paths</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Linux /proc magic symlinks</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Null byte injection</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Unicode direction override</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows reserved names</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Junction point escapes</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td><strong>Coverage</strong></td><td style="text-align: center"><strong>2/19</strong></td><td style="text-align: center"><strong>19/19</strong></td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Path containment difference:</strong></p>
-<p>The <code>vfs</code> crate’s <code>AltrootFS</code> uses path prefix translation - it prepends a root path before delegating to the underlying filesystem. This is vulnerable to symlink-based escapes:</p>
-<pre><code>AltrootFS root: /data/tenant1/
-Symlink: /data/tenant1/link → ../tenant2/secrets.txt
-Access: /link → escapes to /data/tenant2/secrets.txt
-</code></pre>
-<p>AnyFS’s <code>VRootFsBackend</code> uses <code>strict-path</code> for full canonicalization. Symlinks are resolved and validated <em>before</em> any filesystem operation, preventing escapes.</p>
-<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies or security-sensitive containment.</p>
-<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging) or hardened path containment.</p>
+<p>The <code>vfs</code> crate’s <code>AltrootFS</code> is similarly basic - just path prefix translation.</p>
+<p><strong>No middleware composition exists anywhere.</strong></p>
+<p>None of the filesystem libraries offer Tower-style middleware. You can’t do:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>backend
+    .layer(QuotaLayer::new())
+    .layer(RateLimitLayer::new())
+    .layer(TracingLayer::new())
+<span class="boring">}</span></code></pre>
+<p>If you want quotas in <code>vfs</code>, you’d have to build it INTO each backend. Then build it again for the next backend.</p>
 <hr>
-<h3 id="vs-agentfs-turso"><a class="header" href="#vs-agentfs-turso">vs. AgentFS (Turso)</a></h3>
+<h2 id="what-makes-anyfs-unique"><a class="header" href="#what-makes-anyfs-unique">What Makes AnyFS Unique</a></h2>
+<h3 id="1-middleware-composition-nobody-else-has-this"><a class="header" href="#1-middleware-composition-nobody-else-has-this">1. Middleware Composition (Nobody Else Has This)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let fs = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100_MB)
+        .max_file_count(1000)
+        .build())
+    .layer(RateLimitLayer::builder()
+        .max_ops_per_second(100)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("/workspace/.git/**")
+        .build())
+    .layer(TracingLayer::new());
+<span class="boring">}</span></code></pre>
+<p>Add, remove, or reorder middleware without touching backends. Write middleware once, use with any backend.</p>
+<h3 id="2-type-safe-domain-separation-nobody-else-has-this"><a class="header" href="#2-type-safe-domain-separation-nobody-else-has-this">2. Type-Safe Domain Separation (Nobody Else Has This)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct Sandbox;
+struct UserData;
+
+let sandbox: FileStorage&lt;_, Sandbox&gt; = FileStorage::new(memory_backend);
+let userdata: FileStorage&lt;_, UserData&gt; = FileStorage::new(sqlite_backend);
+
+fn process_sandbox(fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) { ... }
+
+process_sandbox(&amp;sandbox);   // OK
+process_sandbox(&amp;userdata);  // COMPILE ERROR
+<span class="boring">}</span></code></pre>
+<p>Compile-time prevention of mixing storage domains.</p>
+<h3 id="3-backend-agnostic-policies-nobody-else-has-this"><a class="header" href="#3-backend-agnostic-policies-nobody-else-has-this">3. Backend-Agnostic Policies (Nobody Else Has This)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>AgentFS</th><th>AnyFS</th></tr>
+<tr><th>Middleware</th><th>Function</th><th style="text-align: center">Works on ANY backend</th></tr>
 </thead>
 <tbody>
-<tr><td>Scope</td><td>Agent runtime (FS + KV + auditing)</td><td>Filesystem abstraction</td></tr>
-<tr><td>Backend choice</td><td>SQLite only</td><td>Memory, SQLite, RealFS, custom</td></tr>
-<tr><td>Middleware</td><td>No</td><td>Yes (composable)</td></tr>
-<tr><td>KV store</td><td>Included</td><td>Not included (different abstraction)</td></tr>
-<tr><td>Tool auditing</td><td>Built-in</td><td>Use Tracing middleware</td></tr>
+<tr><td><code>Quota&lt;B&gt;</code></td><td>Size/count limits</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>RateLimit&lt;B&gt;</code></td><td>Ops per second</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>PathFilter&lt;B&gt;</code></td><td>Path-based access control</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Restrictions&lt;B&gt;</code></td><td>Disable operations</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Tracing&lt;B&gt;</code></td><td>Audit logging</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>ReadOnly&lt;B&gt;</code></td><td>Block all writes</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Cache&lt;B&gt;</code></td><td>LRU caching</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Overlay&lt;B1,B2&gt;</code></td><td>Union filesystem</td><td style="text-align: center">✅</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use AgentFS when:</strong> You need a complete AI agent runtime with KV and auditing.</p>
-<p><strong>Use AnyFS when:</strong> You need just filesystem with backend flexibility and composable policies.</p>
+<h3 id="4-comprehensive-security-testing"><a class="header" href="#4-comprehensive-security-testing">4. Comprehensive Security Testing</a></h3>
+<p>Our conformance test suite includes 50+ security tests covering:</p>
+<ul>
+<li>Path traversal (URL-encoded, backslash, mixed)</li>
+<li>Symlink attacks (escape, loops, TOCTOU)</li>
+<li>Platform-specific (NTFS ADS, 8.3 names, /proc)</li>
+<li>Unicode (normalization, RTL override, homoglyphs)</li>
+<li>Resource exhaustion</li>
+</ul>
+<p>Derived from vulnerabilities in Apache Commons VFS, Afero, PyFilesystem2, and our own <code>strict-path</code> research.</p>
 <hr>
-<h3 id="vs-sqlar-sqlite-archive"><a class="header" href="#vs-sqlar-sqlite-archive">vs. SQLAR (SQLite archive)</a></h3>
+<h2 id="honest-downsides-of-anyfs"><a class="header" href="#honest-downsides-of-anyfs">Honest Downsides of AnyFS</a></h2>
+<h3 id="1-were-new-theyre-established"><a class="header" href="#1-were-new-theyre-established">1. We’re New, They’re Established</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>SQLAR</th><th>AnyFS</th></tr>
+<tr><th>Metric</th><th><code>vfs</code></th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>API</td><td>SQL statements</td><td>Filesystem methods</td></tr>
-<tr><td>Quotas</td><td>No</td><td>Yes</td></tr>
-<tr><td>Middleware</td><td>No</td><td>Yes</td></tr>
-<tr><td>Streaming I/O</td><td>No</td><td>Yes</td></tr>
+<tr><td>Stars</td><td>464</td><td>0 (new)</td></tr>
+<tr><td>Dependent projects</td><td>1,700+</td><td>0 (new)</td></tr>
+<tr><td>Years maintained</td><td>5+</td><td>New</td></tr>
+<tr><td>Contributors</td><td>17</td><td>1</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use SQLAR when:</strong> You want a simple archive format.</p>
-<p><strong>Use AnyFS when:</strong> You need filesystem operations with policies.</p>
-<hr>
-<h3 id="vs-libsqlfs-guardian-project"><a class="header" href="#vs-libsqlfs-guardian-project">vs. libsqlfs (Guardian Project)</a></h3>
+<p><strong>Reality:</strong> The <code>vfs</code> crate works fine for 90% of use cases. If you just need swappable backends for testing, <code>vfs</code> is battle-tested.</p>
+<h3 id="2-complexity-vs-simplicity"><a class="header" href="#2-complexity-vs-simplicity">2. Complexity vs Simplicity</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// vfs: Simple
+let fs = MemoryFS::new();
+fs.create_file("test.txt")?.write_all(b"hello")?;
+
+// AnyFS: More setup if you use middleware
+let fs = MemoryBackend::new()
+    .layer(QuotaLayer::builder().max_total_size(1_MB).build());
+fs.write("/test.txt", b"hello")?;
+<span class="boring">}</span></code></pre>
+<p>If you don’t need middleware, AnyFS adds conceptual overhead.</p>
+<h3 id="3-sync-only-for-now"><a class="header" href="#3-sync-only-for-now">3. Sync-Only (For Now)</a></h3>
+<p>AnyFS is sync-first. In an async-dominated ecosystem (Tokio, etc.), this may limit adoption.</p>
+<p><code>fsspec</code> (Python) and <code>OpenDAL</code> (Rust) are async-first. We’re not.</p>
+<p><strong>Mitigation:</strong> ADR-024 plans async support. Our <code>Send + Sync</code> bounds enable <code>spawn_blocking</code> wrappers today.</p>
+<h3 id="4-agentfs-has-momentum-for-ai-agents"><a class="header" href="#4-agentfs-has-momentum-for-ai-agents">4. AgentFS Has Momentum for AI Agents</a></h3>
+<p>If you’re building AI agents specifically:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>libsqlfs</th><th>AnyFS</th></tr>
+<tr><th>Feature</th><th>AgentFS</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>Interface</td><td>FUSE mount</td><td>Library API</td></tr>
-<tr><td>Deployment</td><td>Requires OS integration</td><td>No mount needed</td></tr>
-<tr><td>Backend choice</td><td>SQLite only</td><td>Multiple</td></tr>
+<tr><td>SQLite backend</td><td>✅</td><td>✅</td></tr>
+<tr><td>FUSE mounting</td><td>✅</td><td>Planned</td></tr>
+<tr><td>Key-value store</td><td>✅</td><td>❌ (different abstraction)</td></tr>
+<tr><td>Tool call auditing</td><td>✅ Built-in</td><td>Via Tracing middleware</td></tr>
+<tr><td>TypeScript SDK</td><td>✅</td><td>❌</td></tr>
+<tr><td>Python SDK</td><td>Coming</td><td>❌</td></tr>
+<tr><td>Corporate backing</td><td>Turso</td><td>None</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use libsqlfs when:</strong> You need a mounted filesystem.</p>
-<p><strong>Use AnyFS when:</strong> You want embedded storage without mounting.</p>
-<hr>
-<h3 id="vs-opendal"><a class="header" href="#vs-opendal">vs. OpenDAL</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Aspect</th><th>OpenDAL</th><th>AnyFS</th></tr>
-</thead>
-<tbody>
-<tr><td>Focus</td><td>Cloud object storage</td><td>Local/embedded filesystem</td></tr>
-<tr><td>Async</td><td>Yes (async-first)</td><td>Sync-first (async planned)</td></tr>
-<tr><td>Backends</td><td>Cloud services (S3, GCS, etc.)</td><td>Local (Memory, SQLite, RealFS)</td></tr>
-<tr><td>Middleware</td><td>Yes</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Use OpenDAL when:</strong> Your storage is cloud object storage.</p>
-<p><strong>Use AnyFS when:</strong> Your storage is local/embedded.</p>
+<p>AgentFS is purpose-built for AI agents with corporate resources. We’re a general-purpose framework.</p>
+<h3 id="5-performance-overhead"><a class="header" href="#5-performance-overhead">5. Performance Overhead</a></h3>
+<p>Middleware composition has costs:</p>
+<ul>
+<li>Each layer adds a function call</li>
+<li>Quota tracking requires size accounting</li>
+<li>Rate limiting needs timestamp checks</li>
+</ul>
+<p>For hot paths with millions of ops/second, this matters. For normal usage, it doesn’t.</p>
+<h3 id="6-real-filesystem-security-has-limits"><a class="header" href="#6-real-filesystem-security-has-limits">6. Real Filesystem Security Has Limits</a></h3>
+<p>For <code>VRootFsBackend</code> (wrapping real filesystem):</p>
+<ul>
+<li>Still has I/O costs for path resolution</li>
+<li>Residual TOCTOU risk (extremely rare)</li>
+<li><code>strict-path</code> covers 19 vectors, but unknown unknowns exist</li>
+</ul>
+<p><strong>Virtual backends (Memory, SQLite) don’t have these issues</strong> - paths are just keys.</p>
 <hr>
 <h2 id="feature-matrix"><a class="header" href="#feature-matrix">Feature Matrix</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
+<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center"><code>virtual-fs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
 </thead>
 <tbody>
-<tr><td>Composable middleware</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Multiple backends</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>SQLite backend</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
-<tr><td>Memory backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Real FS backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Quota enforcement</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Symlink-safe containment</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">N/A</td><td style="text-align: center">N/A</td></tr>
-<tr><td>Rate limiting</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Streaming I/O</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>FUSE mount</td><td style="text-align: center">Possible</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
+<tr><td>Composable middleware</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Multiple backends</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>SQLite backend</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Quota enforcement</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Rate limiting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Type-safe markers</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">✅ (19 vectors)</td><td style="text-align: center">Basic</td><td style="text-align: center">Basic (2 vectors)</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>std::fs-aligned API</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td></tr>
+<tr><td>FUSE mounting</td><td style="text-align: center">Planned</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td>Conformance tests</td><td style="text-align: center">80+</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h2 id="when-to-use-anyfs"><a class="header" href="#when-to-use-anyfs">When to Use AnyFS</a></h2>
-<p><strong>Good fit:</strong></p>
+<h3 id="good-fit"><a class="header" href="#good-fit">Good Fit</a></h3>
 <ul>
-<li>Multi-tenant SaaS with per-tenant quotas</li>
-<li>AI agent sandboxing with path restrictions</li>
-<li>Desktop apps with portable user data</li>
-<li>Plugin systems with isolated storage</li>
-<li>Testing with deterministic isolated storage</li>
-<li>Any case where you might swap backends later</li>
+<li><strong>Multi-tenant SaaS</strong> - Per-tenant quotas, path isolation, rate limiting</li>
+<li><strong>Untrusted input sandboxing</strong> - Comprehensive path security</li>
+<li><strong>Policy-heavy environments</strong> - When you need composable rules</li>
+<li><strong>Backend flexibility</strong> - When you might swap storage later</li>
+<li><strong>Type-safe domain separation</strong> - When mixing containers is dangerous</li>
 </ul>
-<p><strong>Not a good fit:</strong></p>
+<h3 id="not-a-good-fit"><a class="header" href="#not-a-good-fit">Not a Good Fit</a></h3>
 <ul>
-<li>You must mount a filesystem (use FUSE solution)</li>
-<li>You need full POSIX behavior (xattrs, ACLs)</li>
-<li>Your storage is cloud object storage (use OpenDAL)</li>
-<li>You need async-first design today (wait for AnyFS async)</li>
+<li><strong>Simple testing</strong> - <code>vfs</code> is simpler if you just need mock FS</li>
+<li><strong>AI agent runtime</strong> - AgentFS has more features for that specific use case</li>
+<li><strong>Cloud storage</strong> - OpenDAL is async-first with cloud backends</li>
+<li><strong>Async-first codebases</strong> - Wait for AnyFS async support</li>
+<li><strong>Must mount filesystem</strong> - Use FUSE solution directly</li>
 </ul>
-<hr>
-<h2 id="migration-examples"><a class="header" href="#migration-examples">Migration Examples</a></h2>
-<h3 id="from-stdfs"><a class="header" href="#from-stdfs">From <code>std::fs</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Before: host filesystem
-std::fs::write("/data/file.txt", content)?;
-
-// After: AnyFS (can swap backend later)
-fs.write("/data/file.txt", content)?;
-<span class="boring">}</span></code></pre>
-<h3 id="from-raw-sqlite"><a class="header" href="#from-raw-sqlite">From raw SQLite</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Before: raw SQL
-conn.execute("INSERT INTO files(path, data) VALUES (?, ?)", [path, data])?;
-
-// After: AnyFS with SQLite backend
-fs.write(path, data)?;
-<span class="boring">}</span></code></pre>
 <hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
-<p>AnyFS is positioned as the <strong>Tower/Axum of filesystems</strong>: composable middleware over pluggable backends. It fills the gap between simple VFS abstractions (no policies) and complete runtimes (too much bundled together).</p>
-<p><em>For technical details, see <a href="../architecture/design-overview.html">Design Overview</a>.</em></p>
+<p><strong>AnyFS exists because:</strong></p>
+<ol>
+<li>Existing VFS libraries have basic, inadequate security (2/19 attack vectors)</li>
+<li>No filesystem library offers middleware composition</li>
+<li>No filesystem library offers type-safe domain separation</li>
+<li>Policy enforcement (quotas, rate limits, path filtering) doesn’t exist elsewhere</li>
+</ol>
+<p><strong>AnyFS is honest about:</strong></p>
+<ol>
+<li>We’re new, <code>vfs</code> is established</li>
+<li>We add complexity if you don’t need middleware</li>
+<li>We’re sync-only for now</li>
+<li>AgentFS has more resources for AI-specific use cases</li>
+</ol>
+<p><strong>AnyFS is positioned as:</strong></p>
+<blockquote>
+<p><strong>“Tower for filesystems”</strong> - Composable middleware over pluggable backends, with comprehensive security testing.</p>
+</blockquote>
+<hr>
+<h2 id="sources"><a class="header" href="#sources">Sources</a></h2>
+<ul>
+<li><a href="https://github.com/manuel-woelker/rust-vfs">vfs crate</a></li>
+<li><a href="https://lib.rs/crates/virtual-filesystem">virtual-filesystem crate</a></li>
+<li><a href="https://github.com/tursodatabase/agentfs">AgentFS</a></li>
+<li><a href="https://github.com/DK26/strict-path-rs">strict-path</a></li>
+<li><a href="https://github.com/DK26/soft-canonicalize-rs">soft-canonicalize</a></li>
+<li><a href="https://andre.arko.net/2025/08/18/in-memory-filesystems-in-rust/">In-Memory Filesystems in Rust</a> - Performance analysis</li>
+<li><a href="https://users.rust-lang.org/t/virtual-filesystems-for-rust/117173">Rust Forum: Virtual Filesystems</a></li>
+<li><a href="./prior-art-analysis.html">Prior Art Analysis</a> - Detailed vulnerability research</li>
+</ul>
 
                     </main>
 

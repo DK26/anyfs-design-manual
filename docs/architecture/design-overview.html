@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-7fb16bcb.js";
+            window.path_to_searchindex_js = "../searchindex-39540094.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a022a4f5.js"></script>
+        <script src="../toc-b1aa7698.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -526,7 +526,7 @@ fn mount_filesystem(fs: impl FsFuse) {
 </span><span class="boring">fn main() {
 </span>use anyfs::FsPosix;
 
-fn database_app(fs: &amp;mut impl FsPosix) {
+fn database_app(fs: &amp;impl FsPosix) {
     let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
@@ -898,7 +898,7 @@ type SandboxFs = FileStorage&lt;MemoryBackend, Sandbox&gt;;
 type UserDataFs = FileStorage&lt;SecureBackend, UserData&gt;;
 
 // Clean function signatures
-fn run_agent(fs: &amp;mut SandboxFs) { ... }
+fn run_agent(fs: &amp;SandboxFs) { ... }
 <span class="boring">}</span></code></pre>
 <h3 id="filestorage-implementation"><a class="header" href="#filestorage-implementation">FileStorage Implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -1387,20 +1387,28 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 <p><strong>Default:</strong> <code>Vec&lt;u8&gt;</code> (no extra dependency)</p>
 <hr>
 <h2 id="error-types"><a class="header" href="#error-types">Error Types</a></h2>
-<p><code>FsError</code> includes context for better debugging:</p>
+<p><code>FsError</code> includes context for better debugging. It implements <code>std::error::Error</code> via <code>thiserror</code> and uses <code>#[non_exhaustive]</code> for forward compatibility.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub enum FsError {
+</span>/// Filesystem error with context.
+///
+/// All variants include enough information for meaningful error messages.
+/// Use `#[non_exhaustive]` to allow adding variants in minor versions.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum FsError {
     // ========================================================================
     // Path/File Errors
     // ========================================================================
 
     /// Path not found.
+    #[error("not found: {path}")]
     NotFound {
         path: PathBuf,
     },
 
     /// Path already exists.
+    #[error("{operation}: already exists: {path}")]
     AlreadyExists {
         path: PathBuf,
         operation: &amp;'static str,
@@ -1520,8 +1528,25 @@ let slice = data.slice(1000..2000);  // Zero-copy!
         source: std::io::Error,
     },
 }
+
+// Required implementations
+impl From&lt;std::io::Error&gt; for FsError {
+    fn from(err: std::io::Error) -&gt; Self {
+        FsError::Io {
+            operation: "io",
+            path: PathBuf::new(),
+            source: err,
+        }
+    }
+}
 <span class="boring">}</span></code></pre>
-<p>All error variants include enough context for meaningful error messages.</p>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>All variants have <code>#[error("...")]</code> attributes (shown for first two, omitted for brevity)</li>
+<li><code>#[non_exhaustive]</code> allows adding variants in minor versions without breaking changes</li>
+<li><code>From&lt;std::io::Error&gt;</code> enables <code>?</code> operator with std::io functions</li>
+<li>Consider <code>#[must_use]</code> on functions returning <code>Result&lt;_, FsError&gt;</code></li>
+</ul>
 <hr>
 <h2 id="cross-platform-compatibility"><a class="header" href="#cross-platform-compatibility">Cross-Platform Compatibility</a></h2>
 <p>AnyFS is designed for cross-platform use. Virtual backends work everywhere; real filesystem backends have platform considerations.</p>

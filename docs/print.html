@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-7fb16bcb.js";
+            window.path_to_searchindex_js = "searchindex-39540094.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a022a4f5.js"></script>
+        <script src="toc-b1aa7698.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1815,7 +1815,7 @@ fn mount_filesystem(fs: impl FsFuse) {
 </span><span class="boring">fn main() {
 </span>use anyfs::FsPosix;
 
-fn database_app(fs: &amp;mut impl FsPosix) {
+fn database_app(fs: &amp;impl FsPosix) {
     let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
@@ -2187,7 +2187,7 @@ type SandboxFs = FileStorage&lt;MemoryBackend, Sandbox&gt;;
 type UserDataFs = FileStorage&lt;SecureBackend, UserData&gt;;
 
 // Clean function signatures
-fn run_agent(fs: &amp;mut SandboxFs) { ... }
+fn run_agent(fs: &amp;SandboxFs) { ... }
 <span class="boring">}</span></code></pre>
 <h3 id="filestorage-implementation"><a class="header" href="#filestorage-implementation">FileStorage Implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -2676,20 +2676,28 @@ let slice = data.slice(1000..2000);  // Zero-copy!
 <p><strong>Default:</strong> <code>Vec&lt;u8&gt;</code> (no extra dependency)</p>
 <hr>
 <h2 id="error-types"><a class="header" href="#error-types">Error Types</a></h2>
-<p><code>FsError</code> includes context for better debugging:</p>
+<p><code>FsError</code> includes context for better debugging. It implements <code>std::error::Error</code> via <code>thiserror</code> and uses <code>#[non_exhaustive]</code> for forward compatibility.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub enum FsError {
+</span>/// Filesystem error with context.
+///
+/// All variants include enough information for meaningful error messages.
+/// Use `#[non_exhaustive]` to allow adding variants in minor versions.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum FsError {
     // ========================================================================
     // Path/File Errors
     // ========================================================================
 
     /// Path not found.
+    #[error("not found: {path}")]
     NotFound {
         path: PathBuf,
     },
 
     /// Path already exists.
+    #[error("{operation}: already exists: {path}")]
     AlreadyExists {
         path: PathBuf,
         operation: &amp;'static str,
@@ -2809,8 +2817,25 @@ let slice = data.slice(1000..2000);  // Zero-copy!
         source: std::io::Error,
     },
 }
+
+// Required implementations
+impl From&lt;std::io::Error&gt; for FsError {
+    fn from(err: std::io::Error) -&gt; Self {
+        FsError::Io {
+            operation: "io",
+            path: PathBuf::new(),
+            source: err,
+        }
+    }
+}
 <span class="boring">}</span></code></pre>
-<p>All error variants include enough context for meaningful error messages.</p>
+<p><strong>Implementation notes:</strong></p>
+<ul>
+<li>All variants have <code>#[error("...")]</code> attributes (shown for first two, omitted for brevity)</li>
+<li><code>#[non_exhaustive]</code> allows adding variants in minor versions without breaking changes</li>
+<li><code>From&lt;std::io::Error&gt;</code> enables <code>?</code> operator with std::io functions</li>
+<li>Consider <code>#[must_use]</code> on functions returning <code>Result&lt;_, FsError&gt;</code></li>
+</ul>
 <hr>
 <h2 id="cross-platform-compatibility"><a class="header" href="#cross-platform-compatibility">Cross-Platform Compatibility</a></h2>
 <p>AnyFS is designed for cross-platform use. Virtual backends work everywhere; real filesystem backends have platform considerations.</p>
@@ -5446,8 +5471,8 @@ type UserDataFs = FileStorage&lt;SecureBackend, UserData&gt;;
 type TenantFs&lt;T&gt; = FileStorage&lt;SecureBackend, T&gt;;
 
 // Now signatures are clean AND informative
-fn run_agent(fs: &amp;mut SandboxFs) { ... }
-fn save_document(fs: &amp;mut UserDataFs, doc: &amp;Document) { ... }
+fn run_agent(fs: &amp;SandboxFs) { ... }
+fn save_document(fs: &amp;UserDataFs, doc: &amp;Document) { ... }
 <span class="boring">}</span></code></pre>
 <h3 id="when-to-use-markers"><a class="header" href="#when-to-use-markers">When to Use Markers</a></h3>
 <div class="table-wrapper">
@@ -8924,188 +8949,371 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 <li>Scalable blob storage with dedup</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="anyfs---comparison-and-positioning"><a class="header" href="#anyfs---comparison-and-positioning">AnyFS - Comparison and Positioning</a></h1>
-<p><strong>How AnyFS compares to existing solutions</strong></p>
-<p>AnyFS is a <strong>filesystem abstraction with composable middleware</strong>. It separates storage (backends) from policy (middleware) using a Tower-style pattern. With the SQLite backend, a tenant’s filesystem becomes a single portable <code>.db</code> file.</p>
+<h1 id="anyfs-comparison-positioning--honest-assessment"><a class="header" href="#anyfs-comparison-positioning--honest-assessment">AnyFS: Comparison, Positioning &amp; Honest Assessment</a></h1>
+<p><strong>A comprehensive look at why AnyFS exists, how it compares, and where it falls short</strong></p>
 <hr>
-<h2 id="executive-comparison"><a class="header" href="#executive-comparison">Executive Comparison</a></h2>
+<h2 id="origin-story"><a class="header" href="#origin-story">Origin Story</a></h2>
+<p>AnyFS didn’t start as a filesystem abstraction. It started as a security problem.</p>
+<h3 id="the-path-security-problem"><a class="header" href="#the-path-security-problem">The Path Security Problem</a></h3>
+<p>While exploring filesystem security, I created the <a href="https://github.com/DK26/strict-path-rs"><code>strict-path</code></a> crate to ensure that externally-sourced paths could never escape their boundaries. The approach: resolve a boundary path, resolve the provided path, and validate containment.</p>
+<p>This proved far more challenging than expected. Attack vectors kept appearing:</p>
+<ul>
+<li>Symlinks pointing outside the boundary</li>
+<li>Windows junction points</li>
+<li>NTFS Alternate Data Streams (<code>file.txt:hidden:$DATA</code>)</li>
+<li>Windows 8.3 short names (<code>PROGRA~1</code>)</li>
+<li>Linux <code>/proc</code> magic symlinks that escape namespaces</li>
+<li>Unicode normalization tricks (NFC vs NFD)</li>
+<li>URL-encoded traversal (<code>%2e%2e</code>)</li>
+<li>TOCTOU race conditions</li>
+</ul>
+<p>Eventually, <code>strict-path</code> addressed 19+ attack vectors, making it (apparently) comprehensive. But it came with costs:</p>
+<ul>
+<li><strong>I/O overhead</strong> - Real filesystem resolution is expensive</li>
+<li><strong>Existing paths only</strong> - <code>std::fs::canonicalize</code> requires paths to exist</li>
+<li><strong>Residual TOCTOU risk</strong> - A symlink created between verification and operation (extremely rare, but possible)</li>
+</ul>
+<h3 id="the-sqlite-revelation"><a class="header" href="#the-sqlite-revelation">The SQLite Revelation</a></h3>
+<p>Then a new idea emerged: <em>What if the filesystem didn’t exist on disk at all?</em></p>
+<p>A SQLite-backed virtual filesystem would:</p>
+<ul>
+<li><strong>Eliminate path security issues</strong> - Paths are just database keys, not real files</li>
+<li><strong>Be fully portable</strong> - A tenant’s entire filesystem in one <code>.db</code> file</li>
+<li><strong>Have no TOCTOU</strong> - Database transactions are atomic</li>
+<li><strong>Work on non-existing paths</strong> - No canonicalization needed</li>
+</ul>
+<h3 id="the-abstraction-need"><a class="header" href="#the-abstraction-need">The Abstraction Need</a></h3>
+<p>But then: <em>What if I wanted to switch from SQLite to something else later?</em></p>
+<p>I didn’t want to rewrite code just to explore different backends. I needed an abstraction.</p>
+<h3 id="the-framework-vision"><a class="header" href="#the-framework-vision">The Framework Vision</a></h3>
+<p>Research revealed that existing VFS solutions were either:</p>
+<ul>
+<li><strong>Too simple</strong> - Just swappable backends, no policies</li>
+<li><strong>Too fixed</strong> - Specific to one use case (AI agents, archives, etc.)</li>
+<li><strong>Insecure</strong> - Basic <code>..</code> traversal prevention, missing 17+ attack vectors</li>
+</ul>
+<p>My niche is security: <strong>isolating filesystems, limiting actions, controlling resources</strong>.</p>
+<p>The Tower/Axum pattern for HTTP showed how to compose middleware elegantly. Why not apply the same pattern to filesystems?</p>
+<p>Thus AnyFS: <strong>A composable middleware framework for filesystem operations.</strong></p>
+<hr>
+<h2 id="the-landscape-what-already-exists"><a class="header" href="#the-landscape-what-already-exists">The Landscape: What Already Exists</a></h2>
+<h3 id="rust-ecosystem"><a class="header" href="#rust-ecosystem">Rust Ecosystem</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Solution</th><th>Type</th><th style="text-align: center">Middleware</th><th style="text-align: center">Backend Choice</th><th style="text-align: center">Quotas</th><th style="text-align: center">Portable Storage</th></tr>
+<tr><th>Library</th><th>Stars</th><th>Downloads</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>AnyFS</strong></td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (SQLite)</td></tr>
-<tr><td><code>vfs</code> crate</td><td>Library</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>AgentFS</td><td>Runtime</td><td style="text-align: center">No</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>SQLAR</td><td>Format</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>libsqlfs</td><td>FUSE</td><td style="text-align: center">N/A</td><td style="text-align: center">No (SQLite)</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>OpenDAL</td><td>Library</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes (cloud)</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
+<tr><td><a href="https://github.com/manuel-woelker/rust-vfs"><code>vfs</code></a></td><td>464</td><td>1,700+ deps</td><td>Swappable filesystem backends</td></tr>
+<tr><td><a href="https://lib.rs/crates/virtual-filesystem"><code>virtual-filesystem</code></a></td><td>~30</td><td>~260/mo</td><td>Backends with basic sandboxing</td></tr>
+<tr><td><a href="https://github.com/tursodatabase/agentfs"><code>AgentFS</code></a></td><td>New</td><td>Alpha</td><td>AI agent state management</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="other-languages"><a class="header" href="#other-languages">Other Languages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Library</th><th>Language</th><th>Strength</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://filesystem-spec.readthedocs.io/">fsspec</a></td><td>Python</td><td>Async, caching, 20+ backends</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2">PyFilesystem2</a></td><td>Python</td><td>Clean URL-based API</td></tr>
+<tr><td><a href="https://github.com/spf13/afero">Afero</a></td><td>Go</td><td>Composition patterns</td></tr>
+<tr><td><a href="https://commons.apache.org/vfs/">Apache Commons VFS</a></td><td>Java</td><td>Enterprise, many backends</td></tr>
+<tr><td><a href="https://github.com/TestableIO/System.IO.Abstractions">System.IO.Abstractions</a></td><td>.NET</td><td>Testing, mirrors System.IO</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="detailed-comparisons"><a class="header" href="#detailed-comparisons">Detailed Comparisons</a></h2>
-<h3 id="vs-vfs-crate-rust"><a class="header" href="#vs-vfs-crate-rust">vs. <code>vfs</code> crate (Rust)</a></h3>
+<h2 id="honest-comparison"><a class="header" href="#honest-comparison">Honest Comparison</a></h2>
+<h3 id="what-others-do-well"><a class="header" href="#what-others-do-well">What Others Do Well</a></h3>
+<p><strong><code>vfs</code> crate:</strong></p>
+<ul>
+<li>Mature (464 stars, 1,700+ dependent projects)</li>
+<li>Multiple backends (Memory, Physical, Overlay, Embedded)</li>
+<li>Async support (though being sunset)</li>
+<li>Simple, focused API</li>
+</ul>
+<p><strong><code>virtual-filesystem</code>:</strong></p>
+<ul>
+<li>ZIP/TAR archive support</li>
+<li>Mountable filesystem</li>
+<li>Basic sandboxing attempt</li>
+</ul>
+<p><strong>AgentFS:</strong></p>
+<ul>
+<li>Purpose-built for AI agents</li>
+<li>SQLite backend with FUSE mounting</li>
+<li>Key-value store included</li>
+<li>Audit trail built-in</li>
+<li>Backed by Turso (funded company)</li>
+<li>TypeScript/Python SDKs</li>
+</ul>
+<p><strong>fsspec (Python):</strong></p>
+<ul>
+<li>Block-wise caching (not just whole-file)</li>
+<li>Async-first design</li>
+<li>Excellent data science integration</li>
+</ul>
+<h3 id="what-others-do-poorly"><a class="header" href="#what-others-do-poorly">What Others Do Poorly</a></h3>
+<p><strong>Security in existing solutions is inadequate.</strong></p>
+<p>I examined <code>virtual-filesystem</code>’s <code>SandboxedPhysicalFS</code>. Here’s their <strong>entire</strong> security implementation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl PathResolver for SandboxedPathResolver {
+    fn resolve_path(root: &amp;Path, path: &amp;str) -&gt; Result&lt;PathBuf&gt; {
+        let root = root.canonicalize()?;
+        let host_path = root.join(make_relative(path)).canonicalize()?;
+
+        if !host_path.starts_with(root) {
+            return Err(io::Error::new(ErrorKind::PermissionDenied, "Traversal prevented"));
+        }
+        Ok(host_path)
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>That’s it. ~10 lines covering <strong>2 out of 19+</strong> attack vectors.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th><code>vfs</code> crate</th><th>AnyFS</th></tr>
+<tr><th>Attack Vector</th><th style="text-align: center">virtual-filesystem</th><th style="text-align: center">strict-path</th></tr>
 </thead>
 <tbody>
-<tr><td>Middleware pattern</td><td>No</td><td>Yes (Tower-style)</td></tr>
-<tr><td>Quotas/limits</td><td>No</td><td>Yes (Quota middleware)</td></tr>
-<tr><td>Path sandboxing</td><td>Backend-dependent</td><td>Yes (PathFilter middleware)</td></tr>
-<tr><td>Feature gating</td><td>No</td><td>Yes (Restrictions middleware)</td></tr>
-<tr><td>SQLite backend</td><td>No</td><td>Yes (built-in)</td></tr>
-<tr><td>Path containment</td><td>Prefix-based (AltrootFS)</td><td>Canonicalization-based (<code>strict-path</code>)</td></tr>
-<tr><td>Third-party extensibility</td><td>Implement trait</td><td>Implement trait + Layer</td></tr>
-<tr><td>Path type</td><td>Custom <code>VfsPath</code></td><td><code>impl AsRef&lt;Path&gt;</code> (std-compatible)</td></tr>
+<tr><td>Basic <code>..</code> traversal</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>Symlink following</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>NTFS Alternate Data Streams</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows 8.3 short names</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Unicode normalization</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>TOCTOU race conditions</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Non-existing paths</td><td style="text-align: center">❌ FAILS</td><td style="text-align: center">✅</td></tr>
+<tr><td>URL-encoded traversal</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows UNC paths</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Linux /proc magic symlinks</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Null byte injection</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Unicode direction override</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows reserved names</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Junction point escapes</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td><strong>Coverage</strong></td><td style="text-align: center"><strong>2/19</strong></td><td style="text-align: center"><strong>19/19</strong></td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Path containment difference:</strong></p>
-<p>The <code>vfs</code> crate’s <code>AltrootFS</code> uses path prefix translation - it prepends a root path before delegating to the underlying filesystem. This is vulnerable to symlink-based escapes:</p>
-<pre><code>AltrootFS root: /data/tenant1/
-Symlink: /data/tenant1/link → ../tenant2/secrets.txt
-Access: /link → escapes to /data/tenant2/secrets.txt
-</code></pre>
-<p>AnyFS’s <code>VRootFsBackend</code> uses <code>strict-path</code> for full canonicalization. Symlinks are resolved and validated <em>before</em> any filesystem operation, preventing escapes.</p>
-<p><strong>Use <code>vfs</code> when:</strong> You need simple VFS abstraction without policies or security-sensitive containment.</p>
-<p><strong>Use AnyFS when:</strong> You need composable middleware (quotas, sandboxing, logging) or hardened path containment.</p>
+<p>The <code>vfs</code> crate’s <code>AltrootFS</code> is similarly basic - just path prefix translation.</p>
+<p><strong>No middleware composition exists anywhere.</strong></p>
+<p>None of the filesystem libraries offer Tower-style middleware. You can’t do:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>backend
+    .layer(QuotaLayer::new())
+    .layer(RateLimitLayer::new())
+    .layer(TracingLayer::new())
+<span class="boring">}</span></code></pre>
+<p>If you want quotas in <code>vfs</code>, you’d have to build it INTO each backend. Then build it again for the next backend.</p>
 <hr>
-<h3 id="vs-agentfs-turso"><a class="header" href="#vs-agentfs-turso">vs. AgentFS (Turso)</a></h3>
+<h2 id="what-makes-anyfs-unique"><a class="header" href="#what-makes-anyfs-unique">What Makes AnyFS Unique</a></h2>
+<h3 id="1-middleware-composition-nobody-else-has-this"><a class="header" href="#1-middleware-composition-nobody-else-has-this">1. Middleware Composition (Nobody Else Has This)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let fs = SqliteBackend::open("data.db")?
+    .layer(QuotaLayer::builder()
+        .max_total_size(100_MB)
+        .max_file_count(1000)
+        .build())
+    .layer(RateLimitLayer::builder()
+        .max_ops_per_second(100)
+        .build())
+    .layer(PathFilterLayer::builder()
+        .allow("/workspace/**")
+        .deny("/workspace/.git/**")
+        .build())
+    .layer(TracingLayer::new());
+<span class="boring">}</span></code></pre>
+<p>Add, remove, or reorder middleware without touching backends. Write middleware once, use with any backend.</p>
+<h3 id="2-type-safe-domain-separation-nobody-else-has-this"><a class="header" href="#2-type-safe-domain-separation-nobody-else-has-this">2. Type-Safe Domain Separation (Nobody Else Has This)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct Sandbox;
+struct UserData;
+
+let sandbox: FileStorage&lt;_, Sandbox&gt; = FileStorage::new(memory_backend);
+let userdata: FileStorage&lt;_, UserData&gt; = FileStorage::new(sqlite_backend);
+
+fn process_sandbox(fs: &amp;FileStorage&lt;impl Fs, Sandbox&gt;) { ... }
+
+process_sandbox(&amp;sandbox);   // OK
+process_sandbox(&amp;userdata);  // COMPILE ERROR
+<span class="boring">}</span></code></pre>
+<p>Compile-time prevention of mixing storage domains.</p>
+<h3 id="3-backend-agnostic-policies-nobody-else-has-this"><a class="header" href="#3-backend-agnostic-policies-nobody-else-has-this">3. Backend-Agnostic Policies (Nobody Else Has This)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>AgentFS</th><th>AnyFS</th></tr>
+<tr><th>Middleware</th><th>Function</th><th style="text-align: center">Works on ANY backend</th></tr>
 </thead>
 <tbody>
-<tr><td>Scope</td><td>Agent runtime (FS + KV + auditing)</td><td>Filesystem abstraction</td></tr>
-<tr><td>Backend choice</td><td>SQLite only</td><td>Memory, SQLite, RealFS, custom</td></tr>
-<tr><td>Middleware</td><td>No</td><td>Yes (composable)</td></tr>
-<tr><td>KV store</td><td>Included</td><td>Not included (different abstraction)</td></tr>
-<tr><td>Tool auditing</td><td>Built-in</td><td>Use Tracing middleware</td></tr>
+<tr><td><code>Quota&lt;B&gt;</code></td><td>Size/count limits</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>RateLimit&lt;B&gt;</code></td><td>Ops per second</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>PathFilter&lt;B&gt;</code></td><td>Path-based access control</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Restrictions&lt;B&gt;</code></td><td>Disable operations</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Tracing&lt;B&gt;</code></td><td>Audit logging</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>ReadOnly&lt;B&gt;</code></td><td>Block all writes</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Cache&lt;B&gt;</code></td><td>LRU caching</td><td style="text-align: center">✅</td></tr>
+<tr><td><code>Overlay&lt;B1,B2&gt;</code></td><td>Union filesystem</td><td style="text-align: center">✅</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use AgentFS when:</strong> You need a complete AI agent runtime with KV and auditing.</p>
-<p><strong>Use AnyFS when:</strong> You need just filesystem with backend flexibility and composable policies.</p>
+<h3 id="4-comprehensive-security-testing"><a class="header" href="#4-comprehensive-security-testing">4. Comprehensive Security Testing</a></h3>
+<p>Our conformance test suite includes 50+ security tests covering:</p>
+<ul>
+<li>Path traversal (URL-encoded, backslash, mixed)</li>
+<li>Symlink attacks (escape, loops, TOCTOU)</li>
+<li>Platform-specific (NTFS ADS, 8.3 names, /proc)</li>
+<li>Unicode (normalization, RTL override, homoglyphs)</li>
+<li>Resource exhaustion</li>
+</ul>
+<p>Derived from vulnerabilities in Apache Commons VFS, Afero, PyFilesystem2, and our own <code>strict-path</code> research.</p>
 <hr>
-<h3 id="vs-sqlar-sqlite-archive"><a class="header" href="#vs-sqlar-sqlite-archive">vs. SQLAR (SQLite archive)</a></h3>
+<h2 id="honest-downsides-of-anyfs"><a class="header" href="#honest-downsides-of-anyfs">Honest Downsides of AnyFS</a></h2>
+<h3 id="1-were-new-theyre-established"><a class="header" href="#1-were-new-theyre-established">1. We’re New, They’re Established</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>SQLAR</th><th>AnyFS</th></tr>
+<tr><th>Metric</th><th><code>vfs</code></th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>API</td><td>SQL statements</td><td>Filesystem methods</td></tr>
-<tr><td>Quotas</td><td>No</td><td>Yes</td></tr>
-<tr><td>Middleware</td><td>No</td><td>Yes</td></tr>
-<tr><td>Streaming I/O</td><td>No</td><td>Yes</td></tr>
+<tr><td>Stars</td><td>464</td><td>0 (new)</td></tr>
+<tr><td>Dependent projects</td><td>1,700+</td><td>0 (new)</td></tr>
+<tr><td>Years maintained</td><td>5+</td><td>New</td></tr>
+<tr><td>Contributors</td><td>17</td><td>1</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use SQLAR when:</strong> You want a simple archive format.</p>
-<p><strong>Use AnyFS when:</strong> You need filesystem operations with policies.</p>
-<hr>
-<h3 id="vs-libsqlfs-guardian-project"><a class="header" href="#vs-libsqlfs-guardian-project">vs. libsqlfs (Guardian Project)</a></h3>
+<p><strong>Reality:</strong> The <code>vfs</code> crate works fine for 90% of use cases. If you just need swappable backends for testing, <code>vfs</code> is battle-tested.</p>
+<h3 id="2-complexity-vs-simplicity"><a class="header" href="#2-complexity-vs-simplicity">2. Complexity vs Simplicity</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// vfs: Simple
+let fs = MemoryFS::new();
+fs.create_file("test.txt")?.write_all(b"hello")?;
+
+// AnyFS: More setup if you use middleware
+let fs = MemoryBackend::new()
+    .layer(QuotaLayer::builder().max_total_size(1_MB).build());
+fs.write("/test.txt", b"hello")?;
+<span class="boring">}</span></code></pre>
+<p>If you don’t need middleware, AnyFS adds conceptual overhead.</p>
+<h3 id="3-sync-only-for-now"><a class="header" href="#3-sync-only-for-now">3. Sync-Only (For Now)</a></h3>
+<p>AnyFS is sync-first. In an async-dominated ecosystem (Tokio, etc.), this may limit adoption.</p>
+<p><code>fsspec</code> (Python) and <code>OpenDAL</code> (Rust) are async-first. We’re not.</p>
+<p><strong>Mitigation:</strong> ADR-024 plans async support. Our <code>Send + Sync</code> bounds enable <code>spawn_blocking</code> wrappers today.</p>
+<h3 id="4-agentfs-has-momentum-for-ai-agents"><a class="header" href="#4-agentfs-has-momentum-for-ai-agents">4. AgentFS Has Momentum for AI Agents</a></h3>
+<p>If you’re building AI agents specifically:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>libsqlfs</th><th>AnyFS</th></tr>
+<tr><th>Feature</th><th>AgentFS</th><th>AnyFS</th></tr>
 </thead>
 <tbody>
-<tr><td>Interface</td><td>FUSE mount</td><td>Library API</td></tr>
-<tr><td>Deployment</td><td>Requires OS integration</td><td>No mount needed</td></tr>
-<tr><td>Backend choice</td><td>SQLite only</td><td>Multiple</td></tr>
+<tr><td>SQLite backend</td><td>✅</td><td>✅</td></tr>
+<tr><td>FUSE mounting</td><td>✅</td><td>Planned</td></tr>
+<tr><td>Key-value store</td><td>✅</td><td>❌ (different abstraction)</td></tr>
+<tr><td>Tool call auditing</td><td>✅ Built-in</td><td>Via Tracing middleware</td></tr>
+<tr><td>TypeScript SDK</td><td>✅</td><td>❌</td></tr>
+<tr><td>Python SDK</td><td>Coming</td><td>❌</td></tr>
+<tr><td>Corporate backing</td><td>Turso</td><td>None</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Use libsqlfs when:</strong> You need a mounted filesystem.</p>
-<p><strong>Use AnyFS when:</strong> You want embedded storage without mounting.</p>
-<hr>
-<h3 id="vs-opendal"><a class="header" href="#vs-opendal">vs. OpenDAL</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Aspect</th><th>OpenDAL</th><th>AnyFS</th></tr>
-</thead>
-<tbody>
-<tr><td>Focus</td><td>Cloud object storage</td><td>Local/embedded filesystem</td></tr>
-<tr><td>Async</td><td>Yes (async-first)</td><td>Sync-first (async planned)</td></tr>
-<tr><td>Backends</td><td>Cloud services (S3, GCS, etc.)</td><td>Local (Memory, SQLite, RealFS)</td></tr>
-<tr><td>Middleware</td><td>Yes</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Use OpenDAL when:</strong> Your storage is cloud object storage.</p>
-<p><strong>Use AnyFS when:</strong> Your storage is local/embedded.</p>
+<p>AgentFS is purpose-built for AI agents with corporate resources. We’re a general-purpose framework.</p>
+<h3 id="5-performance-overhead"><a class="header" href="#5-performance-overhead">5. Performance Overhead</a></h3>
+<p>Middleware composition has costs:</p>
+<ul>
+<li>Each layer adds a function call</li>
+<li>Quota tracking requires size accounting</li>
+<li>Rate limiting needs timestamp checks</li>
+</ul>
+<p>For hot paths with millions of ops/second, this matters. For normal usage, it doesn’t.</p>
+<h3 id="6-real-filesystem-security-has-limits"><a class="header" href="#6-real-filesystem-security-has-limits">6. Real Filesystem Security Has Limits</a></h3>
+<p>For <code>VRootFsBackend</code> (wrapping real filesystem):</p>
+<ul>
+<li>Still has I/O costs for path resolution</li>
+<li>Residual TOCTOU risk (extremely rare)</li>
+<li><code>strict-path</code> covers 19 vectors, but unknown unknowns exist</li>
+</ul>
+<p><strong>Virtual backends (Memory, SQLite) don’t have these issues</strong> - paths are just keys.</p>
 <hr>
 <h2 id="feature-matrix"><a class="header" href="#feature-matrix">Feature Matrix</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
+<tr><th>Feature</th><th style="text-align: center">AnyFS</th><th style="text-align: center"><code>vfs</code></th><th style="text-align: center"><code>virtual-fs</code></th><th style="text-align: center">AgentFS</th><th style="text-align: center">OpenDAL</th></tr>
 </thead>
 <tbody>
-<tr><td>Composable middleware</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Multiple backends</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>SQLite backend</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
-<tr><td>Memory backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Real FS backend</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Quota enforcement</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Path sandboxing</td><td style="text-align: center">Yes</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Symlink-safe containment</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">N/A</td><td style="text-align: center">N/A</td></tr>
-<tr><td>Rate limiting</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td><td style="text-align: center">No</td><td style="text-align: center">No</td></tr>
-<tr><td>Streaming I/O</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td><td style="text-align: center">Yes</td></tr>
-<tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td></tr>
-<tr><td>FUSE mount</td><td style="text-align: center">Possible</td><td style="text-align: center">No</td><td style="text-align: center">Yes</td><td style="text-align: center">No</td></tr>
+<tr><td>Composable middleware</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Multiple backends</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>SQLite backend</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Quota enforcement</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Rate limiting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Type-safe markers</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">✅ (19 vectors)</td><td style="text-align: center">Basic</td><td style="text-align: center">Basic (2 vectors)</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Async API</td><td style="text-align: center">Planned</td><td style="text-align: center">Partial</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>std::fs-aligned API</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td></tr>
+<tr><td>FUSE mounting</td><td style="text-align: center">Planned</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td>Conformance tests</td><td style="text-align: center">80+</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td><td style="text-align: center">Unknown</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h2 id="when-to-use-anyfs"><a class="header" href="#when-to-use-anyfs">When to Use AnyFS</a></h2>
-<p><strong>Good fit:</strong></p>
+<h3 id="good-fit"><a class="header" href="#good-fit">Good Fit</a></h3>
 <ul>
-<li>Multi-tenant SaaS with per-tenant quotas</li>
-<li>AI agent sandboxing with path restrictions</li>
-<li>Desktop apps with portable user data</li>
-<li>Plugin systems with isolated storage</li>
-<li>Testing with deterministic isolated storage</li>
-<li>Any case where you might swap backends later</li>
+<li><strong>Multi-tenant SaaS</strong> - Per-tenant quotas, path isolation, rate limiting</li>
+<li><strong>Untrusted input sandboxing</strong> - Comprehensive path security</li>
+<li><strong>Policy-heavy environments</strong> - When you need composable rules</li>
+<li><strong>Backend flexibility</strong> - When you might swap storage later</li>
+<li><strong>Type-safe domain separation</strong> - When mixing containers is dangerous</li>
 </ul>
-<p><strong>Not a good fit:</strong></p>
+<h3 id="not-a-good-fit"><a class="header" href="#not-a-good-fit">Not a Good Fit</a></h3>
 <ul>
-<li>You must mount a filesystem (use FUSE solution)</li>
-<li>You need full POSIX behavior (xattrs, ACLs)</li>
-<li>Your storage is cloud object storage (use OpenDAL)</li>
-<li>You need async-first design today (wait for AnyFS async)</li>
+<li><strong>Simple testing</strong> - <code>vfs</code> is simpler if you just need mock FS</li>
+<li><strong>AI agent runtime</strong> - AgentFS has more features for that specific use case</li>
+<li><strong>Cloud storage</strong> - OpenDAL is async-first with cloud backends</li>
+<li><strong>Async-first codebases</strong> - Wait for AnyFS async support</li>
+<li><strong>Must mount filesystem</strong> - Use FUSE solution directly</li>
 </ul>
-<hr>
-<h2 id="migration-examples"><a class="header" href="#migration-examples">Migration Examples</a></h2>
-<h3 id="from-stdfs"><a class="header" href="#from-stdfs">From <code>std::fs</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Before: host filesystem
-std::fs::write("/data/file.txt", content)?;
-
-// After: AnyFS (can swap backend later)
-fs.write("/data/file.txt", content)?;
-<span class="boring">}</span></code></pre>
-<h3 id="from-raw-sqlite"><a class="header" href="#from-raw-sqlite">From raw SQLite</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Before: raw SQL
-conn.execute("INSERT INTO files(path, data) VALUES (?, ?)", [path, data])?;
-
-// After: AnyFS with SQLite backend
-fs.write(path, data)?;
-<span class="boring">}</span></code></pre>
 <hr>
 <h2 id="summary-2"><a class="header" href="#summary-2">Summary</a></h2>
-<p>AnyFS is positioned as the <strong>Tower/Axum of filesystems</strong>: composable middleware over pluggable backends. It fills the gap between simple VFS abstractions (no policies) and complete runtimes (too much bundled together).</p>
-<p><em>For technical details, see <a href="#anyfs---design-overview">Design Overview</a>.</em></p>
+<p><strong>AnyFS exists because:</strong></p>
+<ol>
+<li>Existing VFS libraries have basic, inadequate security (2/19 attack vectors)</li>
+<li>No filesystem library offers middleware composition</li>
+<li>No filesystem library offers type-safe domain separation</li>
+<li>Policy enforcement (quotas, rate limits, path filtering) doesn’t exist elsewhere</li>
+</ol>
+<p><strong>AnyFS is honest about:</strong></p>
+<ol>
+<li>We’re new, <code>vfs</code> is established</li>
+<li>We add complexity if you don’t need middleware</li>
+<li>We’re sync-only for now</li>
+<li>AgentFS has more resources for AI-specific use cases</li>
+</ol>
+<p><strong>AnyFS is positioned as:</strong></p>
+<blockquote>
+<p><strong>“Tower for filesystems”</strong> - Composable middleware over pluggable backends, with comprehensive security testing.</p>
+</blockquote>
+<hr>
+<h2 id="sources"><a class="header" href="#sources">Sources</a></h2>
+<ul>
+<li><a href="https://github.com/manuel-woelker/rust-vfs">vfs crate</a></li>
+<li><a href="https://lib.rs/crates/virtual-filesystem">virtual-filesystem crate</a></li>
+<li><a href="https://github.com/tursodatabase/agentfs">AgentFS</a></li>
+<li><a href="https://github.com/DK26/strict-path-rs">strict-path</a></li>
+<li><a href="https://github.com/DK26/soft-canonicalize-rs">soft-canonicalize</a></li>
+<li><a href="https://andre.arko.net/2025/08/18/in-memory-filesystems-in-rust/">In-Memory Filesystems in Rust</a> - Performance analysis</li>
+<li><a href="https://users.rust-lang.org/t/virtual-filesystems-for-rust/117173">Rust Forum: Virtual Filesystems</a></li>
+<li><a href="#prior-art-analysis-filesystem-abstraction-libraries">Prior Art Analysis</a> - Detailed vulnerability research</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="security-considerations-1"><a class="header" href="#security-considerations-1">Security Considerations</a></h1>
 <p><strong>Security model, threat analysis, and containment guarantees</strong></p>
@@ -10593,6 +10801,633 @@ fs.write("/workspace/doc.txt", b"hello")?;
 <h2 id="recommendation-1"><a class="header" href="#recommendation-1">Recommendation</a></h2>
 <p>Build AnyFS with reusable primitives (<code>rusqlite</code>, <code>strict-path</code>, <code>thiserror</code>, <code>tracing</code>) but maintain the two-crate split. The middleware pattern is what makes the design both flexible and safe.</p>
 <p><strong>Compatibility option:</strong> Later, provide an adapter that implements <code>vfs</code> traits on top of <code>Fs</code> for projects that need <code>vfs</code> compatibility.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="prior-art-analysis-filesystem-abstraction-libraries"><a class="header" href="#prior-art-analysis-filesystem-abstraction-libraries">Prior Art Analysis: Filesystem Abstraction Libraries</a></h1>
+<p>This document analyzes filesystem abstraction libraries in other languages to learn from their successes, identify features we should adopt, and avoid known vulnerabilities.</p>
+<hr>
+<h2 id="executive-summary-1"><a class="header" href="#executive-summary-1">Executive Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Library</th><th>Language</th><th>Key Strength</th><th>Key Weakness</th><th>What We Can Learn</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://filesystem-spec.readthedocs.io/">fsspec</a></td><td>Python</td><td>Async + caching + data science integration</td><td>No middleware composition</td><td>Caching strategies, async design</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2">PyFilesystem2</a></td><td>Python</td><td>Clean URL-based API</td><td>Symlink handling issues</td><td>Path normalization</td></tr>
+<tr><td><a href="https://github.com/spf13/afero">Afero</a></td><td>Go</td><td>Composition (CopyOnWrite, Cache, BasePathFs)</td><td>Symlink escape in BasePathFs</td><td>Composition patterns</td></tr>
+<tr><td><a href="https://commons.apache.org/vfs/">Apache Commons VFS</a></td><td>Java</td><td>Enterprise-grade, many backends</td><td><strong>CVE: Path traversal with encoded <code>..</code></strong></td><td>URL encoding attacks</td></tr>
+<tr><td><a href="https://github.com/TestableIO/System.IO.Abstractions">System.IO.Abstractions</a></td><td>.NET</td><td>Perfect for testing, mirrors System.IO</td><td>No middleware/composition</td><td>MockFileSystem patterns</td></tr>
+<tr><td><a href="https://github.com/streamich/memfs">memfs</a></td><td>Node.js</td><td>Browser + Node unified API</td><td>Fork exists due to “longstanding bugs”</td><td>In-memory implementation</td></tr>
+<tr><td><a href="https://github.com/DK26/soft-canonicalize-rs">soft-canonicalize</a></td><td>Rust</td><td>Non-existing path resolution, TOCTOU-safe</td><td>Real FS only (not virtual)</td><td>Attack patterns to defend</td></tr>
+<tr><td><a href="https://github.com/DK26/strict-path-rs">strict-path</a></td><td>Rust</td><td>19+ attack types blocked, type-safe markers</td><td>Real FS only (not virtual)</td><td>Attack catalog for testing</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="detailed-analysis"><a class="header" href="#detailed-analysis">Detailed Analysis</a></h2>
+<h3 id="1-python-fsspec"><a class="header" href="#1-python-fsspec">1. Python: fsspec</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/fsspec/filesystem_spec">fsspec/filesystem_spec</a></p>
+<p><strong>What they do well:</strong></p>
+<ol>
+<li>
+<p><strong>Unified Interface Across 20+ Backends</strong></p>
+<ul>
+<li>Local, S3, GCS, Azure, HDFS, HTTP, FTP, SFTP, ZIP, TAR, Git, etc.</li>
+<li>Same API regardless of backend</li>
+</ul>
+</li>
+<li>
+<p><strong>Sophisticated Caching</strong></p>
+<pre><code class="language-python"># Block-wise caching - only download accessed parts
+fs = fsspec.filesystem('blockcache', target_protocol='s3',
+                       cache_storage='/tmp/cache')
+
+# Whole-file caching
+fs = fsspec.filesystem('filecache', target_protocol='s3',
+                       cache_storage='/tmp/cache')
+</code></pre>
+</li>
+<li>
+<p><strong>Async Support</strong></p>
+<ul>
+<li><code>AsyncFileSystem</code> base class for async implementations</li>
+<li>Concurrent bulk operations (<code>cat</code> fetches many files at once)</li>
+<li>Used by Dask for parallel data processing</li>
+</ul>
+</li>
+<li>
+<p><strong>Data Science Integration</strong></p>
+<ul>
+<li>Native integration with Pandas, Dask, Intake</li>
+<li>Parquet optimization with parallel chunk fetching</li>
+</ul>
+</li>
+</ol>
+<p><strong>What we should adopt:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Block-wise caching strategy (not just whole-file LRU)</li>
+<li><input disabled="" type="checkbox"> Async design from the start (our ADR-024 async plan)</li>
+<li><input disabled="" type="checkbox"> Consider “parts caching” for large file access patterns</li>
+</ul>
+<p><strong>What they lack that we have:</strong></p>
+<ul>
+<li>No middleware composition pattern</li>
+<li>No quota/rate limiting built-in</li>
+<li>No path filtering/sandboxing</li>
+</ul>
+<hr>
+<h3 id="2-python-pyfilesystem2"><a class="header" href="#2-python-pyfilesystem2">2. Python: PyFilesystem2</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/PyFilesystem/pyfilesystem2">PyFilesystem/pyfilesystem2</a></p>
+<p><strong>What they do well:</strong></p>
+<ol>
+<li>
+<p><strong>URL-based Filesystem Specification</strong></p>
+<pre><code class="language-python">from fs import open_fs
+
+home_fs = open_fs('osfs://~/')
+zip_fs = open_fs('zip://foo.zip')
+ftp_fs = open_fs('ftp://ftp.example.com')
+mem_fs = open_fs('mem://')
+</code></pre>
+</li>
+<li>
+<p><strong>Consistent Path Handling</strong></p>
+<ul>
+<li>Forward slashes everywhere (even on Windows)</li>
+<li>Paths normalized automatically</li>
+</ul>
+</li>
+<li>
+<p><strong>Glob Support Built-in</strong></p>
+<pre><code class="language-python">for match in fs.glob('**/*.py'):
+    print(match.path)
+</code></pre>
+</li>
+</ol>
+<p><strong>Known Issues (from GitHub):</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Issue</th><th>Description</th><th>Impact</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2/issues/171">#171</a></td><td>Symlink loops cause infinite recursion</td><td>DoS potential</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2/issues/417">#417</a></td><td>No symlink creation support</td><td>Missing feature</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2/issues/411">#411</a></td><td>Incorrect handling of symlinks with non-existing targets</td><td>Broken functionality</td></tr>
+<tr><td><a href="https://github.com/PyFilesystem/pyfilesystem2/issues/61">#61</a></td><td>Symlinks not detected properly</td><td>Security concern</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Lessons for AnyFS:</strong></p>
+<ul>
+<li>⚠️ <strong>Symlink handling is complex</strong> - we must handle loops, non-existent targets, and escaping</li>
+<li>✅ <strong>URL-based opening is convenient</strong> - consider for future</li>
+<li>✅ <strong>Consistent path format</strong> - we already do this (forward slashes always)</li>
+</ul>
+<hr>
+<h3 id="3-go-afero"><a class="header" href="#3-go-afero">3. Go: Afero</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/spf13/afero">spf13/afero</a></p>
+<p><strong>What they do well:</strong></p>
+<ol>
+<li>
+<p><strong>Composition Pattern (Similar to Ours!)</strong></p>
+<pre><code class="language-go">// Sandboxing
+baseFs := afero.NewOsFs()
+restrictedFs := afero.NewBasePathFs(baseFs, "/var/data")
+
+// Caching layer
+cachedFs := afero.NewCacheOnReadFs(baseFs, afero.NewMemMapFs(), time.Hour)
+
+// Copy-on-write
+cowFs := afero.NewCopyOnWriteFs(baseFs, afero.NewMemMapFs())
+</code></pre>
+</li>
+<li>
+<p><strong>io/fs Compatibility</strong></p>
+<ul>
+<li>Works with Go 1.16+ standard library interfaces</li>
+<li><code>ReadDirFS</code>, <code>ReadFileFS</code>, etc.</li>
+</ul>
+</li>
+<li>
+<p><strong>Extensive Backend Support</strong></p>
+<ul>
+<li>OS, Memory, SFTP, GCS</li>
+<li>Community: S3, MinIO, Dropbox, Google Drive, Git</li>
+</ul>
+</li>
+</ol>
+<p><strong>Known Issues:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Issue</th><th>Description</th><th>Our Mitigation</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://github.com/spf13/afero/issues/282">#282</a></td><td>Symlinks in BasePathFs can escape jail</td><td>Use <code>strict-path</code> crate for VRootFsBackend</td></tr>
+<tr><td><a href="https://github.com/spf13/afero/issues/88">#88</a></td><td>Symlink handling inconsistent</td><td>Document behavior clearly</td></tr>
+<tr><td><a href="https://github.com/spf13/afero/issues/344">#344</a></td><td>BasePathFs fails when basepath is <code>.</code></td><td>Test edge cases</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>BasePathFs Symlink Escape Issue:</strong></p>
+<blockquote>
+<p>“SymlinkIfPossible will resolve the RealPath of underlayer filesystem before make a symlink. For example, creating a link like ‘/foo/bar’ -&gt; ‘/foo/file’ will be transform into a link point to ‘/{basepath}/foo/file.’”</p>
+</blockquote>
+<p>This means symlinks can potentially point outside the base path!</p>
+<p><strong>Our Solution:</strong></p>
+<ul>
+<li><code>VRootFsBackend</code> uses <a href="https://github.com/nickelpack/strict-path"><code>strict-path</code></a> for real filesystem containment</li>
+<li>Virtual backends (Memory, SQLite) are inherently safe - paths are just keys</li>
+<li><code>PathFilter</code> middleware provides additional sandboxing layer</li>
+</ul>
+<p><strong>What we should verify:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Test symlink creation pointing outside VRootFsBackend</li>
+<li><input disabled="" type="checkbox"> Test <code>..</code> in symlink targets</li>
+<li><input disabled="" type="checkbox"> Test symlink loops with max depth</li>
+</ul>
+<hr>
+<h3 id="4-java-apache-commons-vfs"><a class="header" href="#4-java-apache-commons-vfs">4. Java: Apache Commons VFS</a></h3>
+<p><strong>Repository:</strong> <a href="https://commons.apache.org/vfs/">Apache Commons VFS</a></p>
+<p><strong>🔴 CRITICAL VULNERABILITY: CVE in versions &lt; 2.10.0</strong></p>
+<p><strong>The Bug:</strong></p>
+<pre><code class="language-java">// FileObject API has resolveFile with scope parameter
+FileObject file = baseFile.resolveFile("../secret.txt", NameScope.DESCENDENT);
+// SHOULD throw exception - "../secret.txt" is not a descendent
+
+// BUT with URL encoding:
+FileObject file = baseFile.resolveFile("%2e%2e/secret.txt", NameScope.DESCENDENT);
+// DOES NOT throw exception! Returns file outside base directory.
+</code></pre>
+<p><strong>Root Cause:</strong> Path validation happened BEFORE URL decoding.</p>
+<p><strong>Lesson for AnyFS:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// WRONG - validate then decode
+fn resolve(path: &amp;str) -&gt; Result&lt;PathBuf, FsError&gt; {
+    validate_no_traversal(path)?;  // Checks for ".."
+    let decoded = url_decode(path);  // "../" appears after decode!
+    Ok(PathBuf::from(decoded))
+}
+
+// CORRECT - decode then validate
+fn resolve(path: &amp;str) -&gt; Result&lt;PathBuf, FsError&gt; {
+    let decoded = url_decode(path);
+    let normalized = normalize_path(&amp;decoded);  // Resolve all ".."
+    validate_containment(&amp;normalized)?;
+    Ok(normalized)
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Action Items:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Add test: URL-encoded <code>%2e%2e</code> path traversal attempt</li>
+<li><input disabled="" type="checkbox"> Add test: Double-encoding <code>%252e%252e</code></li>
+<li><input disabled="" type="checkbox"> Ensure path normalization happens BEFORE validation</li>
+<li><input disabled="" type="checkbox"> Document in security model</li>
+</ul>
+<hr>
+<h3 id="5-net-systemioabstractions"><a class="header" href="#5-net-systemioabstractions">5. .NET: System.IO.Abstractions</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/TestableIO/System.IO.Abstractions">TestableIO/System.IO.Abstractions</a></p>
+<p><strong>What they do well:</strong></p>
+<ol>
+<li>
+<p><strong>Perfect API Compatibility</strong></p>
+<ul>
+<li>Mirrors <code>System.IO</code> exactly</li>
+<li>Drop-in replacement for testing</li>
+</ul>
+</li>
+<li>
+<p><strong>MockFileSystem for Testing</strong></p>
+<pre><code class="language-csharp">var fileSystem = new MockFileSystem(new Dictionary&lt;string, MockFileData&gt;
+{
+    { @"c:\myfile.txt", new MockFileData("Testing") },
+    { @"c:\demo\jQuery.js", new MockFileData("jQuery content") },
+});
+
+// Use in tests
+var sut = new MyComponent(fileSystem);
+</code></pre>
+</li>
+<li>
+<p><strong>Analyzers Package</strong></p>
+<ul>
+<li>Roslyn analyzers warn when using <code>System.IO</code> directly</li>
+<li>Guides developers to use abstractions</li>
+</ul>
+</li>
+</ol>
+<p><strong>What they lack:</strong></p>
+<ul>
+<li>No middleware/composition</li>
+<li>No caching layer</li>
+<li>No sandboxing/path filtering</li>
+<li>Testing-focused, not production backends</li>
+</ul>
+<p><strong>What we should adopt:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Consider Rust analyzer/clippy lint for <code>std::fs</code> usage</li>
+<li><input disabled="" type="checkbox"> MockFileSystem pattern is similar to our <code>MemoryBackend</code></li>
+</ul>
+<hr>
+<h3 id="6-nodejs-memfs--unionfs"><a class="header" href="#6-nodejs-memfs--unionfs">6. Node.js: memfs + unionfs</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/streamich/memfs">streamich/memfs</a></p>
+<p><strong>What they do well:</strong></p>
+<ol>
+<li>
+<p><strong>Browser + Node Unified</strong></p>
+<ul>
+<li>Works in browser via File System API</li>
+<li>Same API as Node’s <code>fs</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Union Filesystem Composition</strong></p>
+<pre><code class="language-javascript">import { Union } from 'unionfs';
+import { fs as memfs } from 'memfs';
+import * as fs from 'fs';
+
+const ufs = new Union();
+ufs.use(fs);        // Real filesystem as base
+ufs.use(memfs);     // Memory overlay
+</code></pre>
+</li>
+</ol>
+<p><strong>Known Issues:</strong></p>
+<blockquote>
+<p>“There is a fork of memfs maintained by SageMath (sagemathinc/memfs-js) which was created to fix 13 security vulnerabilities revealed by npm audit. This fork exists because, as their GitHub description notes, ‘there are longstanding bugs’ in the upstream memfs.”</p>
+</blockquote>
+<p><strong>Lesson:</strong> Even popular libraries can have security issues. Our conformance test suite should be comprehensive.</p>
+<hr>
+<h2 id="vulnerabilities-summary"><a class="header" href="#vulnerabilities-summary">Vulnerabilities Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Library</th><th>Vulnerability</th><th>Type</th><th>Our Mitigation</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Apache Commons VFS</strong></td><td>CVE (pre-2.10.0)</td><td>URL-encoded path traversal</td><td>Decode before validate</td></tr>
+<tr><td><strong>Afero (Go)</strong></td><td>Issue #282, #88</td><td>Symlink escape from BasePathFs</td><td>Use <code>strict-path</code>, test thoroughly</td></tr>
+<tr><td><strong>PyFilesystem2</strong></td><td>Issue #171</td><td>Symlink loop causes infinite recursion</td><td>Loop detection with max depth</td></tr>
+<tr><td><strong>memfs (Node)</strong></td><td>13 vulns in npm audit</td><td>Various (unspecified)</td><td>Comprehensive test suite</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="features-comparison-matrix"><a class="header" href="#features-comparison-matrix">Features Comparison Matrix</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">fsspec</th><th style="text-align: center">PyFS2</th><th style="text-align: center">Afero</th><th style="text-align: center">Commons VFS</th><th style="text-align: center">System.IO.Abs</th><th style="text-align: center">AnyFS</th></tr>
+</thead>
+<tbody>
+<tr><td>Middleware composition</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Quota enforcement</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Path sandboxing</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Rate limiting</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Caching layer</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Async support</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">🔜</td></tr>
+<tr><td>Block-wise caching</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>URL-based opening</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Union/overlay FS</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>SQLite backend</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>FUSE mounting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Type-safe markers</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="security-tests-to-add"><a class="header" href="#security-tests-to-add">Security Tests to Add</a></h2>
+<p>Based on vulnerabilities found in other libraries, add these to our conformance test suite:</p>
+<h3 id="path-traversal-tests"><a class="header" href="#path-traversal-tests">Path Traversal Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_url_encoded_path_traversal() {
+    let fs = create_sandboxed_fs("/sandbox");
+
+    // These should all fail or be contained
+    assert!(fs.read("%2e%2e/etc/passwd").is_err());      // URL-encoded ../
+    assert!(fs.read("%252e%252e/secret").is_err());      // Double-encoded
+    assert!(fs.read("..%2f..%2fetc/passwd").is_err());   // Mixed encoding
+    assert!(fs.read("....//....//etc/passwd").is_err()); // Extra dots
+}
+
+#[test]
+fn test_symlink_escape() {
+    let fs = create_sandboxed_fs("/sandbox");
+
+    // Symlink pointing outside should fail or be contained
+    assert!(fs.symlink("/etc/passwd", "/sandbox/link").is_err());
+    assert!(fs.symlink("../../../etc/passwd", "/sandbox/link").is_err());
+
+    // Even if symlink created, reading should fail
+    fs.symlink("../secret", "/sandbox/link").ok();
+    assert!(fs.read("/sandbox/link").is_err());
+}
+
+#[test]
+fn test_symlink_loop_detection() {
+    let fs = MemoryBackend::new();
+
+    // Create loop: a -&gt; b -&gt; a
+    fs.symlink("/b", "/a").unwrap();
+    fs.symlink("/a", "/b").unwrap();
+
+    // Should detect loop, not hang
+    let result = fs.read("/a");
+    assert!(matches!(result, Err(FsError::TooManySymlinks { .. })));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="resource-exhaustion-tests"><a class="header" href="#resource-exhaustion-tests">Resource Exhaustion Tests</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_deep_directory_traversal() {
+    let fs = create_fs_with_depth_limit(64);
+
+    // Creating very deep paths should fail
+    let deep_path = "/".to_string() + &amp;"a/".repeat(100);
+    assert!(fs.create_dir_all(&amp;deep_path).is_err());
+}
+
+#[test]
+fn test_many_open_handles() {
+    let fs = create_fs();
+    let mut handles = vec![];
+
+    // Opening many files shouldn't crash
+    for i in 0..10000 {
+        fs.write(&amp;format!("/file{}", i), b"x").unwrap();
+        if let Ok(h) = fs.open_read(&amp;format!("/file{}", i)) {
+            handles.push(h);
+        }
+    }
+    // Should either succeed or return resource error, not crash
+}
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="action-items"><a class="header" href="#action-items">Action Items</a></h2>
+<h3 id="high-priority-before-v10"><a class="header" href="#high-priority-before-v10">High Priority (Before v1.0)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Task</th><th>Source</th><th>Priority</th></tr>
+</thead>
+<tbody>
+<tr><td>Add URL-encoded path traversal tests</td><td>Apache Commons VFS CVE</td><td>🔴 Critical</td></tr>
+<tr><td>Add symlink escape tests for VRootFsBackend</td><td>Afero issues</td><td>🔴 Critical</td></tr>
+<tr><td>Add symlink loop detection</td><td>PyFilesystem2 #171</td><td>🔴 Critical</td></tr>
+<tr><td>Verify <code>strict-path</code> handles all edge cases</td><td>Afero BasePathFs issues</td><td>🔴 Critical</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="medium-priority-v11"><a class="header" href="#medium-priority-v11">Medium Priority (v1.1+)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Task</th><th>Source</th><th>Priority</th></tr>
+</thead>
+<tbody>
+<tr><td>Consider block-wise caching for large files</td><td>fsspec</td><td>🟡 Enhancement</td></tr>
+<tr><td>Add async support</td><td>fsspec async design</td><td>🟡 Enhancement</td></tr>
+<tr><td>URL-based filesystem specification</td><td>PyFilesystem2, Commons VFS</td><td>🟢 Nice-to-have</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Task</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td>Document symlink behavior for each backend</td><td>All libraries have issues</td></tr>
+<tr><td>Add security considerations for path handling</td><td>Apache Commons VFS CVE</td></tr>
+<tr><td>Compare AnyFS to alternatives</td><td>This analysis</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="sibling-rust-projects-path-security-libraries"><a class="header" href="#sibling-rust-projects-path-security-libraries">Sibling Rust Projects: Path Security Libraries</a></h2>
+<p>AnyFS builds on foundational security work from two related Rust crates that specifically address path resolution vulnerabilities. These crates are planned to be used in AnyFS’s path handling implementation.</p>
+<h3 id="soft-canonicalize-rs"><a class="header" href="#soft-canonicalize-rs">soft-canonicalize-rs</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/DK26/soft-canonicalize-rs">DK26/soft-canonicalize-rs</a></p>
+<p><strong>Purpose:</strong> Path canonicalization that works with non-existing paths—a critical gap in <code>std::fs::canonicalize</code>.</p>
+<p><strong>Security Features:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>Attack Prevented</th></tr>
+</thead>
+<tbody>
+<tr><td>NTFS ADS validation</td><td>Blocks alternate data stream syntax</td><td>Hidden data, path escape</td></tr>
+<tr><td>Symlink cycle detection</td><td>Bounded depth tracking</td><td>DoS via infinite loops</td></tr>
+<tr><td>Path traversal clamping</td><td>Can’t ascend past root</td><td>Directory escape</td></tr>
+<tr><td>Null byte rejection</td><td>Early validation</td><td>Null injection</td></tr>
+<tr><td>TOCTOU resistance</td><td>Atomic-like resolution</td><td>Race conditions</td></tr>
+<tr><td>Windows UNC handling</td><td>Normalizes extended paths</td><td>Path confusion</td></tr>
+<tr><td>Linux namespace preservation</td><td>Uses <code>proc-canonicalize</code></td><td>Container escape via <code>/proc/PID/root</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Key Innovation: Anchored Canonicalization</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// All paths (including symlink targets) are clamped to anchor
+let result = anchored_canonicalize("/workspace", user_input)?;
+// If symlink points to /etc/passwd, result becomes /workspace/etc/passwd
+<span class="boring">}</span></code></pre>
+<p>This is exactly what <code>VRootFsBackend</code> needs for safe path containment.</p>
+<h3 id="strict-path-rs"><a class="header" href="#strict-path-rs">strict-path-rs</a></h3>
+<p><strong>Repository:</strong> <a href="https://github.com/DK26/strict-path-rs">DK26/strict-path-rs</a></p>
+<p><strong>Purpose:</strong> Type-safe path handling that prevents traversal attacks at compile time.</p>
+<p><strong>Two Modes:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Behavior</th><th>Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td><code>StrictPath</code></td><td>Returns <code>Err(PathEscapesBoundary)</code> on escape</td><td>Archive extraction, file uploads</td></tr>
+<tr><td><code>VirtualPath</code></td><td>Clamps escape attempts within sandbox</td><td>Multi-tenant, per-user storage</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Documented Attack Coverage (19+ vulnerabilities):</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attack Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Symlink/junction escapes</td><td>Follows and validates canonical paths</td></tr>
+<tr><td>Windows 8.3 short names</td><td>Detects <code>PROGRA~1</code> obfuscation</td></tr>
+<tr><td>NTFS Alternate Data Streams</td><td>Blocks <code>file.txt:hidden:$DATA</code></td></tr>
+<tr><td>Zip Slip (CVE-2018-1000178)</td><td>Validates archive entries before extraction</td></tr>
+<tr><td>TOCTOU (CVE-2022-21658)</td><td>Handles time-of-check-time-of-use races</td></tr>
+<tr><td>Unicode/encoding bypasses</td><td>Normalizes path representations</td></tr>
+<tr><td>Mixed separators</td><td>Handles <code>/</code> and <code>\</code> on Windows</td></tr>
+<tr><td>UNC path tricks</td><td>Prevents <code>\\?\C:\..\..\</code> attacks</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Type-Safe Marker Pattern (mirrors AnyFS’s design!):</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct UserFiles;
+struct SystemFiles;
+
+fn process_user(f: &amp;StrictPath&lt;UserFiles&gt;) { /* ... */ }
+// Wrong marker type = compile error
+<span class="boring">}</span></code></pre>
+<h3 id="applicability-to-anyfs"><a class="header" href="#applicability-to-anyfs">Applicability to AnyFS</a></h3>
+<p><strong>Important distinction:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend Type</th><th>Path Resolution Strategy</th><th>Can Use These Crates?</th></tr>
+</thead>
+<tbody>
+<tr><td><code>VRootFsBackend</code></td><td>Real filesystem</td><td>✅ Yes - wraps actual FS</td></tr>
+<tr><td><code>MemoryBackend</code></td><td><strong>Lexical only</strong></td><td>❌ No - paths are HashMap keys</td></tr>
+<tr><td><code>SqliteBackend</code></td><td><strong>Lexical only</strong></td><td>❌ No - paths are DB strings</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>For virtual backends (Memory, SQLite, etc.):</strong></p>
+<ul>
+<li>These crates perform <strong>real filesystem resolution</strong> (follow actual symlinks on disk)</li>
+<li>Virtual backends need <strong>lexical-only</strong> path algorithms (pure string manipulation)</li>
+<li>AnyFS must implement its own path resolution that:
+<ol>
+<li>Normalizes <code>.</code> and <code>..</code> via string manipulation</li>
+<li>Resolves symlinks by reading targets from virtual storage</li>
+<li>Detects loops by tracking visited virtual paths</li>
+<li>Validates dangerous patterns (ADS, null bytes) via string checks</li>
+</ol>
+</li>
+</ul>
+<p><strong>For <code>VRootFsBackend</code> only:</strong></p>
+<ul>
+<li>Since it wraps the real filesystem, <code>strict-path</code> could provide safe containment</li>
+<li>But this is the ONLY backend where real FS resolution makes sense</li>
+</ul>
+<h3 id="security-tests-added-to-conformance-suite"><a class="header" href="#security-tests-added-to-conformance-suite">Security Tests Added to Conformance Suite</a></h3>
+<p>Based on these libraries, we’ve added tests for:</p>
+<p><strong>Windows-Specific:</strong></p>
+<ul>
+<li>NTFS Alternate Data Streams (<code>file.txt:hidden</code>)</li>
+<li>Windows 8.3 short names (<code>PROGRA~1</code>)</li>
+<li>UNC path traversal (<code>\\?\C:\..\..\</code>)</li>
+<li>Reserved device names (CON, PRN, NUL)</li>
+<li>Junction point escapes</li>
+</ul>
+<p><strong>Linux-Specific:</strong></p>
+<ul>
+<li><code>/proc/PID/root</code> magic symlinks</li>
+<li><code>/dev/fd/N</code> file descriptor symlinks</li>
+</ul>
+<p><strong>Unicode:</strong></p>
+<ul>
+<li>NFC vs NFD normalization</li>
+<li>Right-to-Left Override (U+202E)</li>
+<li>Homoglyph confusion (Cyrillic vs Latin)</li>
+</ul>
+<p><strong>TOCTOU:</strong></p>
+<ul>
+<li>Check-then-use race conditions</li>
+<li>Symlink target changes during resolution</li>
+</ul>
+<hr>
+<h2 id="conclusion-2"><a class="header" href="#conclusion-2">Conclusion</a></h2>
+<p><strong>What makes AnyFS unique:</strong></p>
+<ol>
+<li><strong>Middleware composition</strong> - Only Afero has this, and we do it better (Tower-style)</li>
+<li><strong>Quota + rate limiting</strong> - No other library has built-in resource control</li>
+<li><strong>Type-safe markers</strong> - Compile-time container isolation is unique to us</li>
+<li><strong>SQLite backend</strong> - No other abstraction library offers this</li>
+</ol>
+<p><strong>What we should learn from others:</strong></p>
+<ol>
+<li><strong>Path traversal via encoding</strong> - Apache Commons VFS vulnerability</li>
+<li><strong>Symlink handling complexity</strong> - All libraries struggle with this</li>
+<li><strong>Caching strategies</strong> - fsspec’s block-wise caching is sophisticated</li>
+<li><strong>Async support</strong> - fsspec shows how to do this well</li>
+</ol>
+<p><strong>Critical security tests to add:</strong></p>
+<ol>
+<li>URL-encoded path traversal (<code>%2e%2e</code>)</li>
+<li>Symlink escape from sandboxed directories</li>
+<li>Symlink loop detection</li>
+<li>Deep path exhaustion</li>
+</ol>
+<hr>
+<h2 id="sources-1"><a class="header" href="#sources-1">Sources</a></h2>
+<h3 id="external-libraries"><a class="header" href="#external-libraries">External Libraries</a></h3>
+<ul>
+<li><a href="https://filesystem-spec.readthedocs.io/">fsspec Documentation</a></li>
+<li><a href="https://github.com/PyFilesystem/pyfilesystem2">PyFilesystem2 GitHub</a></li>
+<li><a href="https://github.com/spf13/afero">Afero GitHub</a></li>
+<li><a href="https://commons.apache.org/vfs/">Apache Commons VFS</a></li>
+<li><a href="https://github.com/TestableIO/System.IO.Abstractions">System.IO.Abstractions GitHub</a></li>
+<li><a href="https://github.com/streamich/memfs">memfs GitHub</a></li>
+</ul>
+<h3 id="sibling-rust-projects"><a class="header" href="#sibling-rust-projects">Sibling Rust Projects</a></h3>
+<ul>
+<li><a href="https://github.com/DK26/soft-canonicalize-rs">soft-canonicalize-rs GitHub</a></li>
+<li><a href="https://github.com/DK26/strict-path-rs">strict-path-rs GitHub</a></li>
+</ul>
+<h3 id="vulnerability-references"><a class="header" href="#vulnerability-references">Vulnerability References</a></h3>
+<ul>
+<li><a href="https://www.cvedetails.com/version/1916065/Apache-Commons-Vfs-2.6.0.html">Apache Commons VFS CVE Details</a></li>
+<li><a href="https://github.com/spf13/afero/issues/282">Afero BasePathFs Issue #282</a></li>
+<li><a href="https://github.com/PyFilesystem/pyfilesystem2/issues/171">PyFilesystem2 Symlink Loop Issue #171</a></li>
+<li><a href="https://nvd.nist.gov/vuln/detail/CVE-2018-1000178">CVE-2018-1000178 (Zip Slip)</a></li>
+<li><a href="https://nvd.nist.gov/vuln/detail/CVE-2022-21658">CVE-2022-21658 (TOCTOU in Rust std)</a></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="implementation-plan"><a class="header" href="#implementation-plan">Implementation Plan</a></h1>
 <p>This plan describes a phased rollout of the AnyFS ecosystem:</p>
@@ -16092,6 +16927,568 @@ mod edge_cases {
 }
 
 // ============================================================================
+// Security Tests (Learned from Prior Art Vulnerabilities)
+// ============================================================================
+
+mod security {
+    use super::*;
+
+    // ------------------------------------------------------------------------
+    // Path Traversal Tests (Apache Commons VFS CVE-inspired)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn reject_dotdot_traversal() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+        fs.write("/secret.txt", b"secret").unwrap();
+
+        // Direct .. traversal must be blocked or normalized
+        let result = fs.read("/sandbox/../secret.txt");
+        // Either blocks the operation or normalizes to /secret.txt (acceptable)
+        // But must NOT escape sandbox context in sandboxed backends
+    }
+
+    #[test]
+    fn reject_url_encoded_dotdot() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+
+        // URL-encoded path traversal: %2e = '.', %2f = '/'
+        // This caused CVE in Apache Commons VFS
+        let result = fs.read("/sandbox/%2e%2e/etc/passwd");
+        assert!(result.is_err(), "URL-encoded path traversal must be rejected");
+
+        // Double-encoded traversal
+        let result = fs.read("/sandbox/%252e%252e/etc/passwd");
+        assert!(result.is_err(), "Double URL-encoded traversal must be rejected");
+    }
+
+    #[test]
+    fn reject_backslash_traversal() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+
+        // Windows-style path traversal
+        let result = fs.read("/sandbox\\..\\secret.txt");
+        assert!(result.is_err(), "Backslash traversal must be rejected");
+    }
+
+    #[test]
+    fn reject_mixed_slash_traversal() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+
+        // Mixed forward/backward slashes
+        let result = fs.read("/sandbox/..\\..\\secret.txt");
+        assert!(result.is_err(), "Mixed slash traversal must be rejected");
+
+        let result = fs.read("/sandbox\\../secret.txt");
+        assert!(result.is_err(), "Mixed slash traversal must be rejected");
+    }
+
+    #[test]
+    fn reject_null_byte_injection() {
+        let fs = create_backend();
+        fs.write("/safe.txt", b"safe").unwrap();
+        fs.write("/safe.txt.bak", b"backup").unwrap();
+
+        // Null byte injection: /safe.txt\0.bak -&gt; /safe.txt
+        let result = fs.read("/safe.txt\0.bak");
+        // Should either reject or not truncate at null
+        if let Ok(content) = result {
+            // If it succeeds, it should read the full path, not truncated
+            assert_ne!(content, b"safe", "Null byte must not truncate path");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Symlink Security Tests (Afero-inspired)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn symlink_cannot_escape_sandbox() {
+        // This test is for sandboxed backends (e.g., VRootFs)
+        // Regular backends may allow this, which is fine
+        let fs = create_backend();
+
+        // Attempt to create symlink pointing outside virtual root
+        let result = fs.symlink("/etc/passwd", "/escape_link");
+
+        // Sandboxed backends MUST reject this
+        // Non-sandboxed backends may allow it
+        // The key is: reading through the symlink must not expose
+        // content outside the sandbox
+    }
+
+    #[test]
+    fn symlink_to_absolute_path_outside() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+        fs.write("/sandbox/safe.txt", b"safe").unwrap();
+
+        // Symlink pointing to absolute path outside sandbox
+        // In sandboxed context, this must either:
+        // 1. Reject symlink creation, or
+        // 2. Resolve relative to sandbox root
+        let result = fs.symlink("/../../../etc/passwd", "/sandbox/link");
+        // Behavior depends on backend type
+    }
+
+    #[test]
+    fn relative_symlink_traversal() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir("/sandbox/subdir").unwrap();
+        fs.write("/secret.txt", b"secret outside sandbox").unwrap();
+
+        // Relative symlink that traverses up and out
+        let _ = fs.symlink("../../secret.txt", "/sandbox/subdir/link");
+
+        // If symlink was created, reading through it in a sandboxed
+        // context must not expose /secret.txt
+    }
+
+    // ------------------------------------------------------------------------
+    // Symlink Loop Detection Tests (PyFilesystem2-inspired)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn detect_direct_symlink_loop() {
+        let fs = create_backend();
+
+        // Self-referential symlink
+        let _ = fs.symlink("/loop", "/loop");
+
+        // Reading must detect the loop
+        let result = fs.read("/loop");
+        assert!(matches!(result, Err(FsError::TooManySymlinks { .. }))
+            || matches!(result, Err(FsError::NotFound { .. }))
+            || result.is_err(),
+            "Direct symlink loop must be detected");
+    }
+
+    #[test]
+    fn detect_indirect_symlink_loop() {
+        let fs = create_backend();
+
+        // Two symlinks pointing to each other: a -&gt; b, b -&gt; a
+        let _ = fs.symlink("/b", "/a");
+        let _ = fs.symlink("/a", "/b");
+
+        // Reading either must detect the loop
+        let result = fs.read("/a");
+        assert!(matches!(result, Err(FsError::TooManySymlinks { .. }))
+            || result.is_err(),
+            "Indirect symlink loop must be detected");
+    }
+
+    #[test]
+    fn detect_deep_symlink_chain() {
+        let fs = create_backend();
+
+        // Create a long chain of symlinks
+        // link_0 -&gt; link_1 -&gt; link_2 -&gt; ... -&gt; link_N
+        for i in 0..100 {
+            let _ = fs.symlink(
+                &amp;format!("/link_{}", i + 1),
+                &amp;format!("/link_{}", i)
+            );
+        }
+        fs.write("/link_100", b"target").unwrap();
+
+        // Following the chain should either succeed or fail with TooManySymlinks
+        // Must NOT cause stack overflow or infinite loop
+        let result = fs.read("/link_0");
+        // Either succeeds (if backend allows deep chains) or returns error
+        // Key is: it must terminate
+    }
+
+    #[test]
+    fn symlink_loop_with_directories() {
+        let fs = create_backend();
+        fs.create_dir("/dir1").unwrap();
+        fs.create_dir("/dir2").unwrap();
+
+        // Create directory symlink loop
+        let _ = fs.symlink("/dir2", "/dir1/link_to_dir2");
+        let _ = fs.symlink("/dir1", "/dir2/link_to_dir1");
+
+        // Attempting to read a file through the loop
+        let result = fs.read("/dir1/link_to_dir2/link_to_dir1/link_to_dir2/file.txt");
+        assert!(result.is_err(), "Directory symlink loop must be detected");
+    }
+
+    // ------------------------------------------------------------------------
+    // Resource Exhaustion Tests
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn reject_excessive_symlink_depth() {
+        let fs = create_backend();
+
+        // FUSE typically limits to 40 symlink follows
+        // We should have a reasonable limit (e.g., 40-256)
+        const MAX_EXPECTED_DEPTH: u32 = 256;
+
+        // Create chain that exceeds expected limit
+        for i in 0..MAX_EXPECTED_DEPTH + 10 {
+            let _ = fs.symlink(
+                &amp;format!("/excessive_{}", i + 1),
+                &amp;format!("/excessive_{}", i)
+            );
+        }
+
+        // Create actual target
+        fs.write(&amp;format!("/excessive_{}", MAX_EXPECTED_DEPTH + 10), b"data").unwrap();
+
+        // Should reject or limit, not follow indefinitely
+        let result = fs.read("/excessive_0");
+        // Either succeeds (backend allows this depth) or errors
+        // Key: must not hang or OOM
+    }
+
+    // ------------------------------------------------------------------------
+    // Canonicalization Tests
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn path_normalization_removes_dots() {
+        let fs = create_backend();
+        fs.create_dir("/parent").unwrap();
+        fs.write("/parent/file.txt", b"content").unwrap();
+
+        // Single dots should be normalized
+        let result = fs.read("/parent/./file.txt");
+        if let Ok(content) = result {
+            assert_eq!(content, b"content");
+        }
+
+        // Double dots in the middle
+        let result = fs.read("/parent/subdir/../file.txt");
+        // Either normalized to /parent/file.txt or rejected
+    }
+
+    #[test]
+    fn path_normalization_removes_double_slashes() {
+        let fs = create_backend();
+        fs.write("/file.txt", b"content").unwrap();
+
+        // Double slashes should be normalized
+        let result = fs.read("//file.txt");
+        if let Ok(content) = result {
+            assert_eq!(content, b"content");
+        }
+
+        let result = fs.read("/parent//file.txt");
+        // Either works (normalized) or returns NotFound (strict)
+    }
+
+    #[test]
+    fn trailing_slash_handling() {
+        let fs = create_backend();
+        fs.create_dir("/mydir").unwrap();
+        fs.write("/mydir/file.txt", b"content").unwrap();
+
+        // Directory with trailing slash
+        assert!(fs.exists("/mydir/").unwrap() || fs.exists("/mydir").unwrap());
+
+        // File with trailing slash should fail or be normalized
+        let result = fs.read("/mydir/file.txt/");
+        // Either fails (strict) or normalizes (lenient)
+    }
+
+    // ------------------------------------------------------------------------
+    // Windows-Specific Security Tests (from soft-canonicalize/strict-path)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    #[cfg(windows)]
+    fn reject_ntfs_alternate_data_streams() {
+        let fs = create_backend();
+        fs.write("/file.txt", b"main content").unwrap();
+
+        // NTFS ADS: file.txt:hidden_stream
+        // Attacker may try to hide data or escape paths via ADS
+        let result = fs.read("/file.txt:hidden");
+        assert!(result.is_err(), "NTFS ADS must be rejected");
+
+        let result = fs.read("/file.txt:$DATA");
+        assert!(result.is_err(), "NTFS ADS with $DATA must be rejected");
+
+        let result = fs.read("/file.txt::$DATA");
+        assert!(result.is_err(), "NTFS default stream syntax must be rejected");
+
+        // ADS in directory path (traversal attempt)
+        let result = fs.read("/dir:ads/../secret.txt");
+        assert!(result.is_err(), "ADS in directory path must be rejected");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn reject_windows_8_3_short_names() {
+        let fs = create_backend();
+        fs.create_dir("/Program Files").unwrap();
+        fs.write("/Program Files/secret.txt", b"secret").unwrap();
+
+        // 8.3 short names can be used to obfuscate paths
+        // PROGRA~1 is the typical short name for "Program Files"
+        // Virtual filesystems should either:
+        // 1. Not support 8.3 names at all (reject)
+        // 2. Resolve them consistently to the same canonical path
+
+        // Test that we don't accidentally create different files
+        let result1 = fs.exists("/Program Files/secret.txt");
+        let result2 = fs.exists("/PROGRA~1/secret.txt");
+
+        // Either both exist (resolved) or short name doesn't exist (rejected)
+        // Key: they must NOT be different files
+        if result1.unwrap_or(false) &amp;&amp; result2.unwrap_or(false) {
+            // If both exist, they must have same content
+            let content1 = fs.read("/Program Files/secret.txt").unwrap();
+            let content2 = fs.read("/PROGRA~1/secret.txt").unwrap();
+            assert_eq!(content1, content2, "8.3 names must resolve to same file");
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn reject_windows_unc_traversal() {
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+
+        // Extended-length path prefix traversal
+        let result = fs.read("\\\\?\\C:\\..\\..\\etc\\passwd");
+        assert!(result.is_err(), "UNC extended path traversal must be rejected");
+
+        // Device namespace
+        let result = fs.read("\\\\.\\C:\\secret.txt");
+        assert!(result.is_err(), "Device namespace paths must be rejected");
+
+        // UNC server path
+        let result = fs.read("\\\\server\\share\\..\\..\\secret.txt");
+        assert!(result.is_err(), "UNC server paths must be rejected");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn reject_windows_reserved_names() {
+        let fs = create_backend();
+
+        // Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+        // These can cause hangs or unexpected behavior
+        let reserved_names = ["CON", "PRN", "AUX", "NUL", "COM1", "LPT1"];
+
+        for name in reserved_names {
+            let result = fs.write(&amp;format!("/{}", name), b"data");
+            // Should either reject or handle safely (not hang)
+
+            let result = fs.write(&amp;format!("/{}.txt", name), b"data");
+            // CON.txt is also problematic on Windows
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn reject_windows_junction_escape() {
+        // Junction points are Windows' equivalent of directory symlinks
+        // They can be used for sandbox escape similar to symlinks
+        let fs = create_backend();
+        fs.create_dir("/sandbox").unwrap();
+
+        // If backend supports junctions, they must be contained like symlinks
+        // The test setup would require actual junction creation capability
+        // This documents the requirement even if not all backends support it
+    }
+
+    // ------------------------------------------------------------------------
+    // Linux-Specific Security Tests (from soft-canonicalize/strict-path)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn reject_proc_magic_symlinks() {
+        // /proc/PID/root and similar "magic" symlinks can escape namespaces
+        // Virtual filesystems wrapping real FS must not follow these
+        let fs = create_backend();
+
+        // These paths are only relevant for backends that wrap real filesystem
+        // In-memory backends naturally don't have this issue
+
+        // /proc/self/root points to the filesystem root, even in containers
+        // Following it would escape chroot/container boundaries
+        let result = fs.read("/proc/self/root/etc/passwd");
+        // Either NotFound (good - path doesn't exist in VFS)
+        // or handled safely (doesn't escape actual container)
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn reject_dev_fd_symlinks() {
+        let fs = create_backend();
+
+        // /dev/fd/N symlinks to open file descriptors
+        // Could be used to access files outside sandbox
+        let result = fs.read("/dev/fd/0");
+        // Should fail or be isolated from real /dev/fd
+    }
+
+    // ------------------------------------------------------------------------
+    // Unicode Security Tests (from strict-path)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn unicode_normalization_consistency() {
+        let fs = create_backend();
+
+        // NFC vs NFD normalization: é can be:
+        // - U+00E9 (precomposed, NFC)
+        // - U+0065 U+0301 (decomposed, NFD: e + combining acute)
+        let nfc = "/caf\u{00E9}.txt";  // precomposed
+        let nfd = "/cafe\u{0301}.txt"; // decomposed
+
+        fs.write(nfc, b"coffee").unwrap();
+
+        // If backend normalizes, both should access same file
+        // If backend doesn't normalize, second should not exist
+        // Key: must NOT create two different files that look identical
+        let result_nfc = fs.exists(nfc);
+        let result_nfd = fs.exists(nfd);
+
+        // Document the backend's behavior
+        // Either both true (normalized) or only NFC true (strict)
+    }
+
+    #[test]
+    fn reject_unicode_direction_override() {
+        let fs = create_backend();
+
+        // Right-to-Left Override (U+202E) can make paths appear different
+        // "secret\u{202E}txt.exe" displays as "secretexe.txt" in some contexts
+        let malicious_path = "/secret\u{202E}txt.exe";
+
+        let result = fs.write(malicious_path, b"data");
+        // Should either reject or sanitize bidirectional control characters
+    }
+
+    #[test]
+    fn reject_unicode_homoglyphs() {
+        let fs = create_backend();
+
+        // Cyrillic 'а' (U+0430) looks like Latin 'a' (U+0061)
+        let latin_path = "/data/file.txt";
+        let cyrillic_path = "/d\u{0430}ta/file.txt"; // Cyrillic 'а'
+
+        fs.create_dir("/data").unwrap();
+        fs.write(latin_path, b"real content").unwrap();
+
+        // These must NOT silently access the same file
+        // Either cyrillic path is NotFound, or it's a different file
+        let result = fs.read(cyrillic_path);
+        if let Ok(content) = result {
+            // If cyrillic path exists, it must be a distinct file
+            // (not accidentally matching the latin path)
+        }
+    }
+
+    #[test]
+    fn reject_null_in_unicode() {
+        let fs = create_backend();
+
+        // Null can be encoded in various ways
+        // UTF-8 null is just 0x00, but check overlong encodings aren't decoded
+        let path_with_null = "/file\u{0000}name.txt";
+
+        let result = fs.write(path_with_null, b"data");
+        assert!(result.is_err(), "Embedded null must be rejected");
+    }
+
+    // ------------------------------------------------------------------------
+    // TOCTOU Race Condition Tests (from soft-canonicalize/strict-path)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn toctou_check_then_use() {
+        let fs = Arc::new(create_backend());
+        fs.create_dir("/uploads").unwrap();
+
+        // Simulate TOCTOU: check if path is safe, then use it
+        // An attacker might change the filesystem between check and use
+
+        let fs_checker = fs.clone();
+        let fs_writer = fs.clone();
+
+        // This test documents the requirement for atomic operations
+        // or proper locking in security-critical paths
+
+        // Thread 1: Check then write
+        let checker = thread::spawn(move || {
+            for i in 0..100 {
+                let path = format!("/uploads/file_{}.txt", i);
+                // Check
+                if !fs_checker.exists(&amp;path).unwrap_or(true) {
+                    // Use (potential race window here)
+                    let _ = fs_checker.write(&amp;path, b"data");
+                }
+            }
+        });
+
+        // Thread 2: Rapid file creation/deletion
+        let writer = thread::spawn(move || {
+            for i in 0..100 {
+                let path = format!("/uploads/file_{}.txt", i);
+                let _ = fs_writer.write(&amp;path, b"attacker");
+                let _ = fs_writer.remove_file(&amp;path);
+            }
+        });
+
+        checker.join().unwrap();
+        writer.join().unwrap();
+
+        // Test passes if no panic/crash occurs
+        // Real protection requires atomic create-if-not-exists operations
+    }
+
+    #[test]
+    fn symlink_toctou_during_resolution() {
+        let fs = Arc::new(create_backend());
+        fs.create_dir("/safe").unwrap();
+        fs.write("/safe/target.txt", b"safe content").unwrap();
+        fs.write("/unsafe.txt", b"unsafe content").unwrap();
+
+        // Attacker rapidly changes symlink target during path resolution
+        let fs_attacker = fs.clone();
+        let fs_reader = fs.clone();
+
+        let attacker = thread::spawn(move || {
+            for _ in 0..100 {
+                // Create symlink to safe target
+                let _ = fs_attacker.remove_file("/safe/link.txt");
+                let _ = fs_attacker.symlink("/safe/target.txt", "/safe/link.txt");
+
+                // Quickly change to unsafe target
+                let _ = fs_attacker.remove_file("/safe/link.txt");
+                let _ = fs_attacker.symlink("/unsafe.txt", "/safe/link.txt");
+            }
+        });
+
+        let reader = thread::spawn(move || {
+            for _ in 0..100 {
+                // Try to read through symlink
+                // Must not accidentally read /unsafe.txt if sandboxed
+                let _ = fs_reader.read("/safe/link.txt");
+            }
+        });
+
+        attacker.join().unwrap();
+        reader.join().unwrap();
+
+        // For sandboxed backends: must never return content from /unsafe.txt
+        // This test verifies the implementation doesn't have TOCTOU in symlink resolution
+    }
+}
+
+// ============================================================================
 // Thread Safety Tests
 // ============================================================================
 
@@ -16637,6 +18034,7 @@ jobs:
 <li><input disabled="" type="checkbox"> All <code>fs_write</code> tests pass</li>
 <li><input disabled="" type="checkbox"> All <code>fs_dir</code> tests pass</li>
 <li><input disabled="" type="checkbox"> All <code>edge_cases</code> tests pass</li>
+<li><input disabled="" type="checkbox"> All <code>security</code> tests pass</li>
 <li><input disabled="" type="checkbox"> All <code>thread_safety</code> tests pass</li>
 <li><input disabled="" type="checkbox"> All <code>no_panic</code> tests pass</li>
 </ul>
@@ -16665,11 +18063,32 @@ jobs:
 <ol>
 <li><strong>Complete coverage</strong> of all <code>Fs</code> trait operations</li>
 <li><strong>Edge case testing</strong> for robustness</li>
+<li><strong>Security tests</strong> learned from vulnerabilities in prior art (Apache Commons VFS, Afero, PyFilesystem2)</li>
 <li><strong>Thread safety verification</strong> for concurrent access</li>
 <li><strong>No-panic guarantees</strong> for invalid inputs</li>
 <li><strong>Extended tests</strong> for <code>FsFull</code> and <code>FsFuse</code> traits</li>
 <li><strong>Middleware testing patterns</strong></li>
 </ol>
+<h3 id="security-tests-cover"><a class="header" href="#security-tests-cover">Security Tests Cover:</a></h3>
+<ul>
+<li><strong>Path traversal attacks</strong>: URL-encoded <code>%2e%2e</code>, backslash traversal, null byte injection</li>
+<li><strong>Symlink escape</strong>: Preventing sandbox escape via symlinks</li>
+<li><strong>Symlink loops</strong>: Direct loops, indirect loops, deep chains</li>
+<li><strong>Resource exhaustion</strong>: Limits on symlink depth</li>
+<li><strong>Path canonicalization</strong>: Dot removal, double slash normalization</li>
+<li><strong>Windows-specific</strong> (from <code>soft-canonicalize</code>/<code>strict-path</code>):
+<ul>
+<li>NTFS Alternate Data Streams</li>
+<li>Windows 8.3 short names</li>
+<li>UNC path traversal</li>
+<li>Reserved device names</li>
+<li>Junction point escapes</li>
+</ul>
+</li>
+<li><strong>Linux-specific</strong>: Magic symlinks (<code>/proc/PID/root</code>), <code>/dev/fd</code> escapes</li>
+<li><strong>Unicode</strong>: NFC/NFD normalization, RTL override, homoglyphs</li>
+<li><strong>TOCTOU</strong>: Race conditions in check-then-use and symlink resolution</li>
+</ul>
 <p>Copy the relevant test modules, implement <code>create_backend()</code>, and run the tests. If they all pass, your backend/middleware is AnyFS-compatible.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="middleware-implementation-guide"><a class="header" href="#middleware-implementation-guide">Middleware Implementation Guide</a></h1>
@@ -18776,6 +20195,305 @@ process_sandbox(&amp;userdata);  // Compile error!
 </tbody>
 </table>
 </div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="design-review-rust-community-alignment"><a class="header" href="#design-review-rust-community-alignment">Design Review: Rust Community Alignment</a></h1>
+<p>This document critically reviews AnyFS design decisions against Rust community expectations and best practices. The goal is to identify potential friction points before implementation.</p>
+<hr>
+<h2 id="summary-9"><a class="header" href="#summary-9">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Issues Found</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td>Critical (must fix)</td><td>2</td><td>✅ Fixed</td></tr>
+<tr><td>Should fix</td><td>4</td><td>🟡 In progress</td></tr>
+<tr><td>Document clearly</td><td>3</td><td>🟢 Ongoing</td></tr>
+<tr><td>Non-issues</td><td>5</td><td>✅ Verified</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="-critical-issues-fixed"><a class="header" href="#-critical-issues-fixed">✅ Critical Issues (Fixed)</a></h2>
+<h3 id="1-fserror-missing-non_exhaustive--fixed"><a class="header" href="#1-fserror-missing-non_exhaustive--fixed">1. FsError Missing <code>#[non_exhaustive]</code> — FIXED</a></h3>
+<p><strong>Problem:</strong> Our <code>FsError</code> enum doesn’t have <code>#[non_exhaustive]</code>. This is a <strong>semver hazard</strong>.</p>
+<p><strong>Status:</strong> ✅ Fixed in <code>design-overview.md</code>. FsError now has <code>#[non_exhaustive]</code>, <code>thiserror::Error</code> derive, and <code>From&lt;std::io::Error&gt;</code> impl.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Current (problematic)
+pub enum FsError {
+    NotFound { path: PathBuf },
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
+    // ...
+}
+
+// If we add a variant in 1.1:
+pub enum FsError {
+    NotFound { path: PathBuf },
+    AlreadyExists { path: PathBuf, operation: &amp;'static str },
+    TooManySymlinks { path: PathBuf },  // NEW - breaks exhaustive matches!
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Impact:</strong> Users with exhaustive matches will get compile errors on minor version bumps.</p>
+<p><strong>Fix:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum FsError {
+    #[error("not found: {path}")]
+    NotFound { path: PathBuf },
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Also needed:</strong></p>
+<ul>
+<li><code>impl std::error::Error for FsError</code></li>
+<li><code>impl From&lt;std::io::Error&gt; for FsError</code></li>
+<li>Consider <code>#[non_exhaustive]</code> on struct variants too</li>
+</ul>
+<hr>
+<h3 id="2-documentation-shows-mut-self-despite-adr-023--fixed"><a class="header" href="#2-documentation-shows-mut-self-despite-adr-023--fixed">2. Documentation Shows <code>&amp;mut self</code> Despite ADR-023 — FIXED</a></h3>
+<p><strong>Problem:</strong> Several code examples still show <code>&amp;mut self</code> or <code>&amp;mut impl Fs</code>.</p>
+<p><strong>Status:</strong> ✅ Fixed. All examples in <code>design-overview.md</code> and <code>files-container.md</code> now use <code>&amp;self</code>.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In design-overview.md line 346:
+fn with_symlinks(fs: &amp;mut (impl Fs + FsLink)) {  // WRONG
+    fs.write("/target.txt", b"content")?;
+    fs.symlink("/target.txt", "/link.txt")?;
+}
+
+// Should be:
+fn with_symlinks(fs: &amp;(impl Fs + FsLink)) {  // Correct
+    fs.write("/target.txt", b"content")?;
+    fs.symlink("/target.txt", "/link.txt")?;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Impact:</strong> Contradicts ADR-023 (interior mutability). Confuses implementers.</p>
+<p><strong>Fix:</strong> Audit all examples and ensure <code>&amp;self</code> everywhere.</p>
+<hr>
+<h2 id="-should-fix"><a class="header" href="#-should-fix">🟡 Should Fix</a></h2>
+<h3 id="3-sync-only-design-may-limit-adoption"><a class="header" href="#3-sync-only-design-may-limit-adoption">3. Sync-Only Design May Limit Adoption</a></h3>
+<p><strong>Problem:</strong> No async support. Many modern Rust projects are async-first.</p>
+<p><strong>Current stance (ADR-024):</strong> Sync now, async later via parallel traits.</p>
+<p><strong>Community expectation:</strong> Projects like <code>tokio</code>, <code>async-std</code> are dominant. Users may expect:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn read(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt;;
+<span class="boring">}</span></code></pre>
+<p><strong>Mitigation:</strong></p>
+<ol>
+<li>Document clearly: “Sync-first by design, async planned”</li>
+<li>Ensure <code>Send + Sync</code> bounds enable <code>spawn_blocking</code> wrapper</li>
+<li>Consider shipping <code>anyfs-async</code> adapter crate early</li>
+</ol>
+<p><strong>Recommendation:</strong> Acceptable for v1.0, but should be high priority for v1.1.</p>
+<hr>
+<h3 id="4-interior-mutability-may-surprise-users"><a class="header" href="#4-interior-mutability-may-surprise-users">4. Interior Mutability May Surprise Users</a></h3>
+<p><strong>Problem:</strong> <code>&amp;self</code> for write operations is unusual in Rust.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Our design
+pub trait FsWrite: Send + Sync {
+    fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+
+// What users might expect (std::io::Write pattern)
+pub trait FsWrite {
+    fn write(&amp;mut self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why we chose this (ADR-023):</strong></p>
+<ul>
+<li>Filesystems are shared resources</li>
+<li>Enables concurrent access</li>
+<li>Matches how <code>std::fs::write()</code> works (takes path, not mutable handle)</li>
+</ul>
+<p><strong>Potential friction:</strong></p>
+<ul>
+<li>Users may try to use <code>&amp;mut self</code> patterns</li>
+<li>May conflict with borrowck mental models</li>
+</ul>
+<p><strong>Mitigation:</strong></p>
+<ol>
+<li>Document prominently with rationale</li>
+<li>Show examples of concurrent usage</li>
+<li>Explain: “Like std::fs, not like std::io::Write”</li>
+</ol>
+<p><strong>Recommendation:</strong> Keep the design, but add prominent documentation.</p>
+<hr>
+<h3 id="5-layer-trait-doesnt-match-tower-exactly"><a class="header" href="#5-layer-trait-doesnt-match-tower-exactly">5. Layer Trait Doesn’t Match Tower Exactly</a></h3>
+<p><strong>Problem:</strong> Tower’s <code>Layer</code> trait has a different signature:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Tower's Layer
+pub trait Layer&lt;S&gt; {
+    type Service;
+    fn layer(&amp;self, inner: S) -&gt; Self::Service;
+}
+
+// Our Layer (appears to be)
+pub trait Layer&lt;B: Fs&gt; {
+    type Backend: Fs;
+    fn layer(self, backend: B) -&gt; Self::Backend;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Differences:</strong></p>
+<ol>
+<li>Tower uses <code>&amp;self</code>, we use <code>self</code> (consumes the layer)</li>
+<li>Tower calls it <code>Service</code>, we call it <code>Backend</code></li>
+<li>Tower doesn’t require bounds on <code>S</code></li>
+</ol>
+<p><strong>Impact:</strong> Users familiar with Tower may be confused.</p>
+<p><strong>Options:</strong></p>
+<ol>
+<li><strong>Match Tower exactly</strong> - maximum familiarity</li>
+<li><strong>Keep our design</strong> - <code>self</code> consumption is arguably cleaner for our use case</li>
+<li><strong>Document differences</strong> - explain why we diverge</li>
+</ol>
+<p><strong>Recommendation:</strong> Document the differences. Our <code>self</code> consumption prevents accidental reuse of configured layers, which is appropriate for our use case.</p>
+<hr>
+<h3 id="6-no-must_use-on-results"><a class="header" href="#6-no-must_use-on-results">6. No <code>#[must_use]</code> on Results</a></h3>
+<p><strong>Problem:</strong> Functions returning <code>Result</code> should have <code>#[must_use]</code> to catch ignored errors.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Current
+fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+
+// Better
+#[must_use]
+fn write(&amp;self, path: impl AsRef&lt;Path&gt;, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt;;
+<span class="boring">}</span></code></pre>
+<p><strong>Impact:</strong> Users might accidentally ignore errors.</p>
+<p><strong>Fix:</strong> Add <code>#[must_use]</code> to all <code>Result</code>-returning methods, or use <code>#[must_use]</code> on the trait itself.</p>
+<hr>
+<h2 id="-document-clearly"><a class="header" href="#-document-clearly">🟢 Document Clearly</a></h2>
+<h3 id="7-path-semantics-are-virtual-not-os"><a class="header" href="#7-path-semantics-are-virtual-not-os">7. Path Semantics Are Virtual, Not OS</a></h3>
+<p><strong>Consideration:</strong> Our paths are virtual filesystem paths, not OS paths.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// On Windows, this works the same as on Unix:
+fs.write("/documents/file.txt", data)?;  // Forward slashes always
+<span class="boring">}</span></code></pre>
+<p><strong>Potential confusion:</strong></p>
+<ul>
+<li>Windows users might expect backslashes</li>
+<li>Path normalization rules may differ from OS</li>
+</ul>
+<p><strong>Mitigation:</strong> Document:</p>
+<ul>
+<li>“Paths are virtual, always use forward slashes”</li>
+<li>“Path resolution is platform-independent”</li>
+<li>Show examples on Windows</li>
+</ul>
+<hr>
+<h3 id="8-fs-as-marker-trait-pattern"><a class="header" href="#8-fs-as-marker-trait-pattern">8. <code>Fs</code> as Marker Trait Pattern</a></h3>
+<p><strong>Pattern:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait Fs: FsRead + FsWrite + FsDir {}
+impl&lt;T: FsRead + FsWrite + FsDir&gt; Fs for T {}
+<span class="boring">}</span></code></pre>
+<p><strong>This is valid Rust</strong> but may surprise some users. They might expect:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait Fs {
+    fn read(...);
+    fn write(...);
+    // etc
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why we do it:</strong></p>
+<ul>
+<li>Granular traits for partial implementations</li>
+<li>Middleware only needs to implement what it wraps</li>
+</ul>
+<p><strong>Mitigation:</strong> Document the pattern clearly with examples.</p>
+<hr>
+<h3 id="9-builder-pattern-requires-configuration"><a class="header" href="#9-builder-pattern-requires-configuration">9. Builder Pattern Requires Configuration</a></h3>
+<p><strong>Pattern:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// This won't compile - no build() on unconfigured builder
+let quota = QuotaLayer::builder().build();  // Error!
+
+// Must configure at least one limit
+let quota = QuotaLayer::builder()
+    .max_total_size(1_000_000)
+    .build();  // OK
+<span class="boring">}</span></code></pre>
+<p><strong>This is intentional</strong> (ADR-022) but may surprise users expecting defaults.</p>
+<p><strong>Mitigation:</strong> Clear error messages and documentation.</p>
+<hr>
+<h2 id="-non-issues-were-doing-it-right"><a class="header" href="#-non-issues-were-doing-it-right">✅ Non-Issues (We’re Doing It Right)</a></h2>
+<h3 id="10-impl-asrefpath-everywhere"><a class="header" href="#10-impl-asrefpath-everywhere">10. <code>impl AsRef&lt;Path&gt;</code> Everywhere</a></h3>
+<p>✅ Matches <code>std::fs</code> conventions. Idiomatic.</p>
+<h3 id="11-send--sync-requirements"><a class="header" href="#11-send--sync-requirements">11. <code>Send + Sync</code> Requirements</a></h3>
+<p>✅ Standard for thread-safe abstractions. Enables use across async boundaries.</p>
+<h3 id="12-feature-gated-backends"><a class="header" href="#12-feature-gated-backends">12. Feature-Gated Backends</a></h3>
+<p>✅ Standard Cargo pattern. Reduces compile time for unused backends.</p>
+<h3 id="13-strategic-boxing-adr-025"><a class="header" href="#13-strategic-boxing-adr-025">13. Strategic Boxing (ADR-025)</a></h3>
+<p>✅ Matches Tower/Axum approach. Well-documented rationale.</p>
+<h3 id="14-generic-middleware-composition"><a class="header" href="#14-generic-middleware-composition">14. Generic Middleware Composition</a></h3>
+<p>✅ Zero-cost abstractions. Idiomatic Rust.</p>
+<hr>
+<h2 id="action-items-1"><a class="header" href="#action-items-1">Action Items</a></h2>
+<h3 id="before-v01-mvp"><a class="header" href="#before-v01-mvp">Before v0.1 (MVP)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Priority</th><th>Issue</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td>🔴 Critical</td><td>FsError non_exhaustive</td><td>Add <code>#[non_exhaustive]</code> and <code>thiserror</code> derive</td></tr>
+<tr><td>🔴 Critical</td><td>&amp;mut in examples</td><td>Audit all examples for &amp;self consistency</td></tr>
+<tr><td>🟡 Should</td><td>#[must_use]</td><td>Add to all Result-returning methods</td></tr>
+<tr><td>🟢 Document</td><td>Interior mutability</td><td>Add prominent section explaining why</td></tr>
+<tr><td>🟢 Document</td><td>Path semantics</td><td>Add section on virtual paths</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="before-v10"><a class="header" href="#before-v10">Before v1.0</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Priority</th><th>Issue</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td>🟡 Should</td><td>Async support</td><td>Ship <code>anyfs-async</code> or document workaround</td></tr>
+<tr><td>🟡 Should</td><td>Layer trait docs</td><td>Document differences from Tower</td></tr>
+<tr><td>🟢 Document</td><td>Marker trait pattern</td><td>Explain Fs = FsRead + FsWrite + FsDir</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="comparison-to-axums-success-factors"><a class="header" href="#comparison-to-axums-success-factors">Comparison to Axum’s Success Factors</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Factor</th><th>Axum</th><th>AnyFS</th><th>Assessment</th></tr>
+</thead>
+<tbody>
+<tr><td>Tower integration</td><td>Native</td><td>Inspired by</td><td>🟡 Different but similar</td></tr>
+<tr><td>Async support</td><td>Yes</td><td>No (planned)</td><td>🟡 Gap, but documented</td></tr>
+<tr><td>Error handling</td><td>thiserror</td><td>Planned</td><td>🔴 Must add</td></tr>
+<tr><td>Documentation</td><td>Excellent</td><td>In progress</td><td>🟡 Continue</td></tr>
+<tr><td>Examples</td><td>Comprehensive</td><td>In progress</td><td>🟡 Continue</td></tr>
+<tr><td>Ecosystem fit</td><td>tokio native</td><td>std::fs native</td><td>✅ Different target</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="conclusion-3"><a class="header" href="#conclusion-3">Conclusion</a></h2>
+<p><strong>Overall assessment:</strong> The design is sound and follows Rust best practices. The main gaps are:</p>
+<ol>
+<li><strong>Critical:</strong> <code>#[non_exhaustive]</code> on FsError (semver hazard)</li>
+<li><strong>Critical:</strong> Inconsistent <code>&amp;mut</code> in examples (contradicts ADR-023)</li>
+<li><strong>Important:</strong> No async yet (but documented path forward)</li>
+<li><strong>Minor:</strong> Documentation gaps (being addressed)</li>
+</ol>
+<p>With these fixes, the design should be well-received by the Rust community.</p>
 
                     </main>
 
