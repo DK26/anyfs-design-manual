@@ -293,7 +293,7 @@ let readonly_fs = FileStorage::new(
 
 - [ ] Use `PathFilter` to sandbox untrusted code
 - [ ] Use `Quota` to prevent resource exhaustion
-- [ ] Use `Restrictions` (default) to disable dangerous features
+- [ ] Use `Restrictions` when you need to disable risky operations
 - [ ] Use `RateLimit` for untrusted/shared environments
 - [ ] Use `Tracing` for audit trails
 - [ ] Use separate backends for separate tenants
@@ -426,7 +426,7 @@ pub struct FileEncryption<B> {
 }
 
 impl<B: Fs> FsWrite for FileEncryption<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         // Encrypt content with authenticated encryption (AES-GCM)
         let nonce = generate_nonce();
         let ciphertext = aes_gcm_encrypt(&self.key, &nonce, data)?;
@@ -436,7 +436,7 @@ impl<B: Fs> FsWrite for FileEncryption<B> {
 }
 
 impl<B: Fs> FsRead for FileEncryption<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let encrypted = self.inner.read(path)?;
         let (nonce, ciphertext) = encrypted.split_at(12);
         aes_gcm_decrypt(&self.key, nonce, ciphertext)
@@ -468,7 +468,7 @@ pub struct IntegrityVerified<B> {
 }
 
 impl<B: Fs> FsWrite for IntegrityVerified<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let mac = hmac_sha256(&self.key, data);
         let protected = [data, mac.as_slice()].concat();
         self.inner.write(path, &protected)
@@ -476,7 +476,7 @@ impl<B: Fs> FsWrite for IntegrityVerified<B> {
 }
 
 impl<B: Fs> FsRead for IntegrityVerified<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let protected = self.inner.read(path)?;
         let (data, mac) = protected.split_at(protected.len() - 32);
         if !hmac_verify(&self.key, data, mac) {
@@ -529,7 +529,7 @@ struct EncryptedNode {
 }
 
 impl FsRead for EncryptedMemoryBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let node = self.nodes.get(path.as_ref())
             .ok_or_else(|| FsError::NotFound { path: path.as_ref().to_path_buf() })?;
 
@@ -542,7 +542,7 @@ impl FsRead for EncryptedMemoryBackend {
 }
 
 impl FsWrite for EncryptedMemoryBackend {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         // Encrypt immediately - plaintext never stored
         let encrypted = self.encrypt(data)?;
 

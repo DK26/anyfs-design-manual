@@ -17,7 +17,7 @@ pub struct MiddlewareName<B> {
 }
 
 impl<B: Fs> FsRead for MiddlewareName<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // 1. Pre-check (validate, log, check limits)
         // 2. Delegate to inner.read(path)
         // 3. Post-process (update state, transform result)
@@ -50,79 +50,79 @@ impl<B> ReadOnly<B> {
 }
 
 impl<B: FsRead> FsRead for ReadOnly<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         self.inner.read(path)  // Pass through
     }
 
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError> {
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
         self.inner.read_to_string(path)  // Pass through
     }
 
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
         self.inner.read_range(path, offset, len)  // Pass through
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         self.inner.exists(path)  // Pass through
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         self.inner.metadata(path)  // Pass through
     }
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError> {
         self.inner.open_read(path)  // Pass through
     }
 }
 
 impl<B: FsWrite> FsWrite for ReadOnly<B> {
-    fn write(&self, _path: impl AsRef<Path>, _data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, _path: &Path, _data: &[u8]) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "write" })
     }
 
-    fn append(&self, _path: impl AsRef<Path>, _data: &[u8]) -> Result<(), FsError> {
+    fn append(&self, _path: &Path, _data: &[u8]) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "append" })
     }
 
-    fn remove_file(&self, _path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, _path: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
 
-    fn rename(&self, _from: impl AsRef<Path>, _to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn rename(&self, _from: &Path, _to: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "rename" })
     }
 
-    fn copy(&self, _from: impl AsRef<Path>, _to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn copy(&self, _from: &Path, _to: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "copy" })
     }
 
-    fn truncate(&self, _path: impl AsRef<Path>, _size: u64) -> Result<(), FsError> {
+    fn truncate(&self, _path: &Path, _size: u64) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "truncate" })
     }
 
-    fn open_write(&self, _path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError> {
+    fn open_write(&self, _path: &Path) -> Result<Box<dyn Write + Send>, FsError> {
         Err(FsError::ReadOnly { operation: "open_write" })
     }
 }
 
 impl<B: FsDir> FsDir for ReadOnly<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         self.inner.read_dir(path)  // Pass through (reading)
     }
 
-    fn create_dir(&self, _path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, _path: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "create_dir" })
     }
 
-    fn create_dir_all(&self, _path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir_all(&self, _path: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "create_dir_all" })
     }
 
-    fn remove_dir(&self, _path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir(&self, _path: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_dir" })
     }
 
-    fn remove_dir_all(&self, _path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir_all(&self, _path: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_dir_all" })
     }
 }
@@ -185,7 +185,7 @@ impl RestrictionsBuilder {
 // FsRead and FsDir: pure delegation (no restrictions on reads)
 
 impl<B: FsLink> FsLink for Restrictions<B> {
-    fn symlink(&self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError> {
+    fn symlink(&self, target: &Path, link: &Path) -> Result<(), FsError> {
         if self.deny_symlinks {
             return Err(FsError::FeatureNotEnabled {
                 feature: "symlinks",
@@ -195,7 +195,7 @@ impl<B: FsLink> FsLink for Restrictions<B> {
         self.inner.symlink(target, link)
     }
 
-    fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError> {
+    fn hard_link(&self, original: &Path, link: &Path) -> Result<(), FsError> {
         if self.deny_hard_links {
             return Err(FsError::FeatureNotEnabled {
                 feature: "hard_links",
@@ -205,17 +205,17 @@ impl<B: FsLink> FsLink for Restrictions<B> {
         self.inner.hard_link(original, link)
     }
 
-    fn read_link(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
+    fn read_link(&self, path: &Path) -> Result<PathBuf, FsError> {
         self.inner.read_link(path)  // Reading is always allowed
     }
 
-    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn symlink_metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         self.inner.symlink_metadata(path)  // Reading is always allowed
     }
 }
 
 impl<B: FsPermissions> FsPermissions for Restrictions<B> {
-    fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError> {
+    fn set_permissions(&self, path: &Path, perm: Permissions) -> Result<(), FsError> {
         if self.deny_permissions {
             return Err(FsError::FeatureNotEnabled {
                 feature: "permissions",
@@ -251,7 +251,7 @@ pub struct Tracing<B> {
 }
 
 impl<B: FsRead> FsRead for Tracing<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
         let span = tracing::span!(Level::DEBUG, "fs::read", ?path);
         let _guard = span.enter();
@@ -266,7 +266,7 @@ impl<B: FsRead> FsRead for Tracing<B> {
         result
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         let path = path.as_ref();
         let span = tracing::span!(Level::DEBUG, "fs::exists", ?path);
         let _guard = span.enter();
@@ -338,12 +338,12 @@ impl<B> RateLimit<B> {
 }
 
 impl<B: FsRead> FsRead for RateLimit<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         self.check_rate_limit()?;
         self.inner.read(path)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         self.check_rate_limit()?;
         self.inner.exists(path)
     }
@@ -391,7 +391,7 @@ impl<B> DryRun<B> {
 }
 
 impl<B: FsRead> FsRead for DryRun<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // Reads execute normally - we need real state to test against
         self.inner.read(path)
     }
@@ -400,19 +400,19 @@ impl<B: FsRead> FsRead for DryRun<B> {
 }
 
 impl<B: FsWrite> FsWrite for DryRun<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         self.log(format!("write {} ({} bytes)", path.display(), data.len()));
         Ok(())  // Don't actually write
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.log(format!("remove_file {}", path.display()));
         Ok(())  // Don't actually remove
     }
 
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError> {
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError> {
         let path = path.as_ref();
         self.log(format!("open_write {}", path.display()));
         // Return a sink that discards all writes
@@ -423,11 +423,11 @@ impl<B: FsWrite> FsWrite for DryRun<B> {
 }
 
 impl<B: FsDir> FsDir for DryRun<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         self.inner.read_dir(path)  // Pass through
     }
 
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.log(format!("create_dir {}", path.display()));
         Ok(())
@@ -506,7 +506,7 @@ impl<B> PathFilter<B> {
 }
 
 impl<B: FsRead> FsRead for PathFilter<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
         self.check_access(path)?;
         self.inner.read(path)
@@ -516,7 +516,7 @@ impl<B: FsRead> FsRead for PathFilter<B> {
 }
 
 impl<B: FsDir> FsDir for PathFilter<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         let path = path.as_ref();
         self.check_access(path)?;
 
@@ -614,7 +614,7 @@ struct CacheEntry {
 }
 
 impl<B: FsRead> FsRead for Cache<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
 
         // Check cache
@@ -644,7 +644,7 @@ impl<B: FsRead> FsRead for Cache<B> {
         Ok(data)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let path = path.as_ref();
 
         // Check cache for metadata
@@ -661,12 +661,12 @@ impl<B: FsRead> FsRead for Cache<B> {
         self.inner.metadata(path)
     }
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError> {
         // DO NOT CACHE - streams are for large files
         self.inner.open_read(path)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         // Could cache this too, or derive from metadata cache
         let path = path.as_ref();
         {
@@ -682,7 +682,7 @@ impl<B: FsRead> FsRead for Cache<B> {
 }
 
 impl<B: FsWrite> FsWrite for Cache<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         let result = self.inner.write(path, data)?;
 
@@ -693,7 +693,7 @@ impl<B: FsWrite> FsWrite for Cache<B> {
         Ok(result)
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         let result = self.inner.remove_file(path)?;
 
@@ -820,7 +820,7 @@ impl<B: Fs> Quota<B> {
 }
 
 impl<B: FsWrite> FsWrite for Quota<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         let new_size = data.len() as u64;
 
@@ -861,7 +861,7 @@ impl<B: FsWrite> FsWrite for Quota<B> {
         Ok(())
     }
 
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError> {
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError> {
         let path = path.as_ref().to_path_buf();
 
         // Get the underlying writer
@@ -1004,7 +1004,7 @@ impl<Lower, Upper> Overlay<Lower, Upper> {
 }
 
 impl<Lower: FsRead, Upper: FsRead> FsRead for Overlay<Lower, Upper> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
 
         // Check if whiteout exists in upper
@@ -1024,7 +1024,7 @@ impl<Lower: FsRead, Upper: FsRead> FsRead for Overlay<Lower, Upper> {
         self.lower.read(path)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         let path = path.as_ref();
 
         // Check whiteout first
@@ -1041,7 +1041,7 @@ impl<Lower: FsRead, Upper: FsRead> FsRead for Overlay<Lower, Upper> {
         self.lower.exists(path)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let path = path.as_ref();
 
         // Check whiteout
@@ -1062,7 +1062,7 @@ impl<Lower: FsRead, Upper: FsRead> FsRead for Overlay<Lower, Upper> {
 }
 
 impl<Lower: FsRead, Upper: Fs> FsWrite for Overlay<Lower, Upper> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Remove whiteout if it exists
@@ -1073,7 +1073,7 @@ impl<Lower: FsRead, Upper: Fs> FsWrite for Overlay<Lower, Upper> {
         self.upper.write(path, data)
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Try to remove from upper
@@ -1088,7 +1088,7 @@ impl<Lower: FsRead, Upper: Fs> FsWrite for Overlay<Lower, Upper> {
         Ok(())
     }
 
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         let from = from.as_ref();
         let to = to.as_ref();
 
@@ -1102,7 +1102,7 @@ impl<Lower: FsRead, Upper: Fs> FsWrite for Overlay<Lower, Upper> {
 }
 
 impl<Lower: FsRead + FsDir, Upper: Fs> FsDir for Overlay<Lower, Upper> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         let path = path.as_ref();
 
         // Check for opaque marker
@@ -1146,7 +1146,7 @@ impl<Lower: FsRead + FsDir, Upper: Fs> FsDir for Overlay<Lower, Upper> {
         Ok(ReadDirIter::from_vec(entries_vec))
     }
 
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Remove whiteout if exists
@@ -1156,7 +1156,7 @@ impl<Lower: FsRead + FsDir, Upper: Fs> FsDir for Overlay<Lower, Upper> {
         self.upper.create_dir(path)
     }
 
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Try to remove from upper
@@ -1263,3 +1263,4 @@ let fs = MemoryBackend::new()
         .max_total_size(100_000_000)
         .build());
 ```
+

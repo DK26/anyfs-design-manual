@@ -46,7 +46,7 @@ fn test_concurrent_create_dir_all() {
         let backend = backend.clone();
         std::thread::spawn(move || {
             let mut backend = backend.write().unwrap();
-            let _ = backend.create_dir_all("/a/b/c/d");
+            let _ = backend.create_dir_all(std::path::Path::new("/a/b/c/d"));
         })
     }).collect();
     for handle in handles {
@@ -107,9 +107,9 @@ let entry = self.entries.get(&path)
 
 ### AnyFS Response
 
-- **Normalize paths in ONE place** (FileStorage or dedicated normalizer)
+- **Normalize paths in ONE place** (FileStorage resolver for virtual backends; `SelfResolving` backends delegate to the OS)
 - **Consistent semantics:** always absolute, always `/` separator
-- **Use `impl AsRef<Path>`** but normalize internally
+- **Use `&Path` in core traits** for object safety; provide `impl AsRef<Path>` at the ergonomic layer (FileStorage/FsExt)
 
 **Required conformance tests:**
 
@@ -154,9 +154,9 @@ let entry = self.entries.get(&path)
 
 ### AnyFS Response
 
-- **Symlinks are opt-in** via `Restrictions` middleware
-- **Default deny is correct** - most use cases don't need symlinks
-- **When enabled, bound resolution depth** (default: 40 hops)
+- **Symlinks are supported by default** - use `Restrictions` to deny creation when needed
+- **Symlink following is the security control** (virtual backends expose `set_follow_symlinks(false)`)
+- **Bound resolution depth** (default: 40 hops)
 - **`strict-path` prevents symlink escapes** in `VRootFsBackend`
 
 ---

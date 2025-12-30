@@ -211,7 +211,7 @@ Read operations can query SQLite and blob store directly (no queue needed):
 
 ```rust
 impl FsRead for HybridBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
 
         // 1. Query SQLite for blob_id
@@ -238,7 +238,7 @@ impl FsRead for HybridBackend {
             .map_err(|e| FsError::Backend(e.to_string()))
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         let path = path.as_ref();
         let db = self.db.lock().map_err(|_| FsError::Backend("lock poisoned".into()))?;
 
@@ -252,7 +252,7 @@ impl FsRead for HybridBackend {
         Ok(exists)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let path = path.as_ref();
         let db = self.db.lock().map_err(|_| FsError::Backend("lock poisoned".into()))?;
 
@@ -288,7 +288,7 @@ Writes use a two-phase pattern: upload blob first, then commit SQLite:
 
 ```rust
 impl FsWrite for HybridBackend {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref().to_path_buf();
 
         // Phase 1: Upload blob (can fail independently)
@@ -310,7 +310,7 @@ impl FsWrite for HybridBackend {
             .map_err(|_| FsError::Backend("write cancelled".into()))?
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref().to_path_buf();
 
         // Queue the removal (blob cleanup happens in background via GC)
@@ -323,7 +323,7 @@ impl FsWrite for HybridBackend {
             .map_err(|_| FsError::Backend("remove cancelled".into()))?
     }
 
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         // Copy is just a metadata operation - increment refcount, no blob copy!
         let (tx, rx) = oneshot::channel();
 
@@ -601,7 +601,7 @@ When `AsyncFs` traits exist (ADR-024), the hybrid backend can use them naturally
 ```rust
 #[async_trait]
 impl AsyncFsRead for HybridBackend {
-    async fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let blob_id = self.lookup_blob_id(path).await?;
         self.blobs.get_async(&blob_id).await  // Non-blocking!
     }

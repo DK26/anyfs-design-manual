@@ -29,11 +29,11 @@ AnyFS uses a layered architecture that separates concerns:
 
 | Layer | Responsibility | Path Handling |
 |-------|----------------|---------------|
-| `FileStorage` | Ergonomic API | Accepts `impl AsRef<Path>` |
-| Middleware | Policy enforcement | Accepts `impl AsRef<Path>` |
-| Backend | Storage + FS semantics | Accepts `impl AsRef<Path>` |
+| `FileStorage` | Ergonomic API + path resolution | Accepts `impl AsRef<Path>`; resolves paths for virtual backends |
+| Middleware | Policy enforcement | `&Path` (object-safe core traits) |
+| Backend | Storage + FS semantics | `&Path` (object-safe core traits) |
 
-All layers use `impl AsRef<Path>` for consistency with `std::fs`.
+Core traits use `&Path` for object safety; `FileStorage`/`FsExt` provide `impl AsRef<Path>` ergonomics. Backends that wrap a real filesystem implement `SelfResolving` so FileStorage can skip its virtual path resolution.
 
 ---
 
@@ -56,7 +56,7 @@ let backend = MemoryBackend::new()
         .allow("/workspace/**")
         .build());
 
-// FileStorage is just ergonomics
+// FileStorage is ergonomics + path resolution (no policy)
 let fs = FileStorage::new(backend);
 ```
 
@@ -68,7 +68,7 @@ For `VRootFsBackend` (real filesystem), path containment uses `strict-path::Virt
 
 ```rust
 impl Fs for VRootFsBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // VirtualRoot ensures paths can't escape
         let safe_path = self.root.join(path)?;
         std::fs::read(safe_path).map_err(Into::into)
@@ -76,7 +76,7 @@ impl Fs for VRootFsBackend {
 }
 ```
 
-For virtual backends (Memory, SQLite), paths are just keys - no OS path traversal possible.
+For virtual backends (Memory, SQLite), paths are just keys - no OS path traversal possible. FileStorage performs symlink-aware resolution for these backends so normalization is consistent across virtual implementations.
 
 For sandboxing across all backends, use `PathFilter` middleware:
 

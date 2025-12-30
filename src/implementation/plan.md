@@ -253,7 +253,7 @@ Each backend implements the traits it supports:
   - Optional marker type `M` for compile-time container differentiation
   - `.boxed()` method for opt-in type erasure when needed
 - `BackendStack` builder for fluent middleware composition
-- Accepts `impl AsRef<Path>` for convenience
+- Accepts `impl AsRef<Path>` in `FileStorage`/`FsExt` (core traits use `&Path`)
 - Delegates all operations to wrapped backend
 
 **Axum-style design:** Zero-cost by default, type erasure opt-in.
@@ -345,16 +345,16 @@ Conformance tests are organized by trait layer:
 #[test]
 fn no_panic_on_missing_file() {
     let backend = create_backend();
-    let result = backend.read("/nonexistent");
+    let result = backend.read(std::path::Path::new("/nonexistent"));
     assert!(matches!(result, Err(FsError::NotFound { .. })));
 }
 
 #[test]
 fn no_panic_on_invalid_operation() {
     let backend = create_backend();
-    backend.write("/file.txt", b"data").unwrap();
+    backend.write(std::path::Path::new("/file.txt"), b"data").unwrap();
     // Try to read directory on a file
-    let result = backend.read_dir("/file.txt");
+    let result = backend.read_dir(std::path::Path::new("/file.txt"));
     assert!(matches!(result, Err(FsError::NotADirectory { .. })));
 }
 ```
@@ -366,7 +366,7 @@ fn no_panic_on_invalid_operation() {
 #[wasm_bindgen_test]
 fn memory_backend_works_in_wasm() {
     let backend = MemoryBackend::new();
-    backend.write("/test.txt", b"hello").unwrap();
+    backend.write(std::path::Path::new("/test.txt"), b"hello").unwrap();
     // Should not panic
 }
 ```
@@ -433,6 +433,10 @@ Required CI checks:
 - Compression middleware
 - `no_std` support (learned from `vfs` #38)
 - Batch operations for performance (learned from `agentfs` #130)
+- URL-based backend registry helper (e.g., `sqlite://`, `mem://`)
+- Copy-on-write overlay variant (Afero-style `CopyOnWriteFs`)
+- Archive backends (zip/tar) as separate crates
+- Indexing middleware (primary) with sidecar SQLite catalog and future pluggable engines
 - Companion shell (`anyfs-shell`) for interactive exploration of backends and middleware
 
 ### `anyfs-shell` - Local Companion Shell
@@ -700,7 +704,7 @@ let remote = RemoteBackend::connect("https://api.yourservice.com")
 
 // Use like any other backend
 let fs = FileStorage::new(remote);
-fs.write("/documents/report.pdf", data)?;
+fs.write(std::path::Path::new("/documents/report.pdf"), data)?;
 ```
 
 **Combined with FUSE for transparent mount:**

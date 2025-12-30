@@ -38,7 +38,7 @@ You get:
 |---------|-----------------|
 | Multi-tenant isolation | Separate backend instances per tenant |
 | Portability | SQLite backend: tenant data = single `.db` file |
-| Security | Restrictions disables dangerous features by default |
+| Security | Restrictions blocks risky operations when composed |
 | Resource control | Quota enforces quotas |
 | Audit compliance | Tracing records all operations |
 | Custom storage | Implement Fs for any medium |
@@ -58,7 +58,7 @@ You get:
 
 - **std::fs alignment**
   - Familiar method names
-  - `impl AsRef<Path>` everywhere
+  - Core traits use `&Path`; `FileStorage`/`FsExt` accept `impl AsRef<Path>` for ergonomics
 
 ---
 
@@ -94,4 +94,4 @@ fs.write("/documents/hello.txt", b"Hello!")?;
 
 ---
 
-For details, see `book/src/architecture/design-overview.md`.
+For details, see [Design Overview](../architecture/design-overview.md).

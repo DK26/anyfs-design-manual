@@ -186,7 +186,7 @@ impl SqliteBackend {
 }
 
 impl FsRead for SqliteBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let conn = self.read_pool.get()
             .map_err(|e| FsError::Backend(format!("pool exhausted: {}", e)))?;
 

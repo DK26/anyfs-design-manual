@@ -4,13 +4,53 @@ This file captures the decisions for the current AnyFS design.
 
 ---
 
+## Decision Map
+
+Primary docs are where each decision is explained in narrative form. ADRs remain the source of truth for the decision itself.
+
+| ADR | Primary doc |
+| --- | ----------- |
+| ADR-001 | [Design Overview](./design-overview.md) |
+| ADR-002 | [Project Structure](../overview/project-structure.md) |
+| ADR-003 | [Layered Traits](../traits/layered-traits.md) |
+| ADR-004 | [Design Overview](./design-overview.md) |
+| ADR-005 | [API Quick Reference](../getting-started/api-reference.md) |
+| ADR-006 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-007 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-008 | [FileStorage](../traits/files-container.md) |
+| ADR-009 | [Project Structure](../overview/project-structure.md) |
+| ADR-010 | [Implementation Plan](../implementation/plan.md) |
+| ADR-011 | [Design Overview](./design-overview.md) |
+| ADR-012 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-013 | [Layered Traits](../traits/layered-traits.md) |
+| ADR-014 | [Design Overview](./design-overview.md) |
+| ADR-015 | [Design Overview](./design-overview.md) |
+| ADR-016 | [Security Considerations](../comparisons/security.md) |
+| ADR-017 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-018 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-019 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-020 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-021 | [Middleware Implementation](../implementation/middleware-implementation.md) |
+| ADR-022 | [API Quick Reference](../getting-started/api-reference.md) |
+| ADR-023 | [Layered Traits](../traits/layered-traits.md) |
+| ADR-024 | [Implementation Plan](../implementation/plan.md) |
+| ADR-025 | [Zero-Cost Alternatives](./zero-cost-alternatives.md) |
+| ADR-026 | [Implementation Plan](../implementation/plan.md) |
+| ADR-027 | [Design Overview](./design-overview.md) |
+| ADR-028 | [Design Overview](./design-overview.md) |
+| ADR-029 | [Two-Layer Path Handling](./two-layer-design.md) |
+| ADR-030 | [Layered Traits](../traits/layered-traits.md) |
+| ADR-031 | [Indexing Middleware](./indexed-realfs-backend.md) |
+
+---
+
 ## ADR Index
 
 | ADR | Title | Status |
 |-----|-------|--------|
 | ADR-001 | Path-based `Fs` trait | Accepted |
 | ADR-002 | Two-crate structure | Accepted |
-| ADR-003 | `impl AsRef<Path>` for all path parameters | Accepted |
+| ADR-003 | Object-safe path parameters | Accepted |
 | ADR-004 | Tower-style middleware pattern | Accepted |
 | ADR-005 | `std::fs`-aligned method names | Accepted |
 | ADR-006 | Quota for quota enforcement | Accepted |
@@ -34,6 +74,11 @@ This file captures the decisions for the current AnyFS design.
 | ADR-024 | Async Strategy | Accepted |
 | ADR-025 | Strategic Boxing (Tower-style) | Accepted |
 | ADR-026 | Companion shell (anyfs-shell) | Accepted (Post-v1) |
+| ADR-027 | Permissive core; security via middleware | Accepted |
+| ADR-028 | Linux-like semantics for virtual backends | Accepted |
+| ADR-029 | Path resolution in FileStorage | Accepted |
+| ADR-030 | Layered trait hierarchy | Accepted |
+| ADR-031 | Indexing as middleware | Accepted (Post-v1) |
 
 ---
 
@@ -57,18 +102,18 @@ This file captures the decisions for the current AnyFS design.
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
 - Middleware is composable and lives with backends in `anyfs`.
-- `FileStorage` is purely ergonomic - no policy logic - included in `anyfs` for convenience.
+- `FileStorage` provides ergonomics plus centralized path resolution for virtual backends - no policy logic - included in `anyfs` for convenience.
 
 ---
 
-## ADR-003: `impl AsRef<Path>` for all path parameters
+## ADR-003: Object-safe path parameters
 
-**Decision:** Both `Fs` traits and `FileStorage` accept `impl AsRef<Path>` for all path parameters.
+**Decision:** Core `Fs` traits take `&Path` so they remain object-safe (`dyn Fs` works). For ergonomics, `FileStorage` and `FsExt` accept `impl AsRef<Path>` and forward to the core traits.
 
 **Why:**
-- Aligned with `std::fs` API conventions.
-- Works across all platforms (not limited to UTF-8).
-- Ergonomic: accepts `&str`, `String`, `&Path`, `PathBuf`.
+- Object safety enables opt-in type erasure (`FileStorage::boxed()`).
+- Keeps hot-path calls zero-cost; dynamic dispatch is explicit and optional.
+- Ergonomics preserved via `FileStorage`/`FsExt` (`&str`, `String`, `PathBuf`).
 
 ---
 
@@ -153,11 +198,12 @@ When blocked, operations return `FsError::FeatureNotEnabled`.
 
 ## ADR-008: FileStorage as thin ergonomic wrapper
 
-**Decision:** `FileStorage<B, M>` is a thin wrapper that provides std::fs-aligned ergonomics only. It contains NO policy logic.
+**Decision:** `FileStorage<B, M>` is a thin wrapper that provides std::fs-aligned ergonomics and centralized path resolution for virtual backends. It contains NO policy logic.
 
 **What it does:**
 - Provides familiar method names
-- Accepts `impl AsRef<Path>` for convenience
+- Accepts `impl AsRef<Path>` for convenience and forwards to the core `&Path` traits
+- Supports an optional marker type `M` for compile-time segregation of containers
 - Delegates all operations to the wrapped backend
 
 **What it does NOT do:**
@@ -167,9 +213,10 @@ When blocked, operations return `FsError::FeatureNotEnabled`.
 - Any other policy
 
 **Why:**
-- Single responsibility - ergonomics only.
+- Single responsibility - ergonomics + path resolution (no policy).
 - Users who don't need ergonomics can use backends directly.
 - Policy is composable via middleware, not hardcoded.
+- Marker types prevent accidental mixing of different storage domains without runtime tags.
 
 ---
 
@@ -209,12 +256,12 @@ When async is needed (e.g., network-backed storage), add a parallel trait:
 ```rust
 // In anyfs-backend
 pub trait AsyncFs: Send + Sync {
-    async fn read(&self, path: impl AsRef<Path> + Send) -> Result<Vec<u8>, FsError>;
-    async fn write(&mut self, path: impl AsRef<Path> + Send, data: &[u8]) -> Result<(), FsError>;
+    async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
+    async fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
     // ... mirrors Fs with async
 
     // Streaming uses AsyncRead/AsyncWrite
-    async fn open_read(&self, path: impl AsRef<Path> + Send)
+    async fn open_read(&self, path: &Path)
         -> Result<Box<dyn AsyncRead + Send + Unpin>, FsError>;
 }
 ```
@@ -338,7 +385,7 @@ pub type FileContent = Vec<u8>;
 
 // In trait definition
 pub trait FsRead: Send {
-    fn read(&self, path: impl AsRef<Path>) -> Result<FileContent, FsError>;
+    fn read(&self, path: &Path) -> Result<FileContent, FsError>;
     // ...
 }
 ```
@@ -463,9 +510,11 @@ RateLimitLayer::builder()
 
 **Usage:**
 ```rust
-let mut dry_run = DryRun::new(backend);
-dry_run.write("/test.txt", b"hello")?;  // Logged but not written
-let ops = dry_run.operations();         // ["write /test.txt (5 bytes)"]
+let dry_run = DryRun::new(backend);
+let fs = FileStorage::new(dry_run);
+
+fs.write("/test.txt", b"hello")?;  // Logged but not written
+// To inspect recorded operations, keep the DryRun handle before wrapping it.
 ```
 
 **Semantics:**
@@ -694,22 +743,22 @@ let quota = QuotaLayer::builder()
 **Previous design:**
 ```rust
 pub trait FsRead: Send {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
 }
 
 pub trait FsWrite: Send {
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn write(&mut self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 }
 ```
 
 **New design:**
 ```rust
 pub trait FsRead: Send + Sync {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
 }
 
 pub trait FsWrite: Send + Sync {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 }
 ```
 
@@ -736,7 +785,7 @@ pub struct MemoryBackend {
 }
 
 impl FsWrite for MemoryBackend {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let mut guard = self.data.write().unwrap();
         guard.insert(path.as_ref().to_path_buf(), data.to_vec());
         Ok(())
@@ -803,13 +852,13 @@ FsPosix       →      AsyncFsPosix
    ```rust
    // Sync (anyfs-backend)
    pub trait FsRead: Send + Sync {
-       fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+       fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
    }
 
    // Async (anyfs-async)
    #[async_trait]
    pub trait AsyncFsRead: Send + Sync {
-       async fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+       async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
    }
    ```
 
@@ -838,7 +887,7 @@ FsPosix       →      AsyncFsPosix
    pub struct SyncToAsync<B>(B);
 
    impl<B: Fs> AsyncFsRead for SyncToAsync<B> {
-       async fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+       async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
            let path = path.as_ref().to_path_buf();
            let backend = self.0.clone(); // requires Clone
            tokio::task::spawn_blocking(move || backend.read(&path)).await?
@@ -884,6 +933,10 @@ FsPosix       →      AsyncFsPosix
 **Context:** Dynamic dispatch (`Box<dyn Trait>`) adds heap allocation and vtable indirection. We need to decide where boxing is acceptable vs. where zero-cost abstractions are required.
 
 **Decision:** Follow Tower/Axum's battle-tested strategy: **zero-cost on the hot path, box at boundaries where flexibility is needed and I/O cost dominates.**
+
+**Principle:** Avoid heap allocations and dynamic dispatch unless they buy real flexibility with negligible performance impact. Box only at cold boundaries (streams/iterators), and make type erasure explicit and opt-in.
+
+**DX stance:** Application code uses `FileStorage`/`FsExt` (std::fs-style paths). Core traits stay object-safe for `dyn Fs`. For hot loops on known concrete backends, we provide a typed streaming extension as the first-class zero-alloc fast path.
 
 ### Boxing Strategy
 
@@ -972,14 +1025,14 @@ Tower's Timeout middleware [uses `Pin<Box<dyn Future>>`](https://docs.rs/tower/l
 ```rust
 pub trait FsRead {
     type Reader: Read + Send;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Self::Reader, FsError>;
 }
 ```
 Rejected: Causes type explosion. `QuotaReader<PathFilterReader<TracingReader<Cursor<Vec<u8>>>>>` is unwieldy and every middleware needs a custom wrapper type.
 
 **2. RPITIT (Rust 1.75+):**
 ```rust
-fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError>;
+fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError>;
 ```
 Rejected as default: Loses object safety. Can't use `dyn Fs` for runtime backend selection.
 
@@ -994,7 +1047,7 @@ If profiling shows stream boxing is a bottleneck (unlikely), we can add:
 /// Extension trait for zero-cost streaming when backend type is known
 pub trait FsReadTyped: FsRead {
     type Reader: Read + Send;
-    fn open_read_typed(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+    fn open_read_typed(&self, path: &Path) -> Result<Self::Reader, FsError>;
 }
 ```
 
@@ -1028,3 +1081,105 @@ The performance cost is negligible (<1% of I/O time), while the ergonomic and fl
 - Demonstrates backend neutrality and middleware effects in a tangible way.
 - Useful for docs, demos, and quick validation.
 - Keeps the core crates free of CLI/UI dependencies.
+
+---
+
+## ADR-027: Permissive core; security via middleware
+
+**Status:** Accepted
+
+**Context:** We need predictable filesystem semantics across backends. Some use cases require strict sandboxing, while others expect full filesystem behavior. Baking security restrictions into core traits would make behavior surprising and backend-dependent.
+
+**Decision:** Core traits are permissive: all operations supported by a backend are allowed by default. Security controls (limits, access control, read-only, rate limiting, audit) are applied via middleware such as `Restrictions`, `PathFilter`, `ReadOnly`, `Quota`, `RateLimit`, and `Tracing`.
+
+**Why:**
+- Predictability: core behavior matches `std::fs` expectations.
+- Backend-agnostic: virtual and host backends share the same contract.
+- Separation of concerns: policy lives in middleware, not storage semantics.
+- Explicit security posture: applications opt in to the protections they need.
+
+---
+
+## ADR-028: Linux-like semantics for virtual backends
+
+**Status:** Accepted
+
+**Context:** Cross-platform filesystems differ in case sensitivity, separators, reserved names, and path length limits. Virtual backends need a consistent model that does not inherit OS quirks.
+
+**Decision:** Virtual backends use Linux-like semantics by default:
+- Case-sensitive paths
+- `/` as the internal separator
+- No reserved names
+- No max path length
+- No ADS (`:stream`) support
+
+**Why:**
+- Cross-platform consistency for the same data.
+- Fewer surprises and reduced security footguns.
+- Simplifies backend implementation and testing.
+- Custom semantics remain possible via middleware or custom backends.
+
+---
+
+## ADR-029: Path resolution in FileStorage
+
+**Status:** Accepted
+
+**Context:** Path normalization (`//`, `.`, `..`) and symlink resolution must be consistent across backends. Implementing this logic in every backend is error-prone and leads to divergent behavior.
+
+**Decision:** `FileStorage` performs canonicalization and normalization for virtual backends. Backends receive resolved paths. Real filesystem backends (e.g., `VRootFsBackend`) delegate to OS resolution plus `strict-path` containment. `FileStorage` exposes `canonicalize`, `soft_canonicalize`, and `anchored_canonicalize` for explicit use.
+
+**Why:**
+- Consistent semantics across all backends.
+- Centralizes security-critical path handling.
+- Simplifies backend implementations.
+- Makes conformance testing straightforward.
+
+---
+
+## ADR-030: Layered trait hierarchy
+
+**Status:** Accepted
+
+**Context:** Not all backends can or should implement full POSIX behavior. Forcing a single large trait would make simple backends harder to implement and would obscure capabilities.
+
+**Decision:** Split the API into layered traits:
+- Core: `FsRead`, `FsWrite`, `FsDir` (combined as `Fs`)
+- Extensions: `FsLink`, `FsPermissions`, `FsSync`, `FsStats`
+- FUSE: `FsInode`
+- POSIX: `FsHandles`, `FsLock`, `FsXattr`
+- Convenience supertraits: `Fs`, `FsFull`, `FsFuse`, `FsPosix`
+
+**Why:**
+- Implement the lowest level you need.
+- Clear capability boundaries and trait bounds.
+- Avoids forcing unsupported features on backends.
+- Enables middleware to target specific capabilities.
+
+---
+
+## ADR-031: Indexing as middleware
+
+**Status:** Accepted (Post-v1)
+
+**Context:** We want a durable, queryable index of file activity and metadata (for audit trails, drive management tools, and statistics). This indexing should be optional, configurable, and work across all backends.
+
+**Decision:** Indexing is implemented as middleware (`Indexing<B>` with `IndexLayer`), not as a specialized backend. The middleware writes to a sidecar index (SQLite by default) and can evolve to support alternate index engines.
+
+**Naming:** Use `IndexLayer` (builder) and `Indexing<B>` (middleware), consistent with existing layer naming.
+
+**Why:**
+- **Separation of concerns:** Indexing is policy/analytics, not storage semantics.
+- **Backend-agnostic:** Works with Memory, SQLite, VRootFs, and custom backends.
+- **Composability:** Users opt in and configure it like other middleware (Quota, Tracing).
+- **Flexibility:** Allows future index engines without changing core traits.
+- **DX consistency:** Keeps std::fs-style usage via `FileStorage` with no API changes.
+
+**Trade-offs:**
+- **External OS changes:** Not captured unless a future watcher/scan helper is added.
+- **Index failures:** Choose between strict mode (fail the op) and best-effort mode.
+
+**Implementation sketch:**
+- `IndexLayer::builder().index_file("index.db").consistency(IndexConsistency::Strict)...`
+- Wraps `open_write()` with a counting writer to record final size on close.
+- Updates a `nodes` table and logs `ops` entries per operation.

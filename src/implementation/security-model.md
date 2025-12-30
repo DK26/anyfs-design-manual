@@ -601,7 +601,7 @@ pub struct RbacMiddleware<B> {
 }
 
 impl<B: FsRead> FsRead for RbacMiddleware<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
         let user = current_user()?;
         let role = self.user_roles.get_role(&user)?;
@@ -618,7 +618,7 @@ impl<B: FsRead> FsRead for RbacMiddleware<B> {
 }
 
 impl<B: FsWrite> FsWrite for RbacMiddleware<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         let user = current_user()?;
         let role = self.user_roles.get_role(&user)?;

@@ -1,13 +1,13 @@
 # Open Questions & Future Considerations
 
-**Status:** Under Discussion
+**Status:** Resolved for v1 (future considerations tracked)
 **Last Updated:** 2025-12-28
 
 ---
 
-This document captures open questions and design considerations that may influence future development of AnyFS.
+This document captures previously open questions and design considerations. Unless explicitly marked as future, the items below are resolved for v1.
 
-> **Note:** Many items originally in this document have been resolved and implemented. See the Architecture Decision Records for final decisions.
+> **Note:** Final decisions live in the Architecture Decision Records.
 
 ---
 

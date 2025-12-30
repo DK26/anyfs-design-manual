@@ -140,16 +140,16 @@ AnyFS middleware can **intercept, transform, and control** operations:
 
 ```rust
 pub trait Fs: Send + Sync {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError>;
     // ... methods aligned with std::fs
 }
 ```
 
 **Design principles:**
-- `impl AsRef<Path>` for ergonomics (accepts `&str`, `String`, `PathBuf`)
+- `&Path` in core traits (object-safe); `FileStorage`/`FsExt` accept `impl AsRef<Path>` for ergonomics
 - Aligned with `std::fs` naming
 - Streaming I/O via `open_read`/`open_write`
 - `Send` bound for async compatibility
@@ -216,7 +216,7 @@ pub trait FileSystem: Send + Sync {
 | **statfs** | No | Yes | Missing |
 | **read_range** | No | Yes | Missing |
 | **symlink_metadata** | No | Yes | Missing |
-| Path type | `&str` | `impl AsRef<Path>` | Different |
+| Path type | `&str` | `&Path` (core) + `impl AsRef<Path>` in ergonomic layer | Different |
 | Middleware | No | Yes | Architectural |
 
 ### Why Not Adopt Their Trait?
@@ -225,7 +225,7 @@ pub trait FileSystem: Send + Sync {
 2. **No permissions** - Our `Restrictions` middleware needs `set_permissions` to gate
 3. **No durability primitives** - No `sync`/`fsync` for data integrity
 4. **No middleware pattern** - Their `VfsPath` bakes in behaviors we want composable
-5. **`&str` paths** - We prefer `impl AsRef<Path>` for ergonomics
+5. **`&str` paths** - Core traits use `&Path` for object safety; ergonomics come from `FileStorage`/`FsExt`
 
 **Our trait is a strict superset.** Everything `vfs` can do, we can do. The reverse is not true.
 

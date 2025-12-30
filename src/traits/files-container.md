@@ -10,11 +10,14 @@
 - **`B`** - Backend type (generic, zero-cost)
 - **`M`** - Optional marker type for compile-time safety
 
+It is the intended application-facing API: std::fs-style paths with object-safe core traits under the hood.
+
 **Axum-style design:** Zero-cost by default, type erasure opt-in.
 
-**It does TWO things:**
+**It does THREE things:**
 1. Ergonomics (std::fs-aligned API)
 2. Optional type-safety via marker types
+3. Centralized path resolution for virtual backends (symlink-aware normalization)
 
 All policy (limits, feature gates, logging) is handled by middleware, not FileStorage.
 
@@ -25,7 +28,7 @@ All policy (limits, feature gates, logging) is handled by middleware, not FileSt
 ```rust
 use anyfs::{MemoryBackend, FileStorage};
 
-// Simple: just ergonomics (type inferred)
+// Simple: ergonomics + path resolution (type inferred)
 let fs = FileStorage::new(MemoryBackend::new());
 ```
 
@@ -138,6 +141,8 @@ FileStorage mirrors std::fs naming:
 | `read_link()` | `std::fs::read_link` |
 | `set_permissions()` | `std::fs::set_permissions` |
 
+When the backend implements extended traits (e.g., `FsLink`, `FsInode`, `FsHandles`), FileStorage forwards those methods too and keeps the same `impl AsRef<Path>` ergonomics for path parameters.
+
 ---
 
 ## What FileStorage Does NOT Do
@@ -147,9 +152,13 @@ FileStorage mirrors std::fs naming:
 | Quota enforcement | `Quota<B>` |
 | Feature gating | `Restrictions<B>` |
 | Audit logging | `Tracing<B>` |
-| Path containment | Backend-specific (VRootFsBackend) |
+| Path containment | PathFilter middleware or VRootFsBackend containment |
 
-FileStorage is **purely ergonomic**. If you need policy, compose middleware.
+FileStorage is **not a policy layer**. If you need policy, compose middleware.
+
+It is also the **ergonomic path layer**: its methods accept `impl AsRef<Path>` and forward to the core object-safe traits that take `&Path`.
+
+For virtual backends, FileStorage performs symlink-aware path resolution before delegating so normalization is consistent across backends. Backends that wrap a real filesystem (e.g., `VRootFsBackend`) implement `SelfResolving` to skip this resolution and let the OS handle it (with strict containment on that backend).
 
 ---
 
@@ -218,15 +227,16 @@ type DynFileStorage<M = ()> = FileStorage<Box<dyn Fs>, M>;
 If you don't need the wrapper, use backends directly:
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer, Fs};
+use anyfs::{MemoryBackend, QuotaLayer, FileStorage};
 
 let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build());
 
-// Use Fs trait methods directly
-backend.write("/file.txt", b"data")?;
+// Use FileStorage for std::fs-style paths
+let fs = FileStorage::new(backend);
+fs.write("/file.txt", b"data")?;
 ```
 
 `FileStorage<B, M>` is part of the `anyfs` crate, not a separate crate.

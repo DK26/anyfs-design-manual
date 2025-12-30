@@ -312,10 +312,14 @@ These are optional extensions inspired by other ecosystems. They are intentional
 - Bulk operation helpers (`read_many`, `write_many`, `copy_many`, `glob`, `walk`) as `FsExt` or a utilities crate.
 - Early async adapter crate (`anyfs-async`) to support remote backends without changing sync traits.
 - Bash-style shell (example app or `anyfs-shell` crate) that routes `ls/cd/cat/cp/mv/rm/mkdir/stat` through `FileStorage` to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).
+- Copy-on-write overlay middleware (Afero-style `CopyOnWriteFs`) as a specialized `Overlay` variant.
+- Archive backends (zip/tar) as separate crates implementing `Fs` (PyFilesystem/fsspec-style).
 
 **Defer (valuable, but needs data or wider review):**
 - Range/block caching middleware for `read_range` heavy workloads (fsspec-style block cache).
 - Runtime capability discovery (`Capabilities` struct) for feature detection (symlink control, case sensitivity, max path length).
+- Lint/analyzer to discourage direct `std::fs` usage in app code (System.IO.Abstractions-style).
+- Retry/timeout middleware for remote backends (once remote backends exist).
 
 **Drop for now (adds noise or cross-platform complexity):**
 - Change notification support (optional `FsWatch` trait or polling middleware).
@@ -386,8 +390,8 @@ fn test_many_open_handles() {
 
     // Opening many files shouldn't crash
     for i in 0..10000 {
-        fs.write(&format!("/file{}", i), b"x").unwrap();
-        if let Ok(h) = fs.open_read(&format!("/file{}", i)) {
+        fs.write(format!("/file{}", i), b"x").unwrap();
+        if let Ok(h) = fs.open_read(format!("/file{}", i)) {
             handles.push(h);
         }
     }

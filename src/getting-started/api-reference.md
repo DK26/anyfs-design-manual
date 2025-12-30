@@ -156,11 +156,12 @@ RateLimitLayer::builder()
 ## DryRun Methods
 
 ```rust
-let mut dry_run = DryRun::new(backend);
+let dry_run = DryRun::new(backend);
+let fs = FileStorage::new(dry_run);
 
 // Read operations execute normally
 // Write operations are logged but not executed
-dry_run.write("/file.txt", b"data")?;  // Logged, returns Ok
+fs.write("/file.txt", b"data")?;  // Logged, returns Ok
 
 // Inspect logged operations
 let ops = dry_run.operations();        // -> &[Operation]
@@ -177,6 +178,20 @@ CacheLayer::builder()
     .max_entries(1000)                          // LRU cache size
     .max_entry_size(1024 * 1024)               // 1MB max per entry
     .ttl(std::time::Duration::from_secs(60))   // Expiration
+    .build()
+    .layer(backend)
+```
+
+---
+
+## IndexLayer Methods (Post-v1)
+
+```rust
+// Builder pattern (required - set index path)
+IndexLayer::builder()
+    .index_file("index.db")             // Sidecar index file (SQLite default)
+    .consistency(IndexConsistency::Strict)
+    .track_reads(false)                 // Optional
     .build()
     .layer(backend)
 ```
@@ -219,6 +234,8 @@ if fs.is_dir("/path")? { ... }
 ---
 
 ## File Operations
+
+Examples below assume `FileStorage` (std::fs-style paths). If you call core trait methods directly, pass `&Path`.
 
 ```rust
 // Check existence
@@ -333,21 +350,24 @@ let clean = normalize("//foo///bar//");  // -> "/foo/bar"
 Backends implementing `FsInode` track inodes internally for hardlink support and FUSE mounting:
 
 ```rust
+use anyfs::FileStorage;
+
 // Convert between paths and inodes
-let inode: u64 = backend.path_to_inode("/some/path")?;
-let path: PathBuf = backend.inode_to_path(inode)?;
+let fs = FileStorage::new(backend);
+let inode: u64 = fs.path_to_inode("/some/path")?;
+let path: PathBuf = fs.inode_to_path(inode)?;
 
 // Lookup child by name within a directory (FUSE-style)
-let root_inode = backend.path_to_inode("/")?;
-let child_inode = backend.lookup(root_inode, "filename.txt")?;
+let root_inode = fs.path_to_inode("/")?;
+let child_inode = fs.lookup(root_inode, "filename.txt")?;
 
 // Get metadata by inode (avoids path resolution)
-let meta = backend.metadata_by_inode(inode)?;
+let meta = fs.metadata_by_inode(inode)?;
 
 // Hardlinks share the same inode
-backend.hard_link("/original", "/link")?;
-let ino1 = backend.path_to_inode("/original")?;
-let ino2 = backend.path_to_inode("/link")?;
+fs.hard_link("/original", "/link")?;
+let ino1 = fs.path_to_inode("/original")?;
+let ino2 = fs.path_to_inode("/link")?;
 assert_eq!(ino1, ino2);  // Same inode!
 ```
 

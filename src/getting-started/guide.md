@@ -30,6 +30,8 @@ Available features:
 
 ## Quick Start
 
+Examples below use `FileStorage`, so you can pass paths as `&str`. If you call core trait methods directly, use `&Path`.
+
 ### Hello World
 
 ```rust

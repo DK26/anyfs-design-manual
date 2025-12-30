@@ -2,6 +2,8 @@
 
 AnyFS uses a **layered trait architecture** for maximum flexibility with minimal complexity.
 
+See ADR-030 for the design rationale.
+
 ---
 
 ## Trait Hierarchy
@@ -41,17 +43,19 @@ AnyFS uses a **layered trait architecture** for maximum flexibility with minimal
 ## Layer 1: Core Traits (Required)
 
 > **Thread Safety:** All traits require `Send + Sync` and use `&self` for all methods. Backend implementers MUST use interior mutability (`RwLock`, `Mutex`, etc.) to ensure thread-safe concurrent access. See ADR-023 for rationale.
+>
+> **Path Parameters:** Core traits use `&Path` so they are object-safe (`dyn Fs` works). For ergonomics, `FileStorage` and `FsExt` accept `impl AsRef<Path>` and forward to the core traits.
 
 ### FsRead
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError>;
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError>;
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
+    fn exists(&self, path: &Path) -> Result<bool, FsError>;
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 ```
 
@@ -59,13 +63,13 @@ pub trait FsRead: Send + Sync {
 
 ```rust
 pub trait FsWrite: Send + Sync {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError>;
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn append(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn remove_file(&self, path: &Path) -> Result<(), FsError>;
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn truncate(&self, path: &Path, size: u64) -> Result<(), FsError>;
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError>;
 }
 ```
 
@@ -73,11 +77,11 @@ pub trait FsWrite: Send + Sync {
 
 ```rust
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError>;
+    fn create_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir_all(&self, path: &Path) -> Result<(), FsError>;
 }
 
 /// Iterator over directory entries. Wraps a boxed iterator for flexibility.
@@ -111,10 +115,10 @@ impl ReadDirIter {
 
 ```rust
 pub trait FsLink: Send + Sync {
-    fn symlink(&self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn read_link(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
-    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
+    fn symlink(&self, target: &Path, link: &Path) -> Result<(), FsError>;
+    fn hard_link(&self, original: &Path, link: &Path) -> Result<(), FsError>;
+    fn read_link(&self, path: &Path) -> Result<PathBuf, FsError>;
+    fn symlink_metadata(&self, path: &Path) -> Result<Metadata, FsError>;
 }
 ```
 
@@ -122,7 +126,7 @@ pub trait FsLink: Send + Sync {
 
 ```rust
 pub trait FsPermissions: Send + Sync {
-    fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError>;
+    fn set_permissions(&self, path: &Path, perm: Permissions) -> Result<(), FsError>;
 }
 ```
 
@@ -131,7 +135,7 @@ pub trait FsPermissions: Send + Sync {
 ```rust
 pub trait FsSync: Send + Sync {
     fn sync(&self) -> Result<(), FsError>;
-    fn fsync(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn fsync(&self, path: &Path) -> Result<(), FsError>;
 }
 ```
 
@@ -151,7 +155,7 @@ pub trait FsStats: Send + Sync {
 
 ```rust
 pub trait FsInode: Send + Sync {
-    fn path_to_inode(&self, path: impl AsRef<Path>) -> Result<u64, FsError>;
+    fn path_to_inode(&self, path: &Path) -> Result<u64, FsError>;
     fn inode_to_path(&self, inode: u64) -> Result<PathBuf, FsError>;
     fn lookup(&self, parent_inode: u64, name: &OsStr) -> Result<u64, FsError>;
     fn metadata_by_inode(&self, inode: u64) -> Result<Metadata, FsError>;
@@ -197,7 +201,7 @@ pub enum LockType {
 
 ```rust
 pub trait FsHandles: Send + Sync {
-    fn open(&self, path: impl AsRef<Path>, flags: OpenFlags) -> Result<Handle, FsError>;
+    fn open(&self, path: &Path, flags: OpenFlags) -> Result<Handle, FsError>;
     fn read_at(&self, handle: Handle, buf: &mut [u8], offset: u64) -> Result<usize, FsError>;
     fn write_at(&self, handle: Handle, data: &[u8], offset: u64) -> Result<usize, FsError>;
     fn close(&self, handle: Handle) -> Result<(), FsError>;
@@ -218,10 +222,10 @@ pub trait FsLock: Send + Sync {
 
 ```rust
 pub trait FsXattr: Send + Sync {
-    fn get_xattr(&self, path: impl AsRef<Path>, name: &str) -> Result<Vec<u8>, FsError>;
-    fn set_xattr(&self, path: impl AsRef<Path>, name: &str, value: &[u8]) -> Result<(), FsError>;
-    fn remove_xattr(&self, path: impl AsRef<Path>, name: &str) -> Result<(), FsError>;
-    fn list_xattr(&self, path: impl AsRef<Path>) -> Result<Vec<String>, FsError>;
+    fn get_xattr(&self, path: &Path, name: &str) -> Result<Vec<u8>, FsError>;
+    fn set_xattr(&self, path: &Path, name: &str, value: &[u8]) -> Result<(), FsError>;
+    fn remove_xattr(&self, path: &Path, name: &str) -> Result<(), FsError>;
+    fn list_xattr(&self, path: &Path) -> Result<Vec<String>, FsError>;
 }
 ```
 
@@ -267,15 +271,17 @@ impl<T: FsFuse + FsHandles + FsLock + FsXattr> FsPosix for T {}
 Use trait bounds to specify requirements:
 
 ```rust
-// Works with any backend
-fn process_files(fs: &impl Fs) -> Result<(), FsError> {
+use anyfs::FileStorage;
+
+// Works with any backend, keeps std::fs-style paths
+fn process_files<B: Fs>(fs: &FileStorage<B>) -> Result<(), FsError> {
     let data = fs.read("/input.txt")?;
     fs.write("/output.txt", &data)?;
     Ok(())
 }
 
 // Requires link support
-fn create_backup(fs: &(impl Fs + FsLink)) -> Result<(), FsError> {
+fn create_backup<B: Fs + FsLink>(fs: &FileStorage<B>) -> Result<(), FsError> {
     fs.hard_link("/data.txt", "/data.txt.bak")?;
     Ok(())
 }
@@ -311,4 +317,3 @@ pub trait FsExt: Fs {
 // Blanket implementation
 impl<B: Fs> FsExt for B {}
 ```
-

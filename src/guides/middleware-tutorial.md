@@ -64,32 +64,32 @@ use anyfs_backend::{FsRead, FsError, Metadata};
 use std::path::Path;
 
 impl<B: FsRead> FsRead for Counter<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);  // COUNT IT
         self.inner.read(path)                         // DELEGATE
     }
 
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError> {
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.read_to_string(path)
     }
 
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.read_range(path, offset, len)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.exists(path)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.metadata(path)
     }
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn std::io::Read + Send>, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.open_read(path)
     }
@@ -108,37 +108,37 @@ Same pattern:
 use anyfs_backend::FsWrite;
 
 impl<B: FsWrite> FsWrite for Counter<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.write(path, data)
     }
 
-    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn append(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.append(path, data)
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.remove_file(path)
     }
 
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.rename(from, to)
     }
 
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.copy(from, to)
     }
 
-    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError> {
+    fn truncate(&self, path: &Path, size: u64) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.truncate(path, size)
     }
 
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Write + Send>, FsError> {
+    fn open_write(&self, path: &Path) -> Result<Box<dyn std::io::Write + Send>, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.open_write(path)
     }
@@ -151,27 +151,27 @@ impl<B: FsWrite> FsWrite for Counter<B> {
 use anyfs_backend::{FsDir, ReadDirIter};
 
 impl<B: FsDir> FsDir for Counter<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, path: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.create_dir(path)
     }
 
-    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.create_dir_all(path)
     }
 
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.remove_dir(path)
     }
 
-    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir_all(&self, path: &Path) -> Result<(), FsError> {
         self.count.fetch_add(1, Ordering::Relaxed);
         self.inner.remove_dir_all(path)
     }
@@ -183,10 +183,10 @@ impl<B: FsDir> FsDir for Counter<B> {
 ### Step 5: Use It
 
 ```rust
-use anyfs::MemoryBackend;
+use anyfs::{FileStorage, MemoryBackend};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let fs = Counter::new(MemoryBackend::new());
+    let fs = FileStorage::new(Counter::new(MemoryBackend::new()));
 
     fs.write("/hello.txt", b"Hello, World!")?;
     fs.read("/hello.txt")?;
@@ -225,8 +225,12 @@ impl<B: Fs> Layer<B> for CounterLayer {
 Now you can do:
 
 ```rust
-let fs = MemoryBackend::new()
-    .layer(CounterLayer);
+use anyfs::FileStorage;
+
+let fs = FileStorage::new(
+    MemoryBackend::new()
+        .layer(CounterLayer)
+);
 
 fs.write("/test.txt", b"data")?;
 println!("Operations: {}", fs.operations());
@@ -275,37 +279,37 @@ impl<B> SecretBlocker<B> {
 
 ```rust
 impl<B: FsRead> FsRead for SecretBlocker<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
         self.check(path)?;           // BLOCK if secret
         self.inner.read(path)        // DELEGATE otherwise
     }
 
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError> {
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.read_to_string(path)
     }
 
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.read_range(path, offset, len)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.exists(path)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.metadata(path)
     }
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn std::io::Read + Send>, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.open_read(path)
@@ -313,25 +317,25 @@ impl<B: FsRead> FsRead for SecretBlocker<B> {
 }
 
 impl<B: FsWrite> FsWrite for SecretBlocker<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.write(path, data)
     }
 
-    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn append(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.append(path, data)
     }
 
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.remove_file(path)
     }
 
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         let from = from.as_ref();
         let to = to.as_ref();
         self.check(from)?;
@@ -339,7 +343,7 @@ impl<B: FsWrite> FsWrite for SecretBlocker<B> {
         self.inner.rename(from, to)
     }
 
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError> {
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         let from = from.as_ref();
         let to = to.as_ref();
         self.check(from)?;
@@ -347,13 +351,13 @@ impl<B: FsWrite> FsWrite for SecretBlocker<B> {
         self.inner.copy(from, to)
     }
 
-    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError> {
+    fn truncate(&self, path: &Path, size: u64) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.truncate(path, size)
     }
 
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Write + Send>, FsError> {
+    fn open_write(&self, path: &Path) -> Result<Box<dyn std::io::Write + Send>, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.open_write(path)
@@ -361,31 +365,31 @@ impl<B: FsWrite> FsWrite for SecretBlocker<B> {
 }
 
 impl<B: FsDir> FsDir for SecretBlocker<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.read_dir(path)
     }
 
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.create_dir(path)
     }
 
-    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.create_dir_all(path)
     }
 
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.remove_dir(path)
     }
 
-    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir_all(&self, path: &Path) -> Result<(), FsError> {
         let path = path.as_ref();
         self.check(path)?;
         self.inner.remove_dir_all(path)
@@ -397,7 +401,7 @@ impl<B: FsDir> FsDir for SecretBlocker<B> {
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let fs = SecretBlocker::new(MemoryBackend::new());
+    let fs = FileStorage::new(SecretBlocker::new(MemoryBackend::new()));
 
     // These work fine
     fs.write("/public/data.txt", b"Hello!")?;
@@ -429,7 +433,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **1. Pass-through with side effects** (Counter, Logger)
 ```rust
-fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
     log::info!("Reading: {:?}", path.as_ref());  // Side effect
     self.inner.read(path)                         // Always delegate
 }
@@ -437,7 +441,7 @@ fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
 
 **2. Conditional blocking** (PathFilter, ReadOnly)
 ```rust
-fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
     if self.is_blocked(path.as_ref()) {
         return Err(FsError::AccessDenied { ... });  // Block
     }
@@ -447,15 +451,35 @@ fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
 
 **3. Data transformation** (Encryption, Compression)
 ```rust
-fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
     let encrypted = self.inner.read(path)?;  // Get data
     Ok(self.decrypt(&encrypted))              // Transform
 }
 
-fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
     let encrypted = self.encrypt(data);       // Transform
     self.inner.write(path, &encrypted)        // Store
 }
+```
+
+---
+
+## Example: Indexing Middleware (Post-v1)
+
+Use `IndexLayer` to keep a queryable index of file activity:
+
+```rust
+use anyfs::{IndexLayer, FileStorage, MemoryBackend};
+
+let backend = MemoryBackend::new()
+    .layer(IndexLayer::builder()
+        .index_file("index.db")
+        .consistency(IndexConsistency::Strict)
+        .track_reads(false)
+        .build());
+
+let fs = FileStorage::new(backend);
+fs.write("/docs/hello.txt", b"hello")?;
 ```
 
 ---
@@ -481,81 +505,81 @@ impl<B> ReadOnly<B> {
 
 // FsRead: delegate everything
 impl<B: FsRead> FsRead for ReadOnly<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         self.inner.read(path)
     }
 
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError> {
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
         self.inner.read_to_string(path)
     }
 
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError> {
         self.inner.read_range(path, offset, len)
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         self.inner.exists(path)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         self.inner.metadata(path)
     }
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn std::io::Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn std::io::Read + Send>, FsError> {
         self.inner.open_read(path)
     }
 }
 
 // FsWrite: block everything
 impl<B: FsWrite> FsWrite for ReadOnly<B> {
-    fn write(&self, _: impl AsRef<Path>, _: &[u8]) -> Result<(), FsError> {
+    fn write(&self, _: &Path, _: &[u8]) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "write" })
     }
 
-    fn append(&self, _: impl AsRef<Path>, _: &[u8]) -> Result<(), FsError> {
+    fn append(&self, _: &Path, _: &[u8]) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "append" })
     }
 
-    fn remove_file(&self, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_file(&self, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_file" })
     }
 
-    fn rename(&self, _: impl AsRef<Path>, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn rename(&self, _: &Path, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "rename" })
     }
 
-    fn copy(&self, _: impl AsRef<Path>, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn copy(&self, _: &Path, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "copy" })
     }
 
-    fn truncate(&self, _: impl AsRef<Path>, _: u64) -> Result<(), FsError> {
+    fn truncate(&self, _: &Path, _: u64) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "truncate" })
     }
 
-    fn open_write(&self, _: impl AsRef<Path>) -> Result<Box<dyn std::io::Write + Send>, FsError> {
+    fn open_write(&self, _: &Path) -> Result<Box<dyn std::io::Write + Send>, FsError> {
         Err(FsError::ReadOnly { operation: "open_write" })
     }
 }
 
 // FsDir: delegate reads, block writes
 impl<B: FsDir> FsDir for ReadOnly<B> {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         self.inner.read_dir(path)  // Reading is OK
     }
 
-    fn create_dir(&self, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir(&self, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "create_dir" })
     }
 
-    fn create_dir_all(&self, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn create_dir_all(&self, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "create_dir_all" })
     }
 
-    fn remove_dir(&self, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir(&self, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_dir" })
     }
 
-    fn remove_dir_all(&self, _: impl AsRef<Path>) -> Result<(), FsError> {
+    fn remove_dir_all(&self, _: &Path) -> Result<(), FsError> {
         Err(FsError::ReadOnly { operation: "remove_dir_all" })
     }
 }
@@ -575,8 +599,10 @@ impl<B: Fs> Layer<B> for ReadOnlyLayer {
 ### Usage
 
 ```rust
-let fs = MemoryBackend::new()
-    .layer(ReadOnlyLayer);
+let fs = FileStorage::new(
+    MemoryBackend::new()
+        .layer(ReadOnlyLayer)
+);
 
 // Reads work
 fs.exists("/anything")?;
@@ -634,3 +660,4 @@ Before publishing your middleware:
 ---
 
 *"Middleware: because sometimes you need to do something between nothing and everything."*
+

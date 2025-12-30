@@ -96,7 +96,7 @@ fn with_symlinks(fs: &(impl Fs + FsLink)) {  // Correct
 
 **Community expectation:** Projects like `tokio`, `async-std` are dominant. Users may expect:
 ```rust
-async fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
+async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
 ```
 
 **Mitigation:**
@@ -115,12 +115,12 @@ async fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
 ```rust
 // Our design
 pub trait FsWrite: Send + Sync {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 }
 
 // What users might expect (std::io::Write pattern)
 pub trait FsWrite {
-    fn write(&mut self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+    fn write(&mut self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 }
 ```
 
@@ -182,11 +182,11 @@ pub trait Layer<B: Fs> {
 
 ```rust
 // Current
-fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 
 // Better
 #[must_use]
-fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
+fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
 ```
 
 **Impact:** Users might accidentally ignore errors.
@@ -263,8 +263,8 @@ let quota = QuotaLayer::builder()
 
 ## ✅ Non-Issues (We're Doing It Right)
 
-### 10. `impl AsRef<Path>` Everywhere
-✅ Matches `std::fs` conventions. Idiomatic.
+### 10. Object-Safe Path Parameters
+✅ Core traits use `&Path`; ergonomics come from `FileStorage`/`FsExt`.
 
 ### 11. `Send + Sync` Requirements
 ✅ Standard for thread-safe abstractions. Enables use across async boundaries.
@@ -325,3 +325,4 @@ let quota = QuotaLayer::builder()
 4. **Minor:** Documentation gaps (being addressed)
 
 With these fixes, the design should be well-received by the Rust community.
+

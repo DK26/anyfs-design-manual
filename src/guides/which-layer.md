@@ -58,11 +58,11 @@ use std::path::Path;
 pub struct MyBackend;
 
 impl Fs for MyBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         todo!()
     }
 
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         todo!()
     }
 
@@ -81,7 +81,7 @@ pub struct MyMiddleware<B: Fs> {
 }
 
 impl<B: Fs> Fs for MyMiddleware<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // Intercept, transform, or delegate
         self.inner.read(path)
     }
@@ -104,4 +104,5 @@ impl<B: Fs> Layer<B> for MyMiddlewareLayer {
 
 - **Don't depend on `anyfs`** if you're only implementing a backend or middleware. Use `anyfs-backend`.
 - **Don't put policy in backends.** Use middleware (Quota, PathFilter, etc.).
-- **Don't put policy in FileStorage.** It's just an ergonomic wrapper.
+- **Don't put policy in FileStorage.** It is an ergonomic wrapper with centralized path resolution, not a policy layer.
+

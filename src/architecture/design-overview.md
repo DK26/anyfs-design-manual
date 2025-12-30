@@ -66,6 +66,8 @@ Anyone can:
 
 **The `Fs` traits mimic `std::fs` with predictable, permissive defaults.**
 
+See ADR-027 for the decision rationale.
+
 The traits are low-level interfaces that any backend can implement - memory, SQLite, real filesystem, network storage, etc. To maintain consistent behavior across all backends:
 
 - All operations work by default (`symlink()`, `hard_link()`, `set_permissions()`)
@@ -141,10 +143,15 @@ These are optional extensions to explore after the core is stable. They are inte
 - Bulk operation helpers (`read_many`, `write_many`, `copy_many`, `glob`, `walk`) as `FsExt` or a utilities crate.
 - Early async adapter crate (`anyfs-async`) to support remote backends without changing sync traits.
 - Bash-style shell (example app or `anyfs-shell` crate) that routes `ls/cd/cat/cp/mv/rm/mkdir/stat` through `FileStorage` to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).
+- Copy-on-write overlay middleware (Afero-style `CopyOnWriteFs`) as a specialized `Overlay` variant.
+- Archive backends (zip/tar) as separate crates implementing `Fs` (inspired by PyFilesystem/fsspec).
+- Indexing middleware (`Indexing<B>` + `IndexLayer`) with pluggable index engines (SQLite default). See [Indexing Middleware](./indexed-realfs-backend.md).
 
 **Defer (valuable, but needs data or wider review):**
 - Range/block caching middleware for `read_range` heavy workloads (fsspec-style block cache).
 - Runtime capability discovery (`Capabilities` struct) for feature detection (symlink control, case sensitivity, max path length).
+- Lint/analyzer to discourage direct `std::fs` usage in app code (System.IO.Abstractions-style).
+- Retry/timeout middleware for remote backends (when network backends are real).
 
 **Drop for now (adds noise or cross-platform complexity):**
 - Change notification support (optional `FsWatch` trait or polling middleware).
@@ -155,7 +162,7 @@ Detailed rationale lives in `src/comparisons/prior-art-analysis.md`.
 
 ## Performance: Strategic Boxing (ADR-025)
 
-AnyFS follows Tower/Axum's approach to dynamic dispatch: **zero-cost on the hot path, box at boundaries where flexibility is needed**.
+AnyFS follows Tower/Axum's approach to dynamic dispatch: **zero-cost on the hot path, box at boundaries where flexibility is needed**. We avoid heap allocations and dynamic dispatch unless they add flexibility without meaningful performance impact.
 
 | Path | Operations | Cost |
 |------|------------|------|
@@ -163,6 +170,8 @@ AnyFS follows Tower/Axum's approach to dynamic dispatch: **zero-cost on the hot 
 | **Hot path** (zero-cost) | Middleware composition: `Quota<Tracing<B>>` | Generics, monomorphized |
 | **Cold path** (boxed) | `open_read()`, `open_write()`, `read_dir()` | One `Box` allocation per call |
 | **Opt-in** | `FileStorage::boxed()` | Explicit type erasure |
+
+**Hot-loop guidance:** If you open many small files and care about micro-overhead (especially on virtual backends), prefer `read()`/`write()` or the typed streaming extension (`FsReadTyped`/`FsWriteTyped`) when the backend type is known. These are the zero-allocation fast paths.
 
 **Why box streams and iterators?**
 1. Middleware needs to wrap them (`QuotaWriter` counts bytes, `PathFilter` filters entries)
@@ -181,6 +190,8 @@ See [ADR-025](./adrs.md#adr-025-strategic-boxing-tower-style) and [Zero-Cost Alt
 ## Trait Architecture (in `anyfs-backend`)
 
 AnyFS uses **layered traits** for maximum flexibility with minimal complexity.
+
+See ADR-030 for the rationale behind the layered hierarchy.
 
 ```
                         FsPosix
@@ -220,12 +231,12 @@ AnyFS uses **layered traits** for maximum flexibility with minimal complexity.
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError>;
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError>;
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
+    fn exists(&self, path: &Path) -> Result<bool, FsError>;
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 ```
 
@@ -233,13 +244,13 @@ pub trait FsRead: Send + Sync {
 
 ```rust
 pub trait FsWrite: Send + Sync {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError>;
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn append(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn remove_file(&self, path: &Path) -> Result<(), FsError>;
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn truncate(&self, path: &Path, size: u64) -> Result<(), FsError>;
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError>;
 }
 ```
 
@@ -249,11 +260,11 @@ pub trait FsWrite: Send + Sync {
 
 ```rust
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError>;
+    fn create_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir_all(&self, path: &Path) -> Result<(), FsError>;
 }
 ```
 
@@ -263,19 +274,19 @@ pub trait FsDir: Send + Sync {
 
 ```rust
 pub trait FsLink: Send + Sync {
-    fn symlink(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn read_link(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
-    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
+    fn symlink(&self, original: &Path, link: &Path) -> Result<(), FsError>;
+    fn hard_link(&self, original: &Path, link: &Path) -> Result<(), FsError>;
+    fn read_link(&self, path: &Path) -> Result<PathBuf, FsError>;
+    fn symlink_metadata(&self, path: &Path) -> Result<Metadata, FsError>;
 }
 
 pub trait FsPermissions: Send + Sync {
-    fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError>;
+    fn set_permissions(&self, path: &Path, perm: Permissions) -> Result<(), FsError>;
 }
 
 pub trait FsSync: Send + Sync {
     fn sync(&self) -> Result<(), FsError>;
-    fn fsync(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn fsync(&self, path: &Path) -> Result<(), FsError>;
 }
 
 pub trait FsStats: Send + Sync {
@@ -289,7 +300,7 @@ pub trait FsStats: Send + Sync {
 
 ```rust
 pub trait FsInode: Send {
-    fn path_to_inode(&self, path: impl AsRef<Path>) -> Result<u64, FsError>;
+    fn path_to_inode(&self, path: &Path) -> Result<u64, FsError>;
     fn inode_to_path(&self, inode: u64) -> Result<PathBuf, FsError>;
     fn lookup(&self, parent_inode: u64, name: &OsStr) -> Result<u64, FsError>;
     fn metadata_by_inode(&self, inode: u64) -> Result<Metadata, FsError>;
@@ -302,7 +313,7 @@ pub trait FsInode: Send {
 
 ```rust
 pub trait FsHandles: Send + Sync {
-    fn open(&self, path: impl AsRef<Path>, flags: OpenFlags) -> Result<Handle, FsError>;
+    fn open(&self, path: &Path, flags: OpenFlags) -> Result<Handle, FsError>;
     fn read_at(&self, handle: Handle, buf: &mut [u8], offset: u64) -> Result<usize, FsError>;
     fn write_at(&self, handle: Handle, data: &[u8], offset: u64) -> Result<usize, FsError>;
     fn close(&self, handle: Handle) -> Result<(), FsError>;
@@ -315,10 +326,10 @@ pub trait FsLock: Send + Sync {
 }
 
 pub trait FsXattr: Send + Sync {
-    fn get_xattr(&self, path: impl AsRef<Path>, name: &str) -> Result<Vec<u8>, FsError>;
-    fn set_xattr(&self, path: impl AsRef<Path>, name: &str, value: &[u8]) -> Result<(), FsError>;
-    fn remove_xattr(&self, path: impl AsRef<Path>, name: &str) -> Result<(), FsError>;
-    fn list_xattr(&self, path: impl AsRef<Path>) -> Result<Vec<String>, FsError>;
+    fn get_xattr(&self, path: &Path, name: &str) -> Result<Vec<u8>, FsError>;
+    fn set_xattr(&self, path: &Path, name: &str, value: &[u8]) -> Result<(), FsError>;
+    fn remove_xattr(&self, path: &Path, name: &str) -> Result<(), FsError>;
+    fn list_xattr(&self, path: &Path) -> Result<Vec<String>, FsError>;
 }
 ```
 
@@ -348,12 +359,27 @@ impl<T: FsFuse + FsHandles + FsLock + FsXattr> FsPosix for T {}
 
 ## Usage Examples
 
-### Most Users: Just `Fs`
+Application code should use `FileStorage` for the std::fs-style DX (string paths). Core trait examples are shown separately for implementers and generic code.
+
+### Most Users: FileStorage
 
 ```rust
-use anyfs::Fs;
+use anyfs::{FileStorage, MemoryBackend};
 
-fn process_files(fs: &impl Fs) {
+fn process_files() -> Result<(), Box<dyn std::error::Error>> {
+    let fs = FileStorage::new(MemoryBackend::new());
+    let data = fs.read("/input.txt")?;
+    fs.write("/output.txt", &processed(data))?;
+    Ok(())
+}
+```
+
+### Generic Code over Core Traits
+
+```rust
+use anyfs::{FileStorage, Fs};
+
+fn process_files<B: Fs>(fs: &FileStorage<B>) {
     let data = fs.read("/input.txt")?;
     fs.write("/output.txt", &processed(data))?;
 }
@@ -362,9 +388,9 @@ fn process_files(fs: &impl Fs) {
 ### Need Links? Add the Trait
 
 ```rust
-use anyfs::{Fs, FsLink};
+use anyfs::{FileStorage, Fs, FsLink};
 
-fn with_symlinks(fs: &(impl Fs + FsLink)) {
+fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) {
     fs.write("/target.txt", b"content")?;
     fs.symlink("/target.txt", "/link.txt")?;
 }
@@ -384,9 +410,9 @@ fn mount_filesystem(fs: impl FsFuse) {
 ### Full POSIX Application
 
 ```rust
-use anyfs::FsPosix;
+use anyfs::{FileStorage, FsPosix};
 
-fn database_app(fs: &impl FsPosix) {
+fn database_app<B: FsPosix>(fs: &FileStorage<B>) {
     let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
@@ -629,13 +655,14 @@ When a path is denied, operations return `FsError::AccessDenied`.
 Prevents all write operations. Useful for publishing immutable data.
 
 ```rust
-use anyfs::{SqliteBackend, ReadOnly};
+use anyfs::{SqliteBackend, ReadOnly, FileStorage};
 
 // Wrap any backend to make it read-only
 let backend = ReadOnly::new(SqliteBackend::open("published.db")?);
+let fs = FileStorage::new(backend);
 
-backend.read("/doc.txt")?;     // OK
-backend.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
+fs.read("/doc.txt")?;     // OK
+fs.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 ```
 
 ### RateLimit<B>
@@ -661,16 +688,15 @@ let backend = RateLimitLayer::builder()
 Logs operations without executing writes. Great for testing and debugging.
 
 ```rust
-use anyfs::{MemoryBackend, DryRun};
+use anyfs::{MemoryBackend, DryRun, FileStorage};
 
 let backend = DryRun::new(MemoryBackend::new());
+let fs = FileStorage::new(backend);
 
-backend.write("/test.txt", b"hello")?;  // Logged but not written
-backend.read("/test.txt");               // Error: file doesn't exist
+fs.write("/test.txt", b"hello")?;  // Logged but not written
+let _ = fs.read("/test.txt");       // Error: file doesn't exist
 
-// Get recorded operations
-let ops = backend.operations();
-// [Operation::Write { path: "/test.txt", size: 5 }]
+// To inspect recorded operations, keep the DryRun handle before wrapping it.
 ```
 
 ### Cache<B>
@@ -678,7 +704,7 @@ let ops = backend.operations();
 LRU cache for read operations. Essential for slow backends (S3, network).
 
 ```rust
-use anyfs::{SqliteBackend, Cache};
+use anyfs::{SqliteBackend, Cache, FileStorage};
 
 let backend = CacheLayer::builder()
     .max_size(100 * 1024 * 1024)      // 100 MB cache
@@ -686,12 +712,13 @@ let backend = CacheLayer::builder()
     .ttl(Duration::from_secs(300))    // 5 min TTL
     .build()
     .layer(SqliteBackend::open("data.db")?);
+let fs = FileStorage::new(backend);
 
 // First read: hits backend, caches result
-let data = backend.read("/file.txt")?;
+let data = fs.read("/file.txt")?;
 
 // Second read: served from cache (fast!)
-let data = backend.read("/file.txt")?;
+let data = fs.read("/file.txt")?;
 ```
 
 ### Overlay<Base, Upper>
@@ -922,13 +949,12 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 
 ## Path Handling
 
-All layers use `impl AsRef<Path>`, aligned with `std::fs`:
+Core traits take `&Path` so they are object-safe (`dyn Fs` works). The ergonomic layer (`FileStorage` and `FsExt`) accepts `impl AsRef<Path>`:
 
 ```rust
-// All of these work
+// These work via FileStorage/FsExt
 fs.write("/file.txt", data)?;
 fs.write(String::from("/file.txt"), data)?;
-fs.write(Path::new("/file.txt"), data)?;
 fs.write(PathBuf::from("/file.txt"), data)?;
 ```
 
@@ -937,6 +963,8 @@ fs.write(PathBuf::from("/file.txt"), data)?;
 ## Path Resolution
 
 Path resolution (walking directory structure, following symlinks) operates on the **`Fs` abstraction**, not reimplemented per-backend.
+
+See ADR-029 for the path-resolution decision.
 
 ### Why Abstract Path Resolution?
 
@@ -1102,7 +1130,7 @@ The `dunce` crate provides `simplified()` - a **lexical** function that converts
 use dunce::simplified;
 
 // \\?\C:\Users\foo\bar.txt → C:\Users\foo\bar.txt
-let path = simplified(Path::new(r"\\?\C:\Users\foo\bar.txt"));
+let path = simplified(r"\\?\C:\Users\foo\bar.txt");
 ```
 
 **Why this matters for `soft_canonicalize`:**
@@ -1128,6 +1156,8 @@ Virtual backends have no platform differences - paths are just strings.
 
 **Design principle:** Simple, secure defaults. Don't close doors for alternative semantics.
 
+See ADR-028 for the decision rationale.
+
 ### Default Behavior (Built-in Backends)
 
 | Aspect | Behavior | Rationale |
@@ -1143,8 +1173,11 @@ Virtual backends have no platform differences - paths are just strings.
 The `Fs` trait doesn't enforce filesystem semantics - backends decide their behavior:
 
 ```rust
+use anyfs::{FileStorage, MemoryBackend};
+use std::path::Path;
+
 // Built-in backends: Linux-like
-let linux_fs = MemoryBackend::new();
+let linux_fs = FileStorage::new(MemoryBackend::new());
 assert!(linux_fs.exists("/Foo.txt")? != linux_fs.exists("/foo.txt")?);
 
 // Someone wants NTFS-like behavior? User-implemented middleware or custom backend:
@@ -1154,7 +1187,7 @@ let ntfs_like = CaseInsensitive::new(           // (user-implemented middleware)
 
 // Or full custom implementation
 impl Fs for NtfsEmulatingBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let normalized = self.case_fold(path);  // Case-insensitive lookup
         // ...
     }
@@ -1312,10 +1345,12 @@ anyfs = { version = "0.1", features = ["bytes"] }
 ```
 
 ```rust
+use anyfs::{FileStorage, MemoryBackend};
 use bytes::Bytes;
 
 // With bytes feature, read returns Bytes (O(1) slicing)
-let data: Bytes = backend.read("/large-file.bin")?;
+let fs = FileStorage::new(MemoryBackend::new());
+let data: Bytes = fs.read("/large-file.bin")?;
 let slice = data.slice(1000..2000);  // Zero-copy!
 ```
 
@@ -1530,7 +1565,7 @@ AnyFS is designed for cross-platform use. Virtual backends work everywhere; real
 
 ```rust
 // This works identically on Windows, Linux, macOS, and WASM
-let fs = MemoryBackend::new();
+let fs = FileStorage::new(MemoryBackend::new());
 fs.symlink("/target", "/link")?;           // Just stores the link
 fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
 ```

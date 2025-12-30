@@ -155,14 +155,15 @@ message DirEntry {
 ```rust
 use tonic::{transport::Server, Request, Response, Status};
 use anyfs_backend::Fs;
+use anyfs::FileStorage;
 
 pub struct FsServer<B: Fs> {
-    backend: B,
+    backend: FileStorage<B>,
 }
 
 impl<B: Fs + Send + Sync + 'static> FsServer<B> {
     pub fn new(backend: B) -> Self {
-        Self { backend }
+        Self { backend: FileStorage::new(backend) }
     }
 
     pub async fn serve(self, addr: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -398,7 +399,7 @@ impl RemoteBackend {
 }
 
 impl FsRead for RemoteBackend {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // Note: This is sync, but we're calling async code
         // In practice, use tokio::runtime::Handle or async traits
 
@@ -423,7 +424,7 @@ impl FsRead for RemoteBackend {
         })
     }
 
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
+    fn exists(&self, path: &Path) -> Result<bool, FsError> {
         // Could be a dedicated RPC or use metadata
         match self.metadata(path) {
             Ok(_) => Ok(true),
@@ -432,7 +433,7 @@ impl FsRead for RemoteBackend {
         }
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async {
             let req = self.request(MetadataRequest {
@@ -456,7 +457,7 @@ impl FsRead for RemoteBackend {
 }
 
 impl FsWrite for RemoteBackend {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async {
             let req = self.request(WriteRequest {
@@ -482,7 +483,7 @@ impl FsWrite for RemoteBackend {
 }
 
 impl FsDir for RemoteBackend {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError> {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async {
             let mut all_entries = Vec::new();
@@ -569,7 +570,7 @@ impl<B> CachingBackend<B> {
 }
 
 impl<B: FsRead> FsRead for CachingBackend<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
 
         // Check cache first
@@ -588,7 +589,7 @@ impl<B: FsRead> FsRead for CachingBackend<B> {
         Ok(data)
     }
 
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError> {
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError> {
         let path = path.as_ref();
 
         // Check cache
@@ -615,7 +616,7 @@ impl<B: FsRead> FsRead for CachingBackend<B> {
 }
 
 impl<B: FsWrite> FsWrite for CachingBackend<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Write through to remote
@@ -647,8 +648,10 @@ impl<B: FsWrite> FsWrite for CachingBackend<B> {
 Handle network failures gracefully:
 
 ```rust
+use anyfs::FileStorage;
+
 pub struct OfflineCapableBackend<B> {
-    remote: B,
+    remote: FileStorage<B>,
     local_cache: SqliteBackend,  // Local SQLite for offline ops
     mode: RwLock<ConnectionMode>,
     pending_writes: RwLock<Vec<PendingWrite>>,
@@ -719,7 +722,7 @@ impl<B: Fs> OfflineCapableBackend<B> {
 }
 
 impl<B: FsRead> FsRead for OfflineCapableBackend<B> {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError> {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         let path = path.as_ref();
 
         if self.is_online() {
@@ -744,7 +747,7 @@ impl<B: FsRead> FsRead for OfflineCapableBackend<B> {
 }
 
 impl<B: FsWrite> FsWrite for OfflineCapableBackend<B> {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError> {
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         let path = path.as_ref();
 
         // Always write to local cache
@@ -795,7 +798,7 @@ enum ConflictResolution {
 }
 
 fn resolve_conflict(
-    path: &Path,
+    path: &str,
     local_data: &[u8],
     server_data: &[u8],
     strategy: ConflictResolution,
@@ -811,7 +814,7 @@ fn resolve_conflict(
         }
         ConflictResolution::KeepBoth => {
             // Rename local to path.conflict
-            let conflict_path = format!("{}.conflict", path.display());
+            let conflict_path = format!("{}.conflict", path);
             remote.write(&conflict_path, local_data)?;
             Ok(())
         }
@@ -1010,3 +1013,4 @@ This gives you a complete cloud filesystem with:
 - Caching for performance
 - Server-side quotas and logging
 - Scalable blob storage with dedup
+

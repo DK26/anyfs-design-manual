@@ -79,6 +79,19 @@ fs.write("/data/file.txt", b"hello")?;
 
 ---
 
+## Future Ideas (Post-v1)
+
+These are optional extensions that fit the design but are intentionally out of scope for v1:
+
+- URL-based backend registry and bulk helpers (`FsExt`/utilities)
+- Async adapter crate for remote backends (`anyfs-async`)
+- Companion shell (`anyfs-shell`) for interactive exploration
+- Copy-on-write overlay and archive backends (zip/tar) as separate crates
+
+See [Design Overview](./architecture/design-overview.md#future-ideas-post-v1) for the full list and rationale.
+
+---
+
 ## Status
 
 | Component      | Status      |
@@ -91,5 +104,5 @@ fs.write("/data/file.txt", b"hello")?;
 ## Authoritative Documents
 
 1. `AGENTS.md` (for AI assistants)
-2. `book/src/architecture/design-overview.md`
-3. `book/src/architecture/adrs.md`
+2. `src/architecture/design-overview.md`
+3. `src/architecture/adrs.md`

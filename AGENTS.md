@@ -121,33 +121,35 @@ FsRead + FsWrite + FsDir  ← Core traits
 > **Thread Safety:** All traits require `Send + Sync` and use `&self` for all methods.
 > Backends MUST use interior mutability (`RwLock`, `Mutex`) for thread-safe concurrent access.
 > See ADR-023 for rationale.
+>
+> **Path Parameters:** Core traits use `&Path` so they are object-safe (`dyn Fs` works). `FileStorage`/`FsExt` provide `impl AsRef<Path>` ergonomics.
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsError>;
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, FsError>;
-    fn read_range(&self, path: impl AsRef<Path>, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, FsError>;
-    fn metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
+    fn read_to_string(&self, path: &Path) -> Result<String, FsError>;
+    fn read_range(&self, path: &Path, offset: u64, len: usize) -> Result<Vec<u8>, FsError>;
+    fn exists(&self, path: &Path) -> Result<bool, FsError>;
+    fn metadata(&self, path: &Path) -> Result<Metadata, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 
 pub trait FsWrite: Send + Sync {
-    fn write(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn append(&self, path: impl AsRef<Path>, data: &[u8]) -> Result<(), FsError>;
-    fn remove_file(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn rename(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn copy(&self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(), FsError>;
-    fn truncate(&self, path: impl AsRef<Path>, size: u64) -> Result<(), FsError>;
-    fn open_write(&self, path: impl AsRef<Path>) -> Result<Box<dyn Write + Send>, FsError>;
+    fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn append(&self, path: &Path, data: &[u8]) -> Result<(), FsError>;
+    fn remove_file(&self, path: &Path) -> Result<(), FsError>;
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError>;
+    fn truncate(&self, path: &Path, size: u64) -> Result<(), FsError>;
+    fn open_write(&self, path: &Path) -> Result<Box<dyn Write + Send>, FsError>;
 }
 
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
-    fn create_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
-    fn remove_dir_all(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError>;
+    fn create_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir(&self, path: &Path) -> Result<(), FsError>;
+    fn remove_dir_all(&self, path: &Path) -> Result<(), FsError>;
 }
 
 /// Basic filesystem - covers 90% of use cases
@@ -159,19 +161,19 @@ impl<T: FsRead + FsWrite + FsDir> Fs for T {}
 
 ```rust
 pub trait FsLink: Send + Sync {
-    fn symlink(&self, target: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) -> Result<(), FsError>;
-    fn read_link(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
-    fn symlink_metadata(&self, path: impl AsRef<Path>) -> Result<Metadata, FsError>;
+    fn symlink(&self, target: &Path, link: &Path) -> Result<(), FsError>;
+    fn hard_link(&self, original: &Path, link: &Path) -> Result<(), FsError>;
+    fn read_link(&self, path: &Path) -> Result<PathBuf, FsError>;
+    fn symlink_metadata(&self, path: &Path) -> Result<Metadata, FsError>;
 }
 
 pub trait FsPermissions: Send + Sync {
-    fn set_permissions(&self, path: impl AsRef<Path>, perm: Permissions) -> Result<(), FsError>;
+    fn set_permissions(&self, path: &Path, perm: Permissions) -> Result<(), FsError>;
 }
 
 pub trait FsSync: Send + Sync {
     fn sync(&self) -> Result<(), FsError>;
-    fn fsync(&self, path: impl AsRef<Path>) -> Result<(), FsError>;
+    fn fsync(&self, path: &Path) -> Result<(), FsError>;
 }
 
 pub trait FsStats: Send + Sync {
@@ -421,3 +423,4 @@ OPT-IN TYPE ERASURE:
 2. **Thread Safety** - `MemoryBackend` uses `Arc<RwLock<...>>`, `SqliteBackend` uses WAL mode
 3. **Error Context** - Include path and operation in all errors
 4. **Path Edge Cases** - Handle `/../`, `//`, empty paths, unicode, long paths
+

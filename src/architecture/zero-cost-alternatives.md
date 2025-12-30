@@ -4,7 +4,7 @@ This document analyzes alternatives to dynamic dispatch (`Box<dyn Trait>`) for s
 
 > **Decision:** See [ADR-025: Strategic Boxing](./adrs.md#adr-025-strategic-boxing-tower-style) for the formal decision.
 >
-> **TL;DR:** We follow Tower/Axum's approach - zero-cost on hot path (`read()`, `write()`), box at cold path boundaries (`open_read()`, `read_dir()`). The boxing cost (<1% of I/O time) is negligible; the ergonomic benefits are substantial.
+> **TL;DR:** We follow Tower/Axum's approach - zero-cost on hot path (`read()`, `write()`), box at cold path boundaries (`open_read()`, `read_dir()`). We avoid heap allocations and dynamic dispatch unless they buy flexibility with negligible performance impact.
 
 ---
 
@@ -12,11 +12,11 @@ This document analyzes alternatives to dynamic dispatch (`Box<dyn Trait>`) for s
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError>;
 }
 
 // Where ReadDirIter is:
@@ -33,13 +33,13 @@ pub struct ReadDirIter(Box<dyn Iterator<Item = Result<DirEntry, FsError>> + Send
 pub trait FsRead: Send + Sync {
     type Reader: Read + Send;
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Self::Reader, FsError>;
 }
 
 pub trait FsDir: Send + Sync {
     type DirIter: Iterator<Item = Result<DirEntry, FsError>> + Send;
 
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Self::DirIter, FsError>;
+    fn read_dir(&self, path: &Path) -> Result<Self::DirIter, FsError>;
 }
 ```
 
@@ -49,7 +49,7 @@ pub trait FsDir: Send + Sync {
 impl FsRead for MemoryBackend {
     type Reader = std::io::Cursor<Vec<u8>>;
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Self::Reader, FsError> {
         let data = self.read(path)?;
         Ok(std::io::Cursor::new(data))
     }
@@ -58,7 +58,7 @@ impl FsRead for MemoryBackend {
 impl FsDir for MemoryBackend {
     type DirIter = std::vec::IntoIter<Result<DirEntry, FsError>>;
 
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<Self::DirIter, FsError> {
+    fn read_dir(&self, path: &Path) -> Result<Self::DirIter, FsError> {
         let entries = self.collect_entries(path)?;
         Ok(entries.into_iter())
     }
@@ -72,7 +72,7 @@ impl<B: FsRead> FsRead for Quota<B> {
     // Must define our own Reader type that wraps B::Reader
     type Reader = QuotaReader<B::Reader>;
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Self::Reader, FsError> {
         let inner = self.inner.open_read(path)?;
         Ok(QuotaReader::new(inner, self.usage.clone()))
     }
@@ -121,11 +121,11 @@ Return Position Impl Trait in Traits allows:
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError>;
+    fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError>;
 }
 
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>)
+    fn read_dir(&self, path: &Path)
         -> Result<impl Iterator<Item = Result<DirEntry, FsError>> + Send, FsError>;
 }
 ```
@@ -136,14 +136,14 @@ The compiler infers a unique anonymous type for each implementor:
 
 ```rust
 impl FsRead for MemoryBackend {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError> {
+    fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError> {
         let data = self.read(path)?;
         Ok(std::io::Cursor::new(data))  // Returns Cursor<Vec<u8>>, but caller sees impl Read
     }
 }
 
 impl FsRead for SqliteBackend {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError> {
+    fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError> {
         Ok(SqliteReader::new(self.conn.clone(), path))  // Different type, same interface
     }
 }
@@ -153,7 +153,7 @@ impl FsRead for SqliteBackend {
 
 ```rust
 impl<B: FsRead> FsRead for Tracing<B> {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError> {
+    fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError> {
         let span = tracing::span!(Level::DEBUG, "open_read");
         let _guard = span.enter();
         self.inner.open_read(path)  // Just forward - return type is inferred
@@ -193,7 +193,7 @@ For readers that borrow from the backend:
 pub trait FsRead: Send + Sync {
     type Reader<'a>: Read + Send where Self: 'a;
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader<'_>, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Self::Reader<'_>, FsError>;
 }
 ```
 
@@ -203,7 +203,7 @@ pub trait FsRead: Send + Sync {
 impl FsRead for MemoryBackend {
     type Reader<'a> = &'a [u8];  // Borrow directly from internal storage!
 
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Self::Reader<'_>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Self::Reader<'_>, FsError> {
         let data = self.storage.read().unwrap();
         let bytes = data.get(path.as_ref())
             .ok_or(FsError::NotFound { path: path.as_ref().to_path_buf() })?;
@@ -239,7 +239,7 @@ Provide **both** dynamic and static APIs:
 ```rust
 pub trait FsRead: Send + Sync {
     /// Dynamic dispatch version (simple, flexible)
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 
 /// Extension trait for zero-cost static dispatch
@@ -247,12 +247,12 @@ pub trait FsReadTyped: FsRead {
     type Reader: Read + Send;
 
     /// Static dispatch version (zero-cost, less flexible)
-    fn open_read_typed(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+    fn open_read_typed(&self, path: &Path) -> Result<Self::Reader, FsError>;
 }
 
 // Blanket impl for convenience when types align
 impl<T: FsReadTyped> FsRead for T {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError> {
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError> {
         Ok(Box::new(self.open_read_typed(path)?))
     }
 }
@@ -288,7 +288,7 @@ Avoid returning iterators entirely:
 
 ```rust
 pub trait FsDir: Send + Sync {
-    fn for_each_entry<F>(&self, path: impl AsRef<Path>, f: F) -> Result<(), FsError>
+    fn for_each_entry<F>(&self, path: &Path, f: F) -> Result<(), FsError>
     where
         F: FnMut(DirEntry) -> ControlFlow<(), ()>;
 }
@@ -348,11 +348,11 @@ pub struct ReadDirIter {
 
 ```rust
 pub trait FsRead: Send + Sync {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<Box<dyn Read + Send>, FsError>;
+    fn open_read(&self, path: &Path) -> Result<Box<dyn Read + Send>, FsError>;
 }
 
 pub trait FsDir: Send + Sync {
-    fn read_dir(&self, path: impl AsRef<Path>) -> Result<ReadDirIter, FsError>;
+    fn read_dir(&self, path: &Path) -> Result<ReadDirIter, FsError>;
 }
 ```
 
@@ -362,14 +362,14 @@ pub trait FsDir: Send + Sync {
 3. **Middleware simplicity** - No wrapper types needed
 4. **Actual cost is low** - One allocation per stream open, not per read
 
-### Optional: Static Dispatch Extension
+### Optional: Static Dispatch Extension (Fast Path)
 
-For performance-critical code, offer typed variants:
+For performance-critical code, offer typed variants. This is the **first-class fast path** for hot loops when the backend type is known:
 
 ```rust
 pub trait FsReadTyped: FsRead {
     type Reader: Read + Send;
-    fn open_read_typed(&self, path: impl AsRef<Path>) -> Result<Self::Reader, FsError>;
+    fn open_read_typed(&self, path: &Path) -> Result<Self::Reader, FsError>;
 }
 ```
 
@@ -379,7 +379,7 @@ If a user doesn't need `dyn Fs`, they can define their own trait:
 
 ```rust
 pub trait FsReadStatic: Send + Sync {
-    fn open_read(&self, path: impl AsRef<Path>) -> Result<impl Read + Send, FsError>;
+    fn open_read(&self, path: &Path) -> Result<impl Read + Send, FsError>;
 }
 ```
 
@@ -424,3 +424,4 @@ pub trait FsReadStatic: Send + Sync {
 | Hybrid | ✅ opt-in | ✅ | ✅ | ✅ Best of both |
 | Callbacks | ✅ | ❌ | ✅ | ❌ Awkward API |
 | SmallVec | ⚠️ | ✅ | ✅ | ⚠️ For ReadDirIter |
+

@@ -104,9 +104,9 @@ mod fs_read {
     #[test]
     fn read_existing_file() {
         let fs = create_backend();
-        fs.write("/test.txt", b"hello world").unwrap();
+        fs.write(std::path::Path::new("/test.txt"), b"hello world").unwrap();
 
-        let content = fs.read("/test.txt").unwrap();
+        let content = fs.read(std::path::Path::new("/test.txt")).unwrap();
         assert_eq!(content, b"hello world");
     }
 
@@ -114,102 +114,102 @@ mod fs_read {
     fn read_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.read("/nonexistent.txt");
+        let result = fs.read(std::path::Path::new("/nonexistent.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn read_directory_returns_not_a_file() {
         let fs = create_backend();
-        fs.create_dir("/mydir").unwrap();
+        fs.create_dir(std::path::Path::new("/mydir")).unwrap();
 
-        let result = fs.read("/mydir");
+        let result = fs.read(std::path::Path::new("/mydir"));
         assert!(matches!(result, Err(FsError::NotAFile { .. })));
     }
 
     #[test]
     fn read_to_string_valid_utf8() {
         let fs = create_backend();
-        fs.write("/text.txt", "hello unicode: 你好".as_bytes()).unwrap();
+        fs.write(std::path::Path::new("/text.txt"), "hello unicode: 你好".as_bytes()).unwrap();
 
-        let content = fs.read_to_string("/text.txt").unwrap();
+        let content = fs.read_to_string(std::path::Path::new("/text.txt")).unwrap();
         assert_eq!(content, "hello unicode: 你好");
     }
 
     #[test]
     fn read_to_string_invalid_utf8_returns_error() {
         let fs = create_backend();
-        fs.write("/binary.bin", &[0xFF, 0xFE, 0x00, 0x01]).unwrap();
+        fs.write(std::path::Path::new("/binary.bin"), &[0xFF, 0xFE, 0x00, 0x01]).unwrap();
 
-        let result = fs.read_to_string("/binary.bin");
+        let result = fs.read_to_string(std::path::Path::new("/binary.bin"));
         assert!(result.is_err());
     }
 
     #[test]
     fn read_range_full_file() {
         let fs = create_backend();
-        fs.write("/data.bin", b"0123456789").unwrap();
+        fs.write(std::path::Path::new("/data.bin"), b"0123456789").unwrap();
 
-        let content = fs.read_range("/data.bin", 0, 10).unwrap();
+        let content = fs.read_range(std::path::Path::new("/data.bin"), 0, 10).unwrap();
         assert_eq!(content, b"0123456789");
     }
 
     #[test]
     fn read_range_partial() {
         let fs = create_backend();
-        fs.write("/data.bin", b"0123456789").unwrap();
+        fs.write(std::path::Path::new("/data.bin"), b"0123456789").unwrap();
 
-        let content = fs.read_range("/data.bin", 3, 4).unwrap();
+        let content = fs.read_range(std::path::Path::new("/data.bin"), 3, 4).unwrap();
         assert_eq!(content, b"3456");
     }
 
     #[test]
     fn read_range_past_end_returns_available() {
         let fs = create_backend();
-        fs.write("/data.bin", b"0123456789").unwrap();
+        fs.write(std::path::Path::new("/data.bin"), b"0123456789").unwrap();
 
-        let content = fs.read_range("/data.bin", 8, 100).unwrap();
+        let content = fs.read_range(std::path::Path::new("/data.bin"), 8, 100).unwrap();
         assert_eq!(content, b"89");
     }
 
     #[test]
     fn read_range_offset_past_end_returns_empty() {
         let fs = create_backend();
-        fs.write("/data.bin", b"0123456789").unwrap();
+        fs.write(std::path::Path::new("/data.bin"), b"0123456789").unwrap();
 
-        let content = fs.read_range("/data.bin", 100, 10).unwrap();
+        let content = fs.read_range(std::path::Path::new("/data.bin"), 100, 10).unwrap();
         assert!(content.is_empty());
     }
 
     #[test]
     fn exists_for_existing_file() {
         let fs = create_backend();
-        fs.write("/exists.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/exists.txt"), b"data").unwrap();
 
-        assert!(fs.exists("/exists.txt").unwrap());
+        assert!(fs.exists(std::path::Path::new("/exists.txt")).unwrap());
     }
 
     #[test]
     fn exists_for_nonexistent_file() {
         let fs = create_backend();
 
-        assert!(!fs.exists("/nonexistent.txt").unwrap());
+        assert!(!fs.exists(std::path::Path::new("/nonexistent.txt")).unwrap());
     }
 
     #[test]
     fn exists_for_directory() {
         let fs = create_backend();
-        fs.create_dir("/mydir").unwrap();
+        fs.create_dir(std::path::Path::new("/mydir")).unwrap();
 
-        assert!(fs.exists("/mydir").unwrap());
+        assert!(fs.exists(std::path::Path::new("/mydir")).unwrap());
     }
 
     #[test]
     fn metadata_for_file() {
         let fs = create_backend();
-        fs.write("/file.txt", b"hello").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"hello").unwrap();
 
-        let meta = fs.metadata("/file.txt").unwrap();
+        let meta = fs.metadata(std::path::Path::new("/file.txt")).unwrap();
         assert_eq!(meta.file_type, FileType::File);
         assert_eq!(meta.size, 5);
     }
@@ -217,9 +217,9 @@ mod fs_read {
     #[test]
     fn metadata_for_directory() {
         let fs = create_backend();
-        fs.create_dir("/mydir").unwrap();
+        fs.create_dir(std::path::Path::new("/mydir")).unwrap();
 
-        let meta = fs.metadata("/mydir").unwrap();
+        let meta = fs.metadata(std::path::Path::new("/mydir")).unwrap();
         assert_eq!(meta.file_type, FileType::Directory);
     }
 
@@ -227,16 +227,16 @@ mod fs_read {
     fn metadata_for_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.metadata("/nonexistent");
+        let result = fs.metadata(std::path::Path::new("/nonexistent"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn open_read_and_consume() {
         let fs = create_backend();
-        fs.write("/stream.txt", b"streaming content").unwrap();
+        fs.write(std::path::Path::new("/stream.txt"), b"streaming content").unwrap();
 
-        let mut reader = fs.open_read("/stream.txt").unwrap();
+        let mut reader = fs.open_read(std::path::Path::new("/stream.txt")).unwrap();
         let mut buf = Vec::new();
         std::io::Read::read_to_end(&mut reader, &mut buf).unwrap();
 
@@ -255,27 +255,27 @@ mod fs_write {
     fn write_creates_new_file() {
         let fs = create_backend();
 
-        fs.write("/new.txt", b"new content").unwrap();
+        fs.write(std::path::Path::new("/new.txt"), b"new content").unwrap();
 
-        assert!(fs.exists("/new.txt").unwrap());
-        assert_eq!(fs.read("/new.txt").unwrap(), b"new content");
+        assert!(fs.exists(std::path::Path::new("/new.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/new.txt")).unwrap(), b"new content");
     }
 
     #[test]
     fn write_overwrites_existing_file() {
         let fs = create_backend();
-        fs.write("/file.txt", b"original").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"original").unwrap();
 
-        fs.write("/file.txt", b"replaced").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"replaced").unwrap();
 
-        assert_eq!(fs.read("/file.txt").unwrap(), b"replaced");
+        assert_eq!(fs.read(std::path::Path::new("/file.txt")).unwrap(), b"replaced");
     }
 
     #[test]
     fn write_to_nonexistent_parent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.write("/nonexistent/file.txt", b"data");
+        let result = fs.write(std::path::Path::new("/nonexistent/file.txt"), b"data");
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
@@ -283,10 +283,10 @@ mod fs_write {
     fn write_empty_file() {
         let fs = create_backend();
 
-        fs.write("/empty.txt", b"").unwrap();
+        fs.write(std::path::Path::new("/empty.txt"), b"").unwrap();
 
-        assert!(fs.exists("/empty.txt").unwrap());
-        assert_eq!(fs.read("/empty.txt").unwrap(), b"");
+        assert!(fs.exists(std::path::Path::new("/empty.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/empty.txt")).unwrap(), b"");
     }
 
     #[test]
@@ -294,126 +294,126 @@ mod fs_write {
         let fs = create_backend();
         let binary: Vec<u8> = (0..=255).collect();
 
-        fs.write("/binary.bin", &binary).unwrap();
+        fs.write(std::path::Path::new("/binary.bin"), &binary).unwrap();
 
-        assert_eq!(fs.read("/binary.bin").unwrap(), binary);
+        assert_eq!(fs.read(std::path::Path::new("/binary.bin")).unwrap(), binary);
     }
 
     #[test]
     fn append_to_existing_file() {
         let fs = create_backend();
-        fs.write("/log.txt", b"line1\n").unwrap();
+        fs.write(std::path::Path::new("/log.txt"), b"line1\n").unwrap();
 
-        fs.append("/log.txt", b"line2\n").unwrap();
+        fs.append(std::path::Path::new("/log.txt"), b"line2\n").unwrap();
 
-        assert_eq!(fs.read("/log.txt").unwrap(), b"line1\nline2\n");
+        assert_eq!(fs.read(std::path::Path::new("/log.txt")).unwrap(), b"line1\nline2\n");
     }
 
     #[test]
     fn append_to_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.append("/nonexistent.txt", b"data");
+        let result = fs.append(std::path::Path::new("/nonexistent.txt"), b"data");
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn remove_file_existing() {
         let fs = create_backend();
-        fs.write("/delete-me.txt", b"bye").unwrap();
+        fs.write(std::path::Path::new("/delete-me.txt"), b"bye").unwrap();
 
-        fs.remove_file("/delete-me.txt").unwrap();
+        fs.remove_file(std::path::Path::new("/delete-me.txt")).unwrap();
 
-        assert!(!fs.exists("/delete-me.txt").unwrap());
+        assert!(!fs.exists(std::path::Path::new("/delete-me.txt")).unwrap());
     }
 
     #[test]
     fn remove_file_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.remove_file("/nonexistent.txt");
+        let result = fs.remove_file(std::path::Path::new("/nonexistent.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn remove_file_on_directory_returns_not_a_file() {
         let fs = create_backend();
-        fs.create_dir("/mydir").unwrap();
+        fs.create_dir(std::path::Path::new("/mydir")).unwrap();
 
-        let result = fs.remove_file("/mydir");
+        let result = fs.remove_file(std::path::Path::new("/mydir"));
         assert!(matches!(result, Err(FsError::NotAFile { .. })));
     }
 
     #[test]
     fn rename_file() {
         let fs = create_backend();
-        fs.write("/old.txt", b"content").unwrap();
+        fs.write(std::path::Path::new("/old.txt"), b"content").unwrap();
 
-        fs.rename("/old.txt", "/new.txt").unwrap();
+        fs.rename(std::path::Path::new("/old.txt"), std::path::Path::new("/new.txt")).unwrap();
 
-        assert!(!fs.exists("/old.txt").unwrap());
-        assert!(fs.exists("/new.txt").unwrap());
-        assert_eq!(fs.read("/new.txt").unwrap(), b"content");
+        assert!(!fs.exists(std::path::Path::new("/old.txt")).unwrap());
+        assert!(fs.exists(std::path::Path::new("/new.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/new.txt")).unwrap(), b"content");
     }
 
     #[test]
     fn rename_overwrites_destination() {
         let fs = create_backend();
-        fs.write("/src.txt", b"source").unwrap();
-        fs.write("/dst.txt", b"destination").unwrap();
+        fs.write(std::path::Path::new("/src.txt"), b"source").unwrap();
+        fs.write(std::path::Path::new("/dst.txt"), b"destination").unwrap();
 
-        fs.rename("/src.txt", "/dst.txt").unwrap();
+        fs.rename(std::path::Path::new("/src.txt"), std::path::Path::new("/dst.txt")).unwrap();
 
-        assert!(!fs.exists("/src.txt").unwrap());
-        assert_eq!(fs.read("/dst.txt").unwrap(), b"source");
+        assert!(!fs.exists(std::path::Path::new("/src.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/dst.txt")).unwrap(), b"source");
     }
 
     #[test]
     fn rename_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.rename("/nonexistent.txt", "/new.txt");
+        let result = fs.rename(std::path::Path::new("/nonexistent.txt"), std::path::Path::new("/new.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn copy_file() {
         let fs = create_backend();
-        fs.write("/original.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/original.txt"), b"data").unwrap();
 
-        fs.copy("/original.txt", "/copy.txt").unwrap();
+        fs.copy(std::path::Path::new("/original.txt"), std::path::Path::new("/copy.txt")).unwrap();
 
-        assert!(fs.exists("/original.txt").unwrap());
-        assert!(fs.exists("/copy.txt").unwrap());
-        assert_eq!(fs.read("/copy.txt").unwrap(), b"data");
+        assert!(fs.exists(std::path::Path::new("/original.txt")).unwrap());
+        assert!(fs.exists(std::path::Path::new("/copy.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/copy.txt")).unwrap(), b"data");
     }
 
     #[test]
     fn copy_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.copy("/nonexistent.txt", "/copy.txt");
+        let result = fs.copy(std::path::Path::new("/nonexistent.txt"), std::path::Path::new("/copy.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn truncate_shrink() {
         let fs = create_backend();
-        fs.write("/file.txt", b"0123456789").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"0123456789").unwrap();
 
-        fs.truncate("/file.txt", 5).unwrap();
+        fs.truncate(std::path::Path::new("/file.txt"), 5).unwrap();
 
-        assert_eq!(fs.read("/file.txt").unwrap(), b"01234");
+        assert_eq!(fs.read(std::path::Path::new("/file.txt")).unwrap(), b"01234");
     }
 
     #[test]
     fn truncate_expand() {
         let fs = create_backend();
-        fs.write("/file.txt", b"abc").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"abc").unwrap();
 
-        fs.truncate("/file.txt", 6).unwrap();
+        fs.truncate(std::path::Path::new("/file.txt"), 6).unwrap();
 
-        let content = fs.read("/file.txt").unwrap();
+        let content = fs.read(std::path::Path::new("/file.txt")).unwrap();
         assert_eq!(content.len(), 6);
         assert_eq!(&content[..3], b"abc");
         // Expanded bytes should be zero
@@ -423,11 +423,11 @@ mod fs_write {
     #[test]
     fn truncate_to_zero() {
         let fs = create_backend();
-        fs.write("/file.txt", b"content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"content").unwrap();
 
-        fs.truncate("/file.txt", 0).unwrap();
+        fs.truncate(std::path::Path::new("/file.txt"), 0).unwrap();
 
-        assert_eq!(fs.read("/file.txt").unwrap(), b"");
+        assert_eq!(fs.read(std::path::Path::new("/file.txt")).unwrap(), b"");
     }
 
     #[test]
@@ -435,12 +435,12 @@ mod fs_write {
         let fs = create_backend();
 
         {
-            let mut writer = fs.open_write("/stream.txt").unwrap();
+            let mut writer = fs.open_write(std::path::Path::new("/stream.txt")).unwrap();
             std::io::Write::write_all(&mut writer, b"streamed").unwrap();
         }
 
         // Content should be visible after writer is dropped
-        assert_eq!(fs.read("/stream.txt").unwrap(), b"streamed");
+        assert_eq!(fs.read(std::path::Path::new("/stream.txt")).unwrap(), b"streamed");
     }
 }
 
@@ -455,19 +455,19 @@ mod fs_dir {
     fn create_dir_single() {
         let fs = create_backend();
 
-        fs.create_dir("/newdir").unwrap();
+        fs.create_dir(std::path::Path::new("/newdir")).unwrap();
 
-        assert!(fs.exists("/newdir").unwrap());
-        let meta = fs.metadata("/newdir").unwrap();
+        assert!(fs.exists(std::path::Path::new("/newdir")).unwrap());
+        let meta = fs.metadata(std::path::Path::new("/newdir")).unwrap();
         assert_eq!(meta.file_type, FileType::Directory);
     }
 
     #[test]
     fn create_dir_already_exists_returns_error() {
         let fs = create_backend();
-        fs.create_dir("/existing").unwrap();
+        fs.create_dir(std::path::Path::new("/existing")).unwrap();
 
-        let result = fs.create_dir("/existing");
+        let result = fs.create_dir(std::path::Path::new("/existing"));
         assert!(matches!(result, Err(FsError::AlreadyExists { .. })));
     }
 
@@ -475,7 +475,7 @@ mod fs_dir {
     fn create_dir_parent_not_exists_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.create_dir("/nonexistent/child");
+        let result = fs.create_dir(std::path::Path::new("/nonexistent/child"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
@@ -483,39 +483,39 @@ mod fs_dir {
     fn create_dir_all_nested() {
         let fs = create_backend();
 
-        fs.create_dir_all("/a/b/c/d").unwrap();
+        fs.create_dir_all(std::path::Path::new("/a/b/c/d")).unwrap();
 
-        assert!(fs.exists("/a").unwrap());
-        assert!(fs.exists("/a/b").unwrap());
-        assert!(fs.exists("/a/b/c").unwrap());
-        assert!(fs.exists("/a/b/c/d").unwrap());
+        assert!(fs.exists(std::path::Path::new("/a")).unwrap());
+        assert!(fs.exists(std::path::Path::new("/a/b")).unwrap());
+        assert!(fs.exists(std::path::Path::new("/a/b/c")).unwrap());
+        assert!(fs.exists(std::path::Path::new("/a/b/c/d")).unwrap());
     }
 
     #[test]
     fn create_dir_all_partially_exists() {
         let fs = create_backend();
-        fs.create_dir("/exists").unwrap();
+        fs.create_dir(std::path::Path::new("/exists")).unwrap();
 
-        fs.create_dir_all("/exists/new/nested").unwrap();
+        fs.create_dir_all(std::path::Path::new("/exists/new/nested")).unwrap();
 
-        assert!(fs.exists("/exists/new/nested").unwrap());
+        assert!(fs.exists(std::path::Path::new("/exists/new/nested")).unwrap());
     }
 
     #[test]
     fn create_dir_all_already_exists_is_ok() {
         let fs = create_backend();
-        fs.create_dir_all("/a/b/c").unwrap();
+        fs.create_dir_all(std::path::Path::new("/a/b/c")).unwrap();
 
         // Should not error
-        fs.create_dir_all("/a/b/c").unwrap();
+        fs.create_dir_all(std::path::Path::new("/a/b/c")).unwrap();
     }
 
     #[test]
     fn read_dir_empty() {
         let fs = create_backend();
-        fs.create_dir("/empty").unwrap();
+        fs.create_dir(std::path::Path::new("/empty")).unwrap();
 
-        let entries: Vec<_> = fs.read_dir("/empty").unwrap()
+        let entries: Vec<_> = fs.read_dir(std::path::Path::new("/empty")).unwrap()
             .filter_map(|e| e.ok())
             .collect();
 
@@ -525,12 +525,12 @@ mod fs_dir {
     #[test]
     fn read_dir_with_files() {
         let fs = create_backend();
-        fs.create_dir("/parent").unwrap();
-        fs.write("/parent/file1.txt", b"1").unwrap();
-        fs.write("/parent/file2.txt", b"2").unwrap();
-        fs.create_dir("/parent/subdir").unwrap();
+        fs.create_dir(std::path::Path::new("/parent")).unwrap();
+        fs.write(std::path::Path::new("/parent/file1.txt"), b"1").unwrap();
+        fs.write(std::path::Path::new("/parent/file2.txt"), b"2").unwrap();
+        fs.create_dir(std::path::Path::new("/parent/subdir")).unwrap();
 
-        let mut entries: Vec<_> = fs.read_dir("/parent").unwrap()
+        let mut entries: Vec<_> = fs.read_dir(std::path::Path::new("/parent")).unwrap()
             .filter_map(|e| e.ok())
             .collect();
         entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -547,36 +547,36 @@ mod fs_dir {
     fn read_dir_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.read_dir("/nonexistent");
+        let result = fs.read_dir(std::path::Path::new("/nonexistent"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn read_dir_on_file_returns_not_a_directory() {
         let fs = create_backend();
-        fs.write("/file.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-        let result = fs.read_dir("/file.txt");
+        let result = fs.read_dir(std::path::Path::new("/file.txt"));
         assert!(matches!(result, Err(FsError::NotADirectory { .. })));
     }
 
     #[test]
     fn remove_dir_empty() {
         let fs = create_backend();
-        fs.create_dir("/todelete").unwrap();
+        fs.create_dir(std::path::Path::new("/todelete")).unwrap();
 
-        fs.remove_dir("/todelete").unwrap();
+        fs.remove_dir(std::path::Path::new("/todelete")).unwrap();
 
-        assert!(!fs.exists("/todelete").unwrap());
+        assert!(!fs.exists(std::path::Path::new("/todelete")).unwrap());
     }
 
     #[test]
     fn remove_dir_not_empty_returns_error() {
         let fs = create_backend();
-        fs.create_dir("/notempty").unwrap();
-        fs.write("/notempty/file.txt", b"data").unwrap();
+        fs.create_dir(std::path::Path::new("/notempty")).unwrap();
+        fs.write(std::path::Path::new("/notempty/file.txt"), b"data").unwrap();
 
-        let result = fs.remove_dir("/notempty");
+        let result = fs.remove_dir(std::path::Path::new("/notempty"));
         assert!(matches!(result, Err(FsError::DirectoryNotEmpty { .. })));
     }
 
@@ -584,38 +584,38 @@ mod fs_dir {
     fn remove_dir_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.remove_dir("/nonexistent");
+        let result = fs.remove_dir(std::path::Path::new("/nonexistent"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn remove_dir_on_file_returns_not_a_directory() {
         let fs = create_backend();
-        fs.write("/file.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-        let result = fs.remove_dir("/file.txt");
+        let result = fs.remove_dir(std::path::Path::new("/file.txt"));
         assert!(matches!(result, Err(FsError::NotADirectory { .. })));
     }
 
     #[test]
     fn remove_dir_all_recursive() {
         let fs = create_backend();
-        fs.create_dir_all("/root/a/b").unwrap();
-        fs.write("/root/file.txt", b"data").unwrap();
-        fs.write("/root/a/nested.txt", b"nested").unwrap();
+        fs.create_dir_all(std::path::Path::new("/root/a/b")).unwrap();
+        fs.write(std::path::Path::new("/root/file.txt"), b"data").unwrap();
+        fs.write(std::path::Path::new("/root/a/nested.txt"), b"nested").unwrap();
 
-        fs.remove_dir_all("/root").unwrap();
+        fs.remove_dir_all(std::path::Path::new("/root")).unwrap();
 
-        assert!(!fs.exists("/root").unwrap());
-        assert!(!fs.exists("/root/a").unwrap());
-        assert!(!fs.exists("/root/file.txt").unwrap());
+        assert!(!fs.exists(std::path::Path::new("/root")).unwrap());
+        assert!(!fs.exists(std::path::Path::new("/root/a")).unwrap());
+        assert!(!fs.exists(std::path::Path::new("/root/file.txt")).unwrap());
     }
 
     #[test]
     fn remove_dir_all_nonexistent_returns_not_found() {
         let fs = create_backend();
 
-        let result = fs.remove_dir_all("/nonexistent");
+        let result = fs.remove_dir_all(std::path::Path::new("/nonexistent"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 }
@@ -631,17 +631,17 @@ mod edge_cases {
     fn root_directory_exists() {
         let fs = create_backend();
 
-        assert!(fs.exists("/").unwrap());
-        let meta = fs.metadata("/").unwrap();
+        assert!(fs.exists(std::path::Path::new("/")).unwrap());
+        let meta = fs.metadata(std::path::Path::new("/")).unwrap();
         assert_eq!(meta.file_type, FileType::Directory);
     }
 
     #[test]
     fn read_dir_root() {
         let fs = create_backend();
-        fs.write("/file.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-        let entries: Vec<_> = fs.read_dir("/").unwrap()
+        let entries: Vec<_> = fs.read_dir(std::path::Path::new("/")).unwrap()
             .filter_map(|e| e.ok())
             .collect();
 
@@ -652,7 +652,7 @@ mod edge_cases {
     fn cannot_remove_root() {
         let fs = create_backend();
 
-        let result = fs.remove_dir("/");
+        let result = fs.remove_dir(std::path::Path::new("/"));
         assert!(result.is_err());
     }
 
@@ -660,7 +660,7 @@ mod edge_cases {
     fn cannot_remove_root_all() {
         let fs = create_backend();
 
-        let result = fs.remove_dir_all("/");
+        let result = fs.remove_dir_all(std::path::Path::new("/"));
         assert!(result.is_err());
     }
 
@@ -668,10 +668,10 @@ mod edge_cases {
     fn file_at_root_level() {
         let fs = create_backend();
 
-        fs.write("/rootfile.txt", b"at root").unwrap();
+        fs.write(std::path::Path::new("/rootfile.txt"), b"at root").unwrap();
 
-        assert!(fs.exists("/rootfile.txt").unwrap());
-        assert_eq!(fs.read("/rootfile.txt").unwrap(), b"at root");
+        assert!(fs.exists(std::path::Path::new("/rootfile.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/rootfile.txt")).unwrap(), b"at root");
     }
 
     #[test]
@@ -679,11 +679,11 @@ mod edge_cases {
         let fs = create_backend();
         let deep_path = "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p";
 
-        fs.create_dir_all(deep_path).unwrap();
-        fs.write(&format!("{}/file.txt", deep_path), b"deep").unwrap();
+        fs.create_dir_all(std::path::Path::new(deep_path)).unwrap();
+        fs.write(std::path::Path::new(&format!("{}/file.txt", deep_path)), b"deep").unwrap();
 
         assert_eq!(
-            fs.read(&format!("{}/file.txt", deep_path)).unwrap(),
+            fs.read(std::path::Path::new(&format!("{}/file.txt", deep_path))).unwrap(),
             b"deep"
         );
     }
@@ -692,32 +692,32 @@ mod edge_cases {
     fn unicode_filename() {
         let fs = create_backend();
 
-        fs.write("/文件.txt", b"chinese").unwrap();
-        fs.write("/файл.txt", b"russian").unwrap();
-        fs.write("/αρχείο.txt", b"greek").unwrap();
+        fs.write(std::path::Path::new("/文件.txt"), b"chinese").unwrap();
+        fs.write(std::path::Path::new("/файл.txt"), b"russian").unwrap();
+        fs.write(std::path::Path::new("/αρχείο.txt"), b"greek").unwrap();
 
-        assert_eq!(fs.read("/文件.txt").unwrap(), b"chinese");
-        assert_eq!(fs.read("/файл.txt").unwrap(), b"russian");
-        assert_eq!(fs.read("/αρχείο.txt").unwrap(), b"greek");
+        assert_eq!(fs.read(std::path::Path::new("/文件.txt")).unwrap(), b"chinese");
+        assert_eq!(fs.read(std::path::Path::new("/файл.txt")).unwrap(), b"russian");
+        assert_eq!(fs.read(std::path::Path::new("/αρχείο.txt")).unwrap(), b"greek");
     }
 
     #[test]
     fn filename_with_spaces() {
         let fs = create_backend();
 
-        fs.write("/file with spaces.txt", b"spaced").unwrap();
+        fs.write(std::path::Path::new("/file with spaces.txt"), b"spaced").unwrap();
 
-        assert!(fs.exists("/file with spaces.txt").unwrap());
-        assert_eq!(fs.read("/file with spaces.txt").unwrap(), b"spaced");
+        assert!(fs.exists(std::path::Path::new("/file with spaces.txt")).unwrap());
+        assert_eq!(fs.read(std::path::Path::new("/file with spaces.txt")).unwrap(), b"spaced");
     }
 
     #[test]
     fn filename_with_special_chars() {
         let fs = create_backend();
 
-        fs.write("/file-name_123.test.txt", b"special").unwrap();
+        fs.write(std::path::Path::new("/file-name_123.test.txt"), b"special").unwrap();
 
-        assert!(fs.exists("/file-name_123.test.txt").unwrap());
+        assert!(fs.exists(std::path::Path::new("/file-name_123.test.txt")).unwrap());
     }
 
     #[test]
@@ -725,21 +725,21 @@ mod edge_cases {
         let fs = create_backend();
         let large_data: Vec<u8> = (0..1_000_000).map(|i| (i % 256) as u8).collect();
 
-        fs.write("/large.bin", &large_data).unwrap();
+        fs.write(std::path::Path::new("/large.bin"), &large_data).unwrap();
 
-        assert_eq!(fs.read("/large.bin").unwrap(), large_data);
+        assert_eq!(fs.read(std::path::Path::new("/large.bin")).unwrap(), large_data);
     }
 
     #[test]
     fn many_files_in_directory() {
         let fs = create_backend();
-        fs.create_dir("/many").unwrap();
+        fs.create_dir(std::path::Path::new("/many")).unwrap();
 
         for i in 0..100 {
-            fs.write(&format!("/many/file_{:03}.txt", i), format!("{}", i).as_bytes()).unwrap();
+            fs.write(std::path::Path::new(&format!("/many/file_{:03}.txt", i)), format!("{}", i).as_bytes()).unwrap();
         }
 
-        let entries: Vec<_> = fs.read_dir("/many").unwrap()
+        let entries: Vec<_> = fs.read_dir(std::path::Path::new("/many")).unwrap()
             .filter_map(|e| e.ok())
             .collect();
 
@@ -749,21 +749,21 @@ mod edge_cases {
     #[test]
     fn overwrite_larger_with_smaller() {
         let fs = create_backend();
-        fs.write("/file.txt", b"this is a longer content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"this is a longer content").unwrap();
 
-        fs.write("/file.txt", b"short").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"short").unwrap();
 
-        assert_eq!(fs.read("/file.txt").unwrap(), b"short");
+        assert_eq!(fs.read(std::path::Path::new("/file.txt")).unwrap(), b"short");
     }
 
     #[test]
     fn overwrite_smaller_with_larger() {
         let fs = create_backend();
-        fs.write("/file.txt", b"short").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"short").unwrap();
 
-        fs.write("/file.txt", b"this is a longer content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"this is a longer content").unwrap();
 
-        assert_eq!(fs.read("/file.txt").unwrap(), b"this is a longer content");
+        assert_eq!(fs.read(std::path::Path::new("/file.txt")).unwrap(), b"this is a longer content");
     }
 }
 
@@ -781,11 +781,11 @@ mod security {
     #[test]
     fn reject_dotdot_traversal() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
-        fs.write("/secret.txt", b"secret").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
+        fs.write(std::path::Path::new("/secret.txt"), b"secret").unwrap();
 
         // Direct .. traversal must be blocked or normalized
-        let result = fs.read("/sandbox/../secret.txt");
+        let result = fs.read(std::path::Path::new("/sandbox/../secret.txt"));
         // Either blocks the operation or normalizes to /secret.txt (acceptable)
         // But must NOT escape sandbox context in sandboxed backends
     }
@@ -793,49 +793,49 @@ mod security {
     #[test]
     fn reject_url_encoded_dotdot() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
 
         // URL-encoded path traversal: %2e = '.', %2f = '/'
         // This caused CVE in Apache Commons VFS
-        let result = fs.read("/sandbox/%2e%2e/etc/passwd");
+        let result = fs.read(std::path::Path::new("/sandbox/%2e%2e/etc/passwd"));
         assert!(result.is_err(), "URL-encoded path traversal must be rejected");
 
         // Double-encoded traversal
-        let result = fs.read("/sandbox/%252e%252e/etc/passwd");
+        let result = fs.read(std::path::Path::new("/sandbox/%252e%252e/etc/passwd"));
         assert!(result.is_err(), "Double URL-encoded traversal must be rejected");
     }
 
     #[test]
     fn reject_backslash_traversal() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
 
         // Windows-style path traversal
-        let result = fs.read("/sandbox\\..\\secret.txt");
+        let result = fs.read(std::path::Path::new("/sandbox\\..\\secret.txt"));
         assert!(result.is_err(), "Backslash traversal must be rejected");
     }
 
     #[test]
     fn reject_mixed_slash_traversal() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
 
         // Mixed forward/backward slashes
-        let result = fs.read("/sandbox/..\\..\\secret.txt");
+        let result = fs.read(std::path::Path::new("/sandbox/..\\..\\secret.txt"));
         assert!(result.is_err(), "Mixed slash traversal must be rejected");
 
-        let result = fs.read("/sandbox\\../secret.txt");
+        let result = fs.read(std::path::Path::new("/sandbox\\../secret.txt"));
         assert!(result.is_err(), "Mixed slash traversal must be rejected");
     }
 
     #[test]
     fn reject_null_byte_injection() {
         let fs = create_backend();
-        fs.write("/safe.txt", b"safe").unwrap();
-        fs.write("/safe.txt.bak", b"backup").unwrap();
+        fs.write(std::path::Path::new("/safe.txt"), b"safe").unwrap();
+        fs.write(std::path::Path::new("/safe.txt.bak"), b"backup").unwrap();
 
         // Null byte injection: /safe.txt\0.bak -> /safe.txt
-        let result = fs.read("/safe.txt\0.bak");
+        let result = fs.read(std::path::Path::new("/safe.txt\0.bak"));
         // Should either reject or not truncate at null
         if let Ok(content) = result {
             // If it succeeds, it should read the full path, not truncated
@@ -854,7 +854,7 @@ mod security {
         let fs = create_backend();
 
         // Attempt to create symlink pointing outside virtual root
-        let result = fs.symlink("/etc/passwd", "/escape_link");
+        let result = fs.symlink(std::path::Path::new("/etc/passwd"), std::path::Path::new("/escape_link"));
 
         // Sandboxed backends MUST reject this
         // Non-sandboxed backends may allow it
@@ -865,26 +865,26 @@ mod security {
     #[test]
     fn symlink_to_absolute_path_outside() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
-        fs.write("/sandbox/safe.txt", b"safe").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
+        fs.write(std::path::Path::new("/sandbox/safe.txt"), b"safe").unwrap();
 
         // Symlink pointing to absolute path outside sandbox
         // In sandboxed context, this must either:
         // 1. Reject symlink creation, or
         // 2. Resolve relative to sandbox root
-        let result = fs.symlink("/../../../etc/passwd", "/sandbox/link");
+        let result = fs.symlink(std::path::Path::new("/../../../etc/passwd"), std::path::Path::new("/sandbox/link"));
         // Behavior depends on backend type
     }
 
     #[test]
     fn relative_symlink_traversal() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
-        fs.create_dir("/sandbox/subdir").unwrap();
-        fs.write("/secret.txt", b"secret outside sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox/subdir")).unwrap();
+        fs.write(std::path::Path::new("/secret.txt"), b"secret outside sandbox").unwrap();
 
         // Relative symlink that traverses up and out
-        let _ = fs.symlink("../../secret.txt", "/sandbox/subdir/link");
+        let _ = fs.symlink(std::path::Path::new("../../secret.txt"), std::path::Path::new("/sandbox/subdir/link"));
 
         // If symlink was created, reading through it in a sandboxed
         // context must not expose /secret.txt
@@ -899,10 +899,10 @@ mod security {
         let fs = create_backend();
 
         // Self-referential symlink
-        let _ = fs.symlink("/loop", "/loop");
+        let _ = fs.symlink(std::path::Path::new("/loop"), std::path::Path::new("/loop"));
 
         // Reading must detect the loop
-        let result = fs.read("/loop");
+        let result = fs.read(std::path::Path::new("/loop"));
         assert!(matches!(result, Err(FsError::TooManySymlinks { .. }))
             || matches!(result, Err(FsError::NotFound { .. }))
             || result.is_err(),
@@ -914,11 +914,11 @@ mod security {
         let fs = create_backend();
 
         // Two symlinks pointing to each other: a -> b, b -> a
-        let _ = fs.symlink("/b", "/a");
-        let _ = fs.symlink("/a", "/b");
+        let _ = fs.symlink(std::path::Path::new("/b"), std::path::Path::new("/a"));
+        let _ = fs.symlink(std::path::Path::new("/a"), std::path::Path::new("/b"));
 
         // Reading either must detect the loop
-        let result = fs.read("/a");
+        let result = fs.read(std::path::Path::new("/a"));
         assert!(matches!(result, Err(FsError::TooManySymlinks { .. }))
             || result.is_err(),
             "Indirect symlink loop must be detected");
@@ -932,15 +932,15 @@ mod security {
         // link_0 -> link_1 -> link_2 -> ... -> link_N
         for i in 0..100 {
             let _ = fs.symlink(
-                &format!("/link_{}", i + 1),
-                &format!("/link_{}", i)
+                std::path::Path::new(&format!("/link_{}", i + 1)),
+                std::path::Path::new(&format!("/link_{}", i))
             );
         }
-        fs.write("/link_100", b"target").unwrap();
+        fs.write(std::path::Path::new("/link_100"), b"target").unwrap();
 
         // Following the chain should either succeed or fail with TooManySymlinks
         // Must NOT cause stack overflow or infinite loop
-        let result = fs.read("/link_0");
+        let result = fs.read(std::path::Path::new("/link_0"));
         // Either succeeds (if backend allows deep chains) or returns error
         // Key is: it must terminate
     }
@@ -948,15 +948,15 @@ mod security {
     #[test]
     fn symlink_loop_with_directories() {
         let fs = create_backend();
-        fs.create_dir("/dir1").unwrap();
-        fs.create_dir("/dir2").unwrap();
+        fs.create_dir(std::path::Path::new("/dir1")).unwrap();
+        fs.create_dir(std::path::Path::new("/dir2")).unwrap();
 
         // Create directory symlink loop
-        let _ = fs.symlink("/dir2", "/dir1/link_to_dir2");
-        let _ = fs.symlink("/dir1", "/dir2/link_to_dir1");
+        let _ = fs.symlink(std::path::Path::new("/dir2"), std::path::Path::new("/dir1/link_to_dir2"));
+        let _ = fs.symlink(std::path::Path::new("/dir1"), std::path::Path::new("/dir2/link_to_dir1"));
 
         // Attempting to read a file through the loop
-        let result = fs.read("/dir1/link_to_dir2/link_to_dir1/link_to_dir2/file.txt");
+        let result = fs.read(std::path::Path::new("/dir1/link_to_dir2/link_to_dir1/link_to_dir2/file.txt"));
         assert!(result.is_err(), "Directory symlink loop must be detected");
     }
 
@@ -975,16 +975,16 @@ mod security {
         // Create chain that exceeds expected limit
         for i in 0..MAX_EXPECTED_DEPTH + 10 {
             let _ = fs.symlink(
-                &format!("/excessive_{}", i + 1),
-                &format!("/excessive_{}", i)
+                std::path::Path::new(&format!("/excessive_{}", i + 1)),
+                std::path::Path::new(&format!("/excessive_{}", i))
             );
         }
 
         // Create actual target
-        fs.write(&format!("/excessive_{}", MAX_EXPECTED_DEPTH + 10), b"data").unwrap();
+        fs.write(std::path::Path::new(&format!("/excessive_{}", MAX_EXPECTED_DEPTH + 10)), b"data").unwrap();
 
         // Should reject or limit, not follow indefinitely
-        let result = fs.read("/excessive_0");
+        let result = fs.read(std::path::Path::new("/excessive_0"));
         // Either succeeds (backend allows this depth) or errors
         // Key: must not hang or OOM
     }
@@ -996,46 +996,46 @@ mod security {
     #[test]
     fn path_normalization_removes_dots() {
         let fs = create_backend();
-        fs.create_dir("/parent").unwrap();
-        fs.write("/parent/file.txt", b"content").unwrap();
+        fs.create_dir(std::path::Path::new("/parent")).unwrap();
+        fs.write(std::path::Path::new("/parent/file.txt"), b"content").unwrap();
 
         // Single dots should be normalized
-        let result = fs.read("/parent/./file.txt");
+        let result = fs.read(std::path::Path::new("/parent/./file.txt"));
         if let Ok(content) = result {
             assert_eq!(content, b"content");
         }
 
         // Double dots in the middle
-        let result = fs.read("/parent/subdir/../file.txt");
+        let result = fs.read(std::path::Path::new("/parent/subdir/../file.txt"));
         // Either normalized to /parent/file.txt or rejected
     }
 
     #[test]
     fn path_normalization_removes_double_slashes() {
         let fs = create_backend();
-        fs.write("/file.txt", b"content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"content").unwrap();
 
         // Double slashes should be normalized
-        let result = fs.read("//file.txt");
+        let result = fs.read(std::path::Path::new("//file.txt"));
         if let Ok(content) = result {
             assert_eq!(content, b"content");
         }
 
-        let result = fs.read("/parent//file.txt");
+        let result = fs.read(std::path::Path::new("/parent//file.txt"));
         // Either works (normalized) or returns NotFound (strict)
     }
 
     #[test]
     fn trailing_slash_handling() {
         let fs = create_backend();
-        fs.create_dir("/mydir").unwrap();
-        fs.write("/mydir/file.txt", b"content").unwrap();
+        fs.create_dir(std::path::Path::new("/mydir")).unwrap();
+        fs.write(std::path::Path::new("/mydir/file.txt"), b"content").unwrap();
 
         // Directory with trailing slash
-        assert!(fs.exists("/mydir/").unwrap() || fs.exists("/mydir").unwrap());
+        assert!(fs.exists(std::path::Path::new("/mydir/")).unwrap() || fs.exists(std::path::Path::new("/mydir")).unwrap());
 
         // File with trailing slash should fail or be normalized
-        let result = fs.read("/mydir/file.txt/");
+        let result = fs.read(std::path::Path::new("/mydir/file.txt/"));
         // Either fails (strict) or normalizes (lenient)
     }
 
@@ -1047,21 +1047,21 @@ mod security {
     #[cfg(windows)]
     fn reject_ntfs_alternate_data_streams() {
         let fs = create_backend();
-        fs.write("/file.txt", b"main content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"main content").unwrap();
 
         // NTFS ADS: file.txt:hidden_stream
         // Attacker may try to hide data or escape paths via ADS
-        let result = fs.read("/file.txt:hidden");
+        let result = fs.read(std::path::Path::new("/file.txt:hidden"));
         assert!(result.is_err(), "NTFS ADS must be rejected");
 
-        let result = fs.read("/file.txt:$DATA");
+        let result = fs.read(std::path::Path::new("/file.txt:$DATA"));
         assert!(result.is_err(), "NTFS ADS with $DATA must be rejected");
 
-        let result = fs.read("/file.txt::$DATA");
+        let result = fs.read(std::path::Path::new("/file.txt::$DATA"));
         assert!(result.is_err(), "NTFS default stream syntax must be rejected");
 
         // ADS in directory path (traversal attempt)
-        let result = fs.read("/dir:ads/../secret.txt");
+        let result = fs.read(std::path::Path::new("/dir:ads/../secret.txt"));
         assert!(result.is_err(), "ADS in directory path must be rejected");
     }
 
@@ -1069,8 +1069,8 @@ mod security {
     #[cfg(windows)]
     fn reject_windows_8_3_short_names() {
         let fs = create_backend();
-        fs.create_dir("/Program Files").unwrap();
-        fs.write("/Program Files/secret.txt", b"secret").unwrap();
+        fs.create_dir(std::path::Path::new("/Program Files")).unwrap();
+        fs.write(std::path::Path::new("/Program Files/secret.txt"), b"secret").unwrap();
 
         // 8.3 short names can be used to obfuscate paths
         // PROGRA~1 is the typical short name for "Program Files"
@@ -1079,15 +1079,15 @@ mod security {
         // 2. Resolve them consistently to the same canonical path
 
         // Test that we don't accidentally create different files
-        let result1 = fs.exists("/Program Files/secret.txt");
-        let result2 = fs.exists("/PROGRA~1/secret.txt");
+        let result1 = fs.exists(std::path::Path::new("/Program Files/secret.txt"));
+        let result2 = fs.exists(std::path::Path::new("/PROGRA~1/secret.txt"));
 
         // Either both exist (resolved) or short name doesn't exist (rejected)
         // Key: they must NOT be different files
         if result1.unwrap_or(false) && result2.unwrap_or(false) {
             // If both exist, they must have same content
-            let content1 = fs.read("/Program Files/secret.txt").unwrap();
-            let content2 = fs.read("/PROGRA~1/secret.txt").unwrap();
+            let content1 = fs.read(std::path::Path::new("/Program Files/secret.txt")).unwrap();
+            let content2 = fs.read(std::path::Path::new("/PROGRA~1/secret.txt")).unwrap();
             assert_eq!(content1, content2, "8.3 names must resolve to same file");
         }
     }
@@ -1096,18 +1096,18 @@ mod security {
     #[cfg(windows)]
     fn reject_windows_unc_traversal() {
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
 
         // Extended-length path prefix traversal
-        let result = fs.read("\\\\?\\C:\\..\\..\\etc\\passwd");
+        let result = fs.read(std::path::Path::new("\\\\?\\C:\\..\\..\\etc\\passwd"));
         assert!(result.is_err(), "UNC extended path traversal must be rejected");
 
         // Device namespace
-        let result = fs.read("\\\\.\\C:\\secret.txt");
+        let result = fs.read(std::path::Path::new("\\\\.\\C:\\secret.txt"));
         assert!(result.is_err(), "Device namespace paths must be rejected");
 
         // UNC server path
-        let result = fs.read("\\\\server\\share\\..\\..\\secret.txt");
+        let result = fs.read(std::path::Path::new("\\\\server\\share\\..\\..\\secret.txt"));
         assert!(result.is_err(), "UNC server paths must be rejected");
     }
 
@@ -1121,10 +1121,10 @@ mod security {
         let reserved_names = ["CON", "PRN", "AUX", "NUL", "COM1", "LPT1"];
 
         for name in reserved_names {
-            let result = fs.write(&format!("/{}", name), b"data");
+            let result = fs.write(std::path::Path::new(&format!("/{}", name)), b"data");
             // Should either reject or handle safely (not hang)
 
-            let result = fs.write(&format!("/{}.txt", name), b"data");
+            let result = fs.write(std::path::Path::new(&format!("/{}.txt", name)), b"data");
             // CON.txt is also problematic on Windows
         }
     }
@@ -1135,7 +1135,7 @@ mod security {
         // Junction points are Windows' equivalent of directory symlinks
         // They can be used for sandbox escape similar to symlinks
         let fs = create_backend();
-        fs.create_dir("/sandbox").unwrap();
+        fs.create_dir(std::path::Path::new("/sandbox")).unwrap();
 
         // If backend supports junctions, they must be contained like symlinks
         // The test setup would require actual junction creation capability
@@ -1158,7 +1158,7 @@ mod security {
 
         // /proc/self/root points to the filesystem root, even in containers
         // Following it would escape chroot/container boundaries
-        let result = fs.read("/proc/self/root/etc/passwd");
+        let result = fs.read(std::path::Path::new("/proc/self/root/etc/passwd"));
         // Either NotFound (good - path doesn't exist in VFS)
         // or handled safely (doesn't escape actual container)
     }
@@ -1170,7 +1170,7 @@ mod security {
 
         // /dev/fd/N symlinks to open file descriptors
         // Could be used to access files outside sandbox
-        let result = fs.read("/dev/fd/0");
+        let result = fs.read(std::path::Path::new("/dev/fd/0"));
         // Should fail or be isolated from real /dev/fd
     }
 
@@ -1220,7 +1220,7 @@ mod security {
         let latin_path = "/data/file.txt";
         let cyrillic_path = "/d\u{0430}ta/file.txt"; // Cyrillic 'а'
 
-        fs.create_dir("/data").unwrap();
+        fs.create_dir(std::path::Path::new("/data")).unwrap();
         fs.write(latin_path, b"real content").unwrap();
 
         // These must NOT silently access the same file
@@ -1251,7 +1251,7 @@ mod security {
     #[test]
     fn toctou_check_then_use() {
         let fs = Arc::new(create_backend());
-        fs.create_dir("/uploads").unwrap();
+        fs.create_dir(std::path::Path::new("/uploads")).unwrap();
 
         // Simulate TOCTOU: check if path is safe, then use it
         // An attacker might change the filesystem between check and use
@@ -1267,9 +1267,9 @@ mod security {
             for i in 0..100 {
                 let path = format!("/uploads/file_{}.txt", i);
                 // Check
-                if !fs_checker.exists(&path).unwrap_or(true) {
+                if !fs_checker.exists(std::path::Path::new(&path)).unwrap_or(true) {
                     // Use (potential race window here)
-                    let _ = fs_checker.write(&path, b"data");
+                    let _ = fs_checker.write(std::path::Path::new(&path), b"data");
                 }
             }
         });
@@ -1278,8 +1278,8 @@ mod security {
         let writer = thread::spawn(move || {
             for i in 0..100 {
                 let path = format!("/uploads/file_{}.txt", i);
-                let _ = fs_writer.write(&path, b"attacker");
-                let _ = fs_writer.remove_file(&path);
+                let _ = fs_writer.write(std::path::Path::new(&path), b"attacker");
+                let _ = fs_writer.remove_file(std::path::Path::new(&path));
             }
         });
 
@@ -1293,9 +1293,9 @@ mod security {
     #[test]
     fn symlink_toctou_during_resolution() {
         let fs = Arc::new(create_backend());
-        fs.create_dir("/safe").unwrap();
-        fs.write("/safe/target.txt", b"safe content").unwrap();
-        fs.write("/unsafe.txt", b"unsafe content").unwrap();
+        fs.create_dir(std::path::Path::new("/safe")).unwrap();
+        fs.write(std::path::Path::new("/safe/target.txt"), b"safe content").unwrap();
+        fs.write(std::path::Path::new("/unsafe.txt"), b"unsafe content").unwrap();
 
         // Attacker rapidly changes symlink target during path resolution
         let fs_attacker = fs.clone();
@@ -1304,12 +1304,12 @@ mod security {
         let attacker = thread::spawn(move || {
             for _ in 0..100 {
                 // Create symlink to safe target
-                let _ = fs_attacker.remove_file("/safe/link.txt");
-                let _ = fs_attacker.symlink("/safe/target.txt", "/safe/link.txt");
+                let _ = fs_attacker.remove_file(std::path::Path::new("/safe/link.txt"));
+                let _ = fs_attacker.symlink(std::path::Path::new("/safe/target.txt"), std::path::Path::new("/safe/link.txt"));
 
                 // Quickly change to unsafe target
-                let _ = fs_attacker.remove_file("/safe/link.txt");
-                let _ = fs_attacker.symlink("/unsafe.txt", "/safe/link.txt");
+                let _ = fs_attacker.remove_file(std::path::Path::new("/safe/link.txt"));
+                let _ = fs_attacker.symlink(std::path::Path::new("/unsafe.txt"), std::path::Path::new("/safe/link.txt"));
             }
         });
 
@@ -1317,7 +1317,7 @@ mod security {
             for _ in 0..100 {
                 // Try to read through symlink
                 // Must not accidentally read /unsafe.txt if sandboxed
-                let _ = fs_reader.read("/safe/link.txt");
+                let _ = fs_reader.read(std::path::Path::new("/safe/link.txt"));
             }
         });
 
@@ -1339,14 +1339,14 @@ mod thread_safety {
     #[test]
     fn concurrent_reads() {
         let fs = Arc::new(create_backend());
-        fs.write("/shared.txt", b"shared content").unwrap();
+        fs.write(std::path::Path::new("/shared.txt"), b"shared content").unwrap();
 
         let handles: Vec<_> = (0..10)
             .map(|_| {
                 let fs = fs.clone();
                 thread::spawn(move || {
                     for _ in 0..100 {
-                        let content = fs.read("/shared.txt").unwrap();
+                        let content = fs.read(std::path::Path::new("/shared.txt")).unwrap();
                         assert_eq!(content, b"shared content");
                     }
                 })
@@ -1368,7 +1368,7 @@ mod thread_safety {
                 thread::spawn(move || {
                     let path = format!("/file_{}.txt", i);
                     for j in 0..100 {
-                        fs.write(&path, format!("{}:{}", i, j).as_bytes()).unwrap();
+                        fs.write(std::path::Path::new(&path), format!("{}:{}", i, j).as_bytes()).unwrap();
                     }
                 })
             })
@@ -1380,7 +1380,7 @@ mod thread_safety {
 
         // Verify all files exist
         for i in 0..10 {
-            assert!(fs.exists(&format!("/file_{}.txt", i)).unwrap());
+            assert!(fs.exists(std::path::Path::new(&format!("/file_{}.txt", i))).unwrap());
         }
     }
 
@@ -1393,7 +1393,7 @@ mod thread_safety {
                 let fs = fs.clone();
                 thread::spawn(move || {
                     // All threads try to create the same path
-                    let _ = fs.create_dir_all("/a/b/c/d");
+                    let _ = fs.create_dir_all(std::path::Path::new("/a/b/c/d"));
                 })
             })
             .collect();
@@ -1403,18 +1403,18 @@ mod thread_safety {
         }
 
         // Path should exist regardless of race
-        assert!(fs.exists("/a/b/c/d").unwrap());
+        assert!(fs.exists(std::path::Path::new("/a/b/c/d")).unwrap());
     }
 
     #[test]
     fn read_during_write() {
         let fs = Arc::new(create_backend());
-        fs.write("/changing.txt", b"initial").unwrap();
+        fs.write(std::path::Path::new("/changing.txt"), b"initial").unwrap();
 
         let fs_writer = fs.clone();
         let writer = thread::spawn(move || {
             for i in 0..100 {
-                fs_writer.write("/changing.txt", format!("version {}", i).as_bytes()).unwrap();
+                fs_writer.write(std::path::Path::new("/changing.txt"), format!("version {}", i).as_bytes()).unwrap();
             }
         });
 
@@ -1422,7 +1422,7 @@ mod thread_safety {
         let reader = thread::spawn(move || {
             for _ in 0..100 {
                 // Should not panic or return garbage
-                let result = fs_reader.read("/changing.txt");
+                let result = fs_reader.read(std::path::Path::new("/changing.txt"));
                 assert!(result.is_ok());
             }
         });
@@ -1434,14 +1434,14 @@ mod thread_safety {
     #[test]
     fn metadata_consistency() {
         let fs = Arc::new(create_backend());
-        fs.write("/meta.txt", b"content").unwrap();
+        fs.write(std::path::Path::new("/meta.txt"), b"content").unwrap();
 
         let handles: Vec<_> = (0..10)
             .map(|_| {
                 let fs = fs.clone();
                 thread::spawn(move || {
                     for _ in 0..100 {
-                        let meta = fs.metadata("/meta.txt").unwrap();
+                        let meta = fs.metadata(std::path::Path::new("/meta.txt")).unwrap();
                         // Size should be consistent
                         assert!(meta.size > 0);
                     }
@@ -1467,11 +1467,11 @@ mod no_panic {
         let fs = create_backend();
 
         // These should return errors, not panic
-        let _ = fs.read("");
-        let _ = fs.write("", b"data");
-        let _ = fs.metadata("");
-        let _ = fs.exists("");
-        let _ = fs.read_dir("");
+        let _ = fs.read(std::path::Path::new(""));
+        let _ = fs.write(std::path::Path::new(""), b"data");
+        let _ = fs.metadata(std::path::Path::new(""));
+        let _ = fs.exists(std::path::Path::new(""));
+        let _ = fs.read_dir(std::path::Path::new(""));
     }
 
     #[test]
@@ -1479,8 +1479,8 @@ mod no_panic {
         let fs = create_backend();
 
         // Paths with null bytes should error or be handled gracefully
-        let _ = fs.read("/file\0name.txt");
-        let _ = fs.write("/file\0name.txt", b"data");
+        let _ = fs.read(std::path::Path::new("/file\0name.txt"));
+        let _ = fs.write(std::path::Path::new("/file\0name.txt"), b"data");
     }
 
     #[test]
@@ -1490,8 +1490,8 @@ mod no_panic {
         let long_path = format!("/{}", long_name);
 
         // Should error gracefully, not panic
-        let _ = fs.write(&long_path, b"data");
-        let _ = fs.read(&long_path);
+        let _ = fs.write(std::path::Path::new(&long_path), b"data");
+        let _ = fs.read(std::path::Path::new(&long_path));
     }
 
     #[test]
@@ -1499,28 +1499,28 @@ mod no_panic {
         let fs = create_backend();
         let long_name = format!("/{}.txt", "x".repeat(1000));
 
-        let _ = fs.write(&long_name, b"data");
+        let _ = fs.write(std::path::Path::new(&long_name), b"data");
     }
 
     #[test]
     fn read_after_remove_does_not_panic() {
         let fs = create_backend();
-        fs.write("/temp.txt", b"data").unwrap();
-        fs.remove_file("/temp.txt").unwrap();
+        fs.write(std::path::Path::new("/temp.txt"), b"data").unwrap();
+        fs.remove_file(std::path::Path::new("/temp.txt")).unwrap();
 
         // Should return NotFound, not panic
-        let result = fs.read("/temp.txt");
+        let result = fs.read(std::path::Path::new("/temp.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 
     #[test]
     fn double_remove_does_not_panic() {
         let fs = create_backend();
-        fs.write("/temp.txt", b"data").unwrap();
-        fs.remove_file("/temp.txt").unwrap();
+        fs.write(std::path::Path::new("/temp.txt"), b"data").unwrap();
+        fs.remove_file(std::path::Path::new("/temp.txt")).unwrap();
 
         // Second remove should error, not panic
-        let result = fs.remove_file("/temp.txt");
+        let result = fs.remove_file(std::path::Path::new("/temp.txt"));
         assert!(matches!(result, Err(FsError::NotFound { .. })));
     }
 }
@@ -1552,49 +1552,49 @@ mod fs_full {
         #[test]
         fn create_symlink() {
             let fs = create_full_backend();
-            fs.write("/target.txt", b"target content").unwrap();
+            fs.write(std::path::Path::new("/target.txt"), b"target content").unwrap();
 
-            fs.symlink("/target.txt", "/link.txt").unwrap();
+            fs.symlink(std::path::Path::new("/target.txt"), std::path::Path::new("/link.txt")).unwrap();
 
-            assert!(fs.exists("/link.txt").unwrap());
-            let meta = fs.symlink_metadata("/link.txt").unwrap();
+            assert!(fs.exists(std::path::Path::new("/link.txt")).unwrap());
+            let meta = fs.symlink_metadata(std::path::Path::new("/link.txt")).unwrap();
             assert_eq!(meta.file_type, FileType::Symlink);
         }
 
         #[test]
         fn read_symlink() {
             let fs = create_full_backend();
-            fs.write("/target.txt", b"content").unwrap();
-            fs.symlink("/target.txt", "/link.txt").unwrap();
+            fs.write(std::path::Path::new("/target.txt"), b"content").unwrap();
+            fs.symlink(std::path::Path::new("/target.txt"), std::path::Path::new("/link.txt")).unwrap();
 
-            let target = fs.read_link("/link.txt").unwrap();
+            let target = fs.read_link(std::path::Path::new("/link.txt")).unwrap();
             assert_eq!(target.to_string_lossy(), "/target.txt");
         }
 
         #[test]
         fn hard_link() {
             let fs = create_full_backend();
-            fs.write("/original.txt", b"shared content").unwrap();
+            fs.write(std::path::Path::new("/original.txt"), b"shared content").unwrap();
 
-            fs.hard_link("/original.txt", "/hardlink.txt").unwrap();
+            fs.hard_link(std::path::Path::new("/original.txt"), std::path::Path::new("/hardlink.txt")).unwrap();
 
             // Both paths should have the same content
-            assert_eq!(fs.read("/original.txt").unwrap(), b"shared content");
-            assert_eq!(fs.read("/hardlink.txt").unwrap(), b"shared content");
+            assert_eq!(fs.read(std::path::Path::new("/original.txt")).unwrap(), b"shared content");
+            assert_eq!(fs.read(std::path::Path::new("/hardlink.txt")).unwrap(), b"shared content");
 
             // Modifying one should affect the other
-            fs.write("/hardlink.txt", b"modified").unwrap();
-            assert_eq!(fs.read("/original.txt").unwrap(), b"modified");
+            fs.write(std::path::Path::new("/hardlink.txt"), b"modified").unwrap();
+            assert_eq!(fs.read(std::path::Path::new("/original.txt")).unwrap(), b"modified");
         }
 
         #[test]
         fn symlink_metadata_vs_metadata() {
             let fs = create_full_backend();
-            fs.write("/target.txt", b"content").unwrap();
-            fs.symlink("/target.txt", "/link.txt").unwrap();
+            fs.write(std::path::Path::new("/target.txt"), b"content").unwrap();
+            fs.symlink(std::path::Path::new("/target.txt"), std::path::Path::new("/link.txt")).unwrap();
 
             // symlink_metadata returns the symlink's metadata
-            let sym_meta = fs.symlink_metadata("/link.txt").unwrap();
+            let sym_meta = fs.symlink_metadata(std::path::Path::new("/link.txt")).unwrap();
             assert_eq!(sym_meta.file_type, FileType::Symlink);
 
             // metadata (if it follows symlinks) returns target's metadata
@@ -1612,11 +1612,11 @@ mod fs_full {
         #[test]
         fn set_permissions() {
             let fs = create_full_backend();
-            fs.write("/file.txt", b"data").unwrap();
+            fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-            fs.set_permissions("/file.txt", Permissions::from_mode(0o755)).unwrap();
+            fs.set_permissions(std::path::Path::new("/file.txt"), Permissions::from_mode(0o755)).unwrap();
 
-            let meta = fs.metadata("/file.txt").unwrap();
+            let meta = fs.metadata(std::path::Path::new("/file.txt")).unwrap();
             assert_eq!(meta.permissions, Some(0o755));
         }
 
@@ -1624,7 +1624,7 @@ mod fs_full {
         fn set_permissions_nonexistent_returns_not_found() {
             let fs = create_full_backend();
 
-            let result = fs.set_permissions("/nonexistent", Permissions::from_mode(0o644));
+            let result = fs.set_permissions(std::path::Path::new("/nonexistent"), Permissions::from_mode(0o644));
             assert!(matches!(result, Err(FsError::NotFound { .. })));
         }
     }
@@ -1639,7 +1639,7 @@ mod fs_full {
         #[test]
         fn sync_does_not_error() {
             let fs = create_full_backend();
-            fs.write("/file.txt", b"data").unwrap();
+            fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
             // sync() should complete without error
             fs.sync().unwrap();
@@ -1648,16 +1648,16 @@ mod fs_full {
         #[test]
         fn fsync_specific_file() {
             let fs = create_full_backend();
-            fs.write("/file.txt", b"data").unwrap();
+            fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-            fs.fsync("/file.txt").unwrap();
+            fs.fsync(std::path::Path::new("/file.txt")).unwrap();
         }
 
         #[test]
         fn fsync_nonexistent_returns_not_found() {
             let fs = create_full_backend();
 
-            let result = fs.fsync("/nonexistent.txt");
+            let result = fs.fsync(std::path::Path::new("/nonexistent.txt"));
             assert!(matches!(result, Err(FsError::NotFound { .. })));
         }
     }
@@ -1704,10 +1704,10 @@ mod fs_fuse {
     #[test]
     fn path_to_inode_consistency() {
         let fs = create_fuse_backend();
-        fs.write("/file.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-        let inode1 = fs.path_to_inode("/file.txt").unwrap();
-        let inode2 = fs.path_to_inode("/file.txt").unwrap();
+        let inode1 = fs.path_to_inode(std::path::Path::new("/file.txt")).unwrap();
+        let inode2 = fs.path_to_inode(std::path::Path::new("/file.txt")).unwrap();
 
         // Same path should always return same inode
         assert_eq!(inode1, inode2);
@@ -1716,9 +1716,9 @@ mod fs_fuse {
     #[test]
     fn inode_to_path_roundtrip() {
         let fs = create_fuse_backend();
-        fs.write("/file.txt", b"data").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"data").unwrap();
 
-        let inode = fs.path_to_inode("/file.txt").unwrap();
+        let inode = fs.path_to_inode(std::path::Path::new("/file.txt")).unwrap();
         let path = fs.inode_to_path(inode).unwrap();
 
         assert_eq!(path.to_string_lossy(), "/file.txt");
@@ -1727,22 +1727,22 @@ mod fs_fuse {
     #[test]
     fn lookup_child() {
         let fs = create_fuse_backend();
-        fs.create_dir("/parent").unwrap();
-        fs.write("/parent/child.txt", b"data").unwrap();
+        fs.create_dir(std::path::Path::new("/parent")).unwrap();
+        fs.write(std::path::Path::new("/parent/child.txt"), b"data").unwrap();
 
-        let parent_inode = fs.path_to_inode("/parent").unwrap();
+        let parent_inode = fs.path_to_inode(std::path::Path::new("/parent")).unwrap();
         let child_inode = fs.lookup(parent_inode, std::ffi::OsStr::new("child.txt")).unwrap();
 
-        let expected_inode = fs.path_to_inode("/parent/child.txt").unwrap();
+        let expected_inode = fs.path_to_inode(std::path::Path::new("/parent/child.txt")).unwrap();
         assert_eq!(child_inode, expected_inode);
     }
 
     #[test]
     fn metadata_by_inode() {
         let fs = create_fuse_backend();
-        fs.write("/file.txt", b"content").unwrap();
+        fs.write(std::path::Path::new("/file.txt"), b"content").unwrap();
 
-        let inode = fs.path_to_inode("/file.txt").unwrap();
+        let inode = fs.path_to_inode(std::path::Path::new("/file.txt")).unwrap();
         let meta = fs.metadata_by_inode(inode).unwrap();
 
         assert_eq!(meta.file_type, FileType::File);
@@ -1753,7 +1753,7 @@ mod fs_fuse {
     fn root_inode_is_one() {
         let fs = create_fuse_backend();
 
-        let root_inode = fs.path_to_inode("/").unwrap();
+        let root_inode = fs.path_to_inode(std::path::Path::new("/")).unwrap();
 
         // By FUSE convention, root inode is 1
         assert_eq!(root_inode, 1);
@@ -1762,11 +1762,11 @@ mod fs_fuse {
     #[test]
     fn different_files_different_inodes() {
         let fs = create_fuse_backend();
-        fs.write("/file1.txt", b"data1").unwrap();
-        fs.write("/file2.txt", b"data2").unwrap();
+        fs.write(std::path::Path::new("/file1.txt"), b"data1").unwrap();
+        fs.write(std::path::Path::new("/file2.txt"), b"data2").unwrap();
 
-        let inode1 = fs.path_to_inode("/file1.txt").unwrap();
-        let inode2 = fs.path_to_inode("/file2.txt").unwrap();
+        let inode1 = fs.path_to_inode(std::path::Path::new("/file1.txt")).unwrap();
+        let inode2 = fs.path_to_inode(std::path::Path::new("/file2.txt")).unwrap();
 
         assert_ne!(inode1, inode2);
     }
@@ -1774,11 +1774,11 @@ mod fs_fuse {
     #[test]
     fn hard_links_same_inode() {
         let fs = create_fuse_backend();
-        fs.write("/original.txt", b"data").unwrap();
-        fs.hard_link("/original.txt", "/link.txt").unwrap();
+        fs.write(std::path::Path::new("/original.txt"), b"data").unwrap();
+        fs.hard_link(std::path::Path::new("/original.txt"), std::path::Path::new("/link.txt")).unwrap();
 
-        let inode1 = fs.path_to_inode("/original.txt").unwrap();
-        let inode2 = fs.path_to_inode("/link.txt").unwrap();
+        let inode1 = fs.path_to_inode(std::path::Path::new("/original.txt")).unwrap();
+        let inode2 = fs.path_to_inode(std::path::Path::new("/link.txt")).unwrap();
 
         // Hard links must share the same inode
         assert_eq!(inode1, inode2);
@@ -1809,16 +1809,16 @@ mod middleware_tests {
     fn passthrough_read_write() {
         let fs = create_middleware();
 
-        fs.write("/test.txt", b"data").unwrap();
-        assert_eq!(fs.read("/test.txt").unwrap(), b"data");
+        fs.write(std::path::Path::new("/test.txt"), b"data").unwrap();
+        assert_eq!(fs.read(std::path::Path::new("/test.txt")).unwrap(), b"data");
     }
 
     #[test]
     fn passthrough_directories() {
         let fs = create_middleware();
 
-        fs.create_dir_all("/a/b/c").unwrap();
-        assert!(fs.exists("/a/b/c").unwrap());
+        fs.create_dir_all(std::path::Path::new("/a/b/c")).unwrap();
+        assert!(fs.exists(std::path::Path::new("/a/b/c")).unwrap());
     }
 
     // Add middleware-specific tests here
@@ -1829,7 +1829,7 @@ mod middleware_tests {
         let fs = QuotaMiddleware::new(MemoryBackend::new())
             .with_max_file_size(100);
 
-        let result = fs.write("/big.txt", &vec![0u8; 200]);
+        let result = fs.write(std::path::Path::new("/big.txt"), &vec![0u8; 200]);
         assert!(matches!(result, Err(FsError::QuotaExceeded { .. })));
     }
 
@@ -1838,8 +1838,8 @@ mod middleware_tests {
         let fs = QuotaMiddleware::new(MemoryBackend::new())
             .with_max_file_size(100);
 
-        fs.write("/small.txt", &vec![0u8; 50]).unwrap();
-        assert!(fs.exists("/small.txt").unwrap());
+        fs.write(std::path::Path::new("/small.txt"), &vec![0u8; 50]).unwrap();
+        assert!(fs.exists(std::path::Path::new("/small.txt")).unwrap());
     }
 }
 ```
