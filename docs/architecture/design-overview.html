@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-39540094.js";
+            window.path_to_searchindex_js = "../searchindex-a990b1f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b1aa7698.js"></script>
@@ -310,6 +310,26 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
      |-- anyfs (backends + middleware + ergonomics)
            ^-- vrootfs feature may use strict-path
 </code></pre>
+<hr>
+<h2 id="future-ideas-post-v1"><a class="header" href="#future-ideas-post-v1">Future Ideas (Post-v1)</a></h2>
+<p>These are optional extensions to explore after the core is stable. They are intentionally not part of v1.</p>
+<p><strong>Keep (post-v1 add-ons that fit the current design):</strong></p>
+<ul>
+<li>URL-based backend registry (<code>sqlite://</code>, <code>mem://</code>, <code>stdfs://</code>) as a helper crate, not in core APIs.</li>
+<li>Bulk operation helpers (<code>read_many</code>, <code>write_many</code>, <code>copy_many</code>, <code>glob</code>, <code>walk</code>) as <code>FsExt</code> or a utilities crate.</li>
+<li>Early async adapter crate (<code>anyfs-async</code>) to support remote backends without changing sync traits.</li>
+<li>Bash-style shell (example app or <code>anyfs-shell</code> crate) that routes <code>ls/cd/cat/cp/mv/rm/mkdir/stat</code> through <code>FileStorage</code> to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).</li>
+</ul>
+<p><strong>Defer (valuable, but needs data or wider review):</strong></p>
+<ul>
+<li>Range/block caching middleware for <code>read_range</code> heavy workloads (fsspec-style block cache).</li>
+<li>Runtime capability discovery (<code>Capabilities</code> struct) for feature detection (symlink control, case sensitivity, max path length).</li>
+</ul>
+<p><strong>Drop for now (adds noise or cross-platform complexity):</strong></p>
+<ul>
+<li>Change notification support (optional <code>FsWatch</code> trait or polling middleware).</li>
+</ul>
+<p>Detailed rationale lives in <code>src/comparisons/prior-art-analysis.md</code>.</p>
 <hr>
 <h2 id="performance-strategic-boxing-adr-025"><a class="header" href="#performance-strategic-boxing-adr-025">Performance: Strategic Boxing (ADR-025)</a></h2>
 <p>AnyFS follows Tower/Axum’s approach to dynamic dispatch: <strong>zero-cost on the hot path, box at boundaries where flexibility is needed</strong>.</p>

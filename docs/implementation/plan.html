@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-39540094.js";
+            window.path_to_searchindex_js = "../searchindex-a990b1f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b1aa7698.js"></script>
@@ -607,7 +607,49 @@ strategy:
 <li>Compression middleware</li>
 <li><code>no_std</code> support (learned from <code>vfs</code> #38)</li>
 <li>Batch operations for performance (learned from <code>agentfs</code> #130)</li>
+<li>Companion shell (<code>anyfs-shell</code>) for interactive exploration of backends and middleware</li>
 </ul>
+<h3 id="anyfs-shell---local-companion-shell"><a class="header" href="#anyfs-shell---local-companion-shell"><code>anyfs-shell</code> - Local Companion Shell</a></h3>
+<p>Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a post-v1 companion crate, not part of the core libraries.</p>
+<p><strong>Goals:</strong></p>
+<ul>
+<li>Route all operations through <code>FileStorage</code> to exercise middleware and backend composition.</li>
+<li>Provide a familiar, low-noise CLI for navigation and file management.</li>
+<li>Keep scope intentionally small (no scripting, pipes, job control).</li>
+</ul>
+<p><strong>Command set (v1):</strong></p>
+<ul>
+<li><code>ls [path]</code> - list directory entries (default: current directory).</li>
+<li><code>cd &lt;path&gt;</code> - change working directory.</li>
+<li><code>pwd</code> - print current directory.</li>
+<li><code>cat &lt;path&gt;</code> - print file contents (UTF-8; error on invalid data).</li>
+<li><code>cp &lt;src&gt; &lt;dst&gt;</code> - copy files.</li>
+<li><code>mv &lt;src&gt; &lt;dst&gt;</code> - rename/move files.</li>
+<li><code>rm &lt;path&gt;</code> - remove file.</li>
+<li><code>mkdir &lt;path&gt;</code> - create directory.</li>
+<li><code>stat &lt;path&gt;</code> - show metadata (type, size, times, permissions if supported).</li>
+<li><code>help</code>, <code>exit</code> - basic shell control.</li>
+</ul>
+<p><strong>Flags (minimal):</strong></p>
+<ul>
+<li><code>ls -l</code> - long listing with size/type and modified time (when available).</li>
+<li><code>mkdir -p</code> - create intermediate directories.</li>
+<li><code>rm -r</code> - remove directory tree.</li>
+</ul>
+<p><strong>Backend selection (initial sketch):</strong></p>
+<ul>
+<li><code>--backend mem</code> (default), <code>--backend sqlite --db path</code>, <code>--backend stdfs --root path</code>, <code>--backend vrootfs --root path</code>.</li>
+<li><code>--config path</code> to load a small TOML file describing backend + middleware stack.</li>
+</ul>
+<p><strong>Example session:</strong></p>
+<pre><code>anyfs:/ &gt; ls
+docs  tmp  hello.txt
+anyfs:/ &gt; cat hello.txt
+Hello!
+anyfs:/ &gt; stat docs
+type=dir size=0 modified=2025-02-01T12:34:56Z
+anyfs:/ &gt; exit
+</code></pre>
 <h3 id="anyfs-mount---mount-as-real-filesystem"><a class="header" href="#anyfs-mount---mount-as-real-filesystem"><code>anyfs-mount</code> - Mount as Real Filesystem</a></h3>
 <p>Adapter to expose any <code>FsFuse</code> backend as a FUSE mount point.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]

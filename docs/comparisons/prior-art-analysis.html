@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-39540094.js";
+            window.path_to_searchindex_js = "../searchindex-a990b1f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b1aa7698.js"></script>
@@ -516,6 +516,25 @@ ufs.use(memfs);     // Memory overlay
 </tbody>
 </table>
 </div>
+<hr>
+<h2 id="future-ideas-to-consider"><a class="header" href="#future-ideas-to-consider">Future Ideas to Consider</a></h2>
+<p>These are optional extensions inspired by other ecosystems. They are intentionally not part of the core v1 scope.</p>
+<p><strong>Keep (post-v1 add-ons that fit the current design):</strong></p>
+<ul>
+<li>URL-based backend registry (<code>sqlite://</code>, <code>mem://</code>, <code>stdfs://</code>) as a helper crate, not in core APIs.</li>
+<li>Bulk operation helpers (<code>read_many</code>, <code>write_many</code>, <code>copy_many</code>, <code>glob</code>, <code>walk</code>) as <code>FsExt</code> or a utilities crate.</li>
+<li>Early async adapter crate (<code>anyfs-async</code>) to support remote backends without changing sync traits.</li>
+<li>Bash-style shell (example app or <code>anyfs-shell</code> crate) that routes <code>ls/cd/cat/cp/mv/rm/mkdir/stat</code> through <code>FileStorage</code> to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).</li>
+</ul>
+<p><strong>Defer (valuable, but needs data or wider review):</strong></p>
+<ul>
+<li>Range/block caching middleware for <code>read_range</code> heavy workloads (fsspec-style block cache).</li>
+<li>Runtime capability discovery (<code>Capabilities</code> struct) for feature detection (symlink control, case sensitivity, max path length).</li>
+</ul>
+<p><strong>Drop for now (adds noise or cross-platform complexity):</strong></p>
+<ul>
+<li>Change notification support (optional <code>FsWatch</code> trait or polling middleware).</li>
+</ul>
 <hr>
 <h2 id="security-tests-to-add"><a class="header" href="#security-tests-to-add">Security Tests to Add</a></h2>
 <p>Based on vulnerabilities found in other libraries, add these to our conformance test suite:</p>

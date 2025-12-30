@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-39540094.js";
+            window.path_to_searchindex_js = "../searchindex-a990b1f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b1aa7698.js"></script>
@@ -215,6 +215,7 @@
 <tr><td>ADR-023</td><td>Interior mutability for all trait methods</td><td>Accepted</td></tr>
 <tr><td>ADR-024</td><td>Async Strategy</td><td>Accepted</td></tr>
 <tr><td>ADR-025</td><td>Strategic Boxing (Tower-style)</td><td>Accepted</td></tr>
+<tr><td>ADR-026</td><td>Companion shell (anyfs-shell)</td><td>Accepted (Post-v1)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1183,6 +1184,23 @@ pub trait FsReadTyped: FsRead {
 <li><strong>Opt-in type erasure</strong> (explicit <code>boxed()</code> method)</li>
 </ul>
 <p>The performance cost is negligible (&lt;1% of I/O time), while the ergonomic and flexibility benefits are substantial.</p>
+<hr>
+<h2 id="adr-026-companion-shell-anyfs-shell"><a class="header" href="#adr-026-companion-shell-anyfs-shell">ADR-026: Companion shell (anyfs-shell)</a></h2>
+<p><strong>Status:</strong> Accepted (Post-v1)</p>
+<p><strong>Context:</strong> Users want a low-friction way to explore how different backends and middleware behave without writing a full application.</p>
+<p><strong>Decision:</strong> Provide a separate companion crate (e.g., <code>anyfs-shell</code>) that exposes a bash-style navigation and file management interface built on <code>FileStorage</code>.</p>
+<p><strong>Scope:</strong></p>
+<ul>
+<li>Commands: <code>ls</code>, <code>cd</code>, <code>cat</code>, <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>mkdir</code>, <code>stat</code>.</li>
+<li>Navigation and file management only; no full bash scripting, pipes, or job control.</li>
+<li>All operations route through <code>FileStorage</code> to exercise middleware and backend composition.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Demonstrates backend neutrality and middleware effects in a tangible way.</li>
+<li>Useful for docs, demos, and quick validation.</li>
+<li>Keeps the core crates free of CLI/UI dependencies.</li>
+</ul>
 
                     </main>
 

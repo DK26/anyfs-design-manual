@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-39540094.js";
+            window.path_to_searchindex_js = "searchindex-a990b1f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b1aa7698.js"></script>
@@ -1600,6 +1600,26 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
            ^-- vrootfs feature may use strict-path
 </code></pre>
 <hr>
+<h2 id="future-ideas-post-v1"><a class="header" href="#future-ideas-post-v1">Future Ideas (Post-v1)</a></h2>
+<p>These are optional extensions to explore after the core is stable. They are intentionally not part of v1.</p>
+<p><strong>Keep (post-v1 add-ons that fit the current design):</strong></p>
+<ul>
+<li>URL-based backend registry (<code>sqlite://</code>, <code>mem://</code>, <code>stdfs://</code>) as a helper crate, not in core APIs.</li>
+<li>Bulk operation helpers (<code>read_many</code>, <code>write_many</code>, <code>copy_many</code>, <code>glob</code>, <code>walk</code>) as <code>FsExt</code> or a utilities crate.</li>
+<li>Early async adapter crate (<code>anyfs-async</code>) to support remote backends without changing sync traits.</li>
+<li>Bash-style shell (example app or <code>anyfs-shell</code> crate) that routes <code>ls/cd/cat/cp/mv/rm/mkdir/stat</code> through <code>FileStorage</code> to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).</li>
+</ul>
+<p><strong>Defer (valuable, but needs data or wider review):</strong></p>
+<ul>
+<li>Range/block caching middleware for <code>read_range</code> heavy workloads (fsspec-style block cache).</li>
+<li>Runtime capability discovery (<code>Capabilities</code> struct) for feature detection (symlink control, case sensitivity, max path length).</li>
+</ul>
+<p><strong>Drop for now (adds noise or cross-platform complexity):</strong></p>
+<ul>
+<li>Change notification support (optional <code>FsWatch</code> trait or polling middleware).</li>
+</ul>
+<p>Detailed rationale lives in <code>src/comparisons/prior-art-analysis.md</code>.</p>
+<hr>
 <h2 id="performance-strategic-boxing-adr-025"><a class="header" href="#performance-strategic-boxing-adr-025">Performance: Strategic Boxing (ADR-025)</a></h2>
 <p>AnyFS follows Tower/Axum’s approach to dynamic dispatch: <strong>zero-cost on the hot path, box at boundaries where flexibility is needed</strong>.</p>
 <div class="table-wrapper">
@@ -3093,6 +3113,7 @@ let fs = FileStorage::new(backend);
 <tr><td>ADR-023</td><td>Interior mutability for all trait methods</td><td>Accepted</td></tr>
 <tr><td>ADR-024</td><td>Async Strategy</td><td>Accepted</td></tr>
 <tr><td>ADR-025</td><td>Strategic Boxing (Tower-style)</td><td>Accepted</td></tr>
+<tr><td>ADR-026</td><td>Companion shell (anyfs-shell)</td><td>Accepted (Post-v1)</td></tr>
 </tbody>
 </table>
 </div>
@@ -4061,6 +4082,23 @@ pub trait FsReadTyped: FsRead {
 <li><strong>Opt-in type erasure</strong> (explicit <code>boxed()</code> method)</li>
 </ul>
 <p>The performance cost is negligible (&lt;1% of I/O time), while the ergonomic and flexibility benefits are substantial.</p>
+<hr>
+<h2 id="adr-026-companion-shell-anyfs-shell"><a class="header" href="#adr-026-companion-shell-anyfs-shell">ADR-026: Companion shell (anyfs-shell)</a></h2>
+<p><strong>Status:</strong> Accepted (Post-v1)</p>
+<p><strong>Context:</strong> Users want a low-friction way to explore how different backends and middleware behave without writing a full application.</p>
+<p><strong>Decision:</strong> Provide a separate companion crate (e.g., <code>anyfs-shell</code>) that exposes a bash-style navigation and file management interface built on <code>FileStorage</code>.</p>
+<p><strong>Scope:</strong></p>
+<ul>
+<li>Commands: <code>ls</code>, <code>cd</code>, <code>cat</code>, <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>mkdir</code>, <code>stat</code>.</li>
+<li>Navigation and file management only; no full bash scripting, pipes, or job control.</li>
+<li>All operations route through <code>FileStorage</code> to exercise middleware and backend composition.</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Demonstrates backend neutrality and middleware effects in a tangible way.</li>
+<li>Useful for docs, demos, and quick validation.</li>
+<li>Keeps the core crates free of CLI/UI dependencies.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="hybrid-backend-design"><a class="header" href="#hybrid-backend-design">Hybrid Backend Design</a></h1>
 <p><strong>SQLite Metadata + Content-Addressed Blob Storage</strong></p>
@@ -11139,6 +11177,25 @@ ufs.use(memfs);     // Memory overlay
 </table>
 </div>
 <hr>
+<h2 id="future-ideas-to-consider"><a class="header" href="#future-ideas-to-consider">Future Ideas to Consider</a></h2>
+<p>These are optional extensions inspired by other ecosystems. They are intentionally not part of the core v1 scope.</p>
+<p><strong>Keep (post-v1 add-ons that fit the current design):</strong></p>
+<ul>
+<li>URL-based backend registry (<code>sqlite://</code>, <code>mem://</code>, <code>stdfs://</code>) as a helper crate, not in core APIs.</li>
+<li>Bulk operation helpers (<code>read_many</code>, <code>write_many</code>, <code>copy_many</code>, <code>glob</code>, <code>walk</code>) as <code>FsExt</code> or a utilities crate.</li>
+<li>Early async adapter crate (<code>anyfs-async</code>) to support remote backends without changing sync traits.</li>
+<li>Bash-style shell (example app or <code>anyfs-shell</code> crate) that routes <code>ls/cd/cat/cp/mv/rm/mkdir/stat</code> through <code>FileStorage</code> to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).</li>
+</ul>
+<p><strong>Defer (valuable, but needs data or wider review):</strong></p>
+<ul>
+<li>Range/block caching middleware for <code>read_range</code> heavy workloads (fsspec-style block cache).</li>
+<li>Runtime capability discovery (<code>Capabilities</code> struct) for feature detection (symlink control, case sensitivity, max path length).</li>
+</ul>
+<p><strong>Drop for now (adds noise or cross-platform complexity):</strong></p>
+<ul>
+<li>Change notification support (optional <code>FsWatch</code> trait or polling middleware).</li>
+</ul>
+<hr>
 <h2 id="security-tests-to-add"><a class="header" href="#security-tests-to-add">Security Tests to Add</a></h2>
 <p>Based on vulnerabilities found in other libraries, add these to our conformance test suite:</p>
 <h3 id="path-traversal-tests"><a class="header" href="#path-traversal-tests">Path Traversal Tests</a></h3>
@@ -11856,7 +11913,49 @@ strategy:
 <li>Compression middleware</li>
 <li><code>no_std</code> support (learned from <code>vfs</code> #38)</li>
 <li>Batch operations for performance (learned from <code>agentfs</code> #130)</li>
+<li>Companion shell (<code>anyfs-shell</code>) for interactive exploration of backends and middleware</li>
 </ul>
+<h3 id="anyfs-shell---local-companion-shell"><a class="header" href="#anyfs-shell---local-companion-shell"><code>anyfs-shell</code> - Local Companion Shell</a></h3>
+<p>Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a post-v1 companion crate, not part of the core libraries.</p>
+<p><strong>Goals:</strong></p>
+<ul>
+<li>Route all operations through <code>FileStorage</code> to exercise middleware and backend composition.</li>
+<li>Provide a familiar, low-noise CLI for navigation and file management.</li>
+<li>Keep scope intentionally small (no scripting, pipes, job control).</li>
+</ul>
+<p><strong>Command set (v1):</strong></p>
+<ul>
+<li><code>ls [path]</code> - list directory entries (default: current directory).</li>
+<li><code>cd &lt;path&gt;</code> - change working directory.</li>
+<li><code>pwd</code> - print current directory.</li>
+<li><code>cat &lt;path&gt;</code> - print file contents (UTF-8; error on invalid data).</li>
+<li><code>cp &lt;src&gt; &lt;dst&gt;</code> - copy files.</li>
+<li><code>mv &lt;src&gt; &lt;dst&gt;</code> - rename/move files.</li>
+<li><code>rm &lt;path&gt;</code> - remove file.</li>
+<li><code>mkdir &lt;path&gt;</code> - create directory.</li>
+<li><code>stat &lt;path&gt;</code> - show metadata (type, size, times, permissions if supported).</li>
+<li><code>help</code>, <code>exit</code> - basic shell control.</li>
+</ul>
+<p><strong>Flags (minimal):</strong></p>
+<ul>
+<li><code>ls -l</code> - long listing with size/type and modified time (when available).</li>
+<li><code>mkdir -p</code> - create intermediate directories.</li>
+<li><code>rm -r</code> - remove directory tree.</li>
+</ul>
+<p><strong>Backend selection (initial sketch):</strong></p>
+<ul>
+<li><code>--backend mem</code> (default), <code>--backend sqlite --db path</code>, <code>--backend stdfs --root path</code>, <code>--backend vrootfs --root path</code>.</li>
+<li><code>--config path</code> to load a small TOML file describing backend + middleware stack.</li>
+</ul>
+<p><strong>Example session:</strong></p>
+<pre><code>anyfs:/ &gt; ls
+docs  tmp  hello.txt
+anyfs:/ &gt; cat hello.txt
+Hello!
+anyfs:/ &gt; stat docs
+type=dir size=0 modified=2025-02-01T12:34:56Z
+anyfs:/ &gt; exit
+</code></pre>
 <h3 id="anyfs-mount---mount-as-real-filesystem"><a class="header" href="#anyfs-mount---mount-as-real-filesystem"><code>anyfs-mount</code> - Mount as Real Filesystem</a></h3>
 <p>Adapter to expose any <code>FsFuse</code> backend as a FUSE mount point.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
