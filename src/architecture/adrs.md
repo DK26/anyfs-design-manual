@@ -33,6 +33,7 @@ This file captures the decisions for the current AnyFS design.
 | ADR-023 | Interior mutability for all trait methods | Accepted |
 | ADR-024 | Async Strategy | Accepted |
 | ADR-025 | Strategic Boxing (Tower-style) | Accepted |
+| ADR-026 | Companion shell (anyfs-shell) | Accepted (Post-v1) |
 
 ---
 
@@ -1007,3 +1008,23 @@ Our boxing strategy mirrors Tower/Axum's production-proven approach:
 - **Opt-in type erasure** (explicit `boxed()` method)
 
 The performance cost is negligible (<1% of I/O time), while the ergonomic and flexibility benefits are substantial.
+
+---
+
+## ADR-026: Companion shell (anyfs-shell)
+
+**Status:** Accepted (Post-v1)
+
+**Context:** Users want a low-friction way to explore how different backends and middleware behave without writing a full application.
+
+**Decision:** Provide a separate companion crate (e.g., `anyfs-shell`) that exposes a bash-style navigation and file management interface built on `FileStorage`.
+
+**Scope:**
+- Commands: `ls`, `cd`, `cat`, `cp`, `mv`, `rm`, `mkdir`, `stat`.
+- Navigation and file management only; no full bash scripting, pipes, or job control.
+- All operations route through `FileStorage` to exercise middleware and backend composition.
+
+**Why:**
+- Demonstrates backend neutrality and middleware effects in a tangible way.
+- Useful for docs, demos, and quick validation.
+- Keeps the core crates free of CLI/UI dependencies.

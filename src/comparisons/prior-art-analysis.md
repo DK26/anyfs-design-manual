@@ -303,6 +303,25 @@ fn resolve(path: &str) -> Result<PathBuf, FsError> {
 
 ---
 
+## Future Ideas to Consider
+
+These are optional extensions inspired by other ecosystems. They are intentionally not part of the core v1 scope.
+
+**Keep (post-v1 add-ons that fit the current design):**
+- URL-based backend registry (`sqlite://`, `mem://`, `stdfs://`) as a helper crate, not in core APIs.
+- Bulk operation helpers (`read_many`, `write_many`, `copy_many`, `glob`, `walk`) as `FsExt` or a utilities crate.
+- Early async adapter crate (`anyfs-async`) to support remote backends without changing sync traits.
+- Bash-style shell (example app or `anyfs-shell` crate) that routes `ls/cd/cat/cp/mv/rm/mkdir/stat` through `FileStorage` to demonstrate middleware and backend neutrality (navigation and file management only, not full bash scripting).
+
+**Defer (valuable, but needs data or wider review):**
+- Range/block caching middleware for `read_range` heavy workloads (fsspec-style block cache).
+- Runtime capability discovery (`Capabilities` struct) for feature detection (symlink control, case sensitivity, max path length).
+
+**Drop for now (adds noise or cross-platform complexity):**
+- Change notification support (optional `FsWatch` trait or polling middleware).
+
+---
+
 ## Security Tests to Add
 
 Based on vulnerabilities found in other libraries, add these to our conformance test suite:

@@ -433,6 +433,48 @@ Required CI checks:
 - Compression middleware
 - `no_std` support (learned from `vfs` #38)
 - Batch operations for performance (learned from `agentfs` #130)
+- Companion shell (`anyfs-shell`) for interactive exploration of backends and middleware
+
+### `anyfs-shell` - Local Companion Shell
+
+Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a post-v1 companion crate, not part of the core libraries.
+
+**Goals:**
+- Route all operations through `FileStorage` to exercise middleware and backend composition.
+- Provide a familiar, low-noise CLI for navigation and file management.
+- Keep scope intentionally small (no scripting, pipes, job control).
+
+**Command set (v1):**
+- `ls [path]` - list directory entries (default: current directory).
+- `cd <path>` - change working directory.
+- `pwd` - print current directory.
+- `cat <path>` - print file contents (UTF-8; error on invalid data).
+- `cp <src> <dst>` - copy files.
+- `mv <src> <dst>` - rename/move files.
+- `rm <path>` - remove file.
+- `mkdir <path>` - create directory.
+- `stat <path>` - show metadata (type, size, times, permissions if supported).
+- `help`, `exit` - basic shell control.
+
+**Flags (minimal):**
+- `ls -l` - long listing with size/type and modified time (when available).
+- `mkdir -p` - create intermediate directories.
+- `rm -r` - remove directory tree.
+
+**Backend selection (initial sketch):**
+- `--backend mem` (default), `--backend sqlite --db path`, `--backend stdfs --root path`, `--backend vrootfs --root path`.
+- `--config path` to load a small TOML file describing backend + middleware stack.
+
+**Example session:**
+```
+anyfs:/ > ls
+docs  tmp  hello.txt
+anyfs:/ > cat hello.txt
+Hello!
+anyfs:/ > stat docs
+type=dir size=0 modified=2025-02-01T12:34:56Z
+anyfs:/ > exit
+```
 
 ### `anyfs-mount` - Mount as Real Filesystem
 
