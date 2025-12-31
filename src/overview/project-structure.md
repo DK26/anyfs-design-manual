@@ -73,15 +73,25 @@ Each layer implements `Fs`, enabling composition.
 
 ## Cargo Features
 
-Features in `anyfs` select which backends to include:
-
+### Backends
 - `memory` — In-memory storage (default)
 - `sqlite` — SQLite-backed persistent storage
-- `sqlite-cipher` — Encrypted SQLite via SQLCipher (AES-256, mutually exclusive with `sqlite`)
+- `sqlite-cipher` — Encrypted SQLite via SQLCipher (mutually exclusive with `sqlite`)
 - `stdfs` — Direct `std::fs` delegation (no containment)
 - `vrootfs` — Host filesystem backend with path containment (uses `strict-path`)
 
-Middleware is always available (no feature flags).
+### Middleware
+Following the **Tower/Axum** pattern, we use feature flags to keep the core lightweight:
+
+- `quota` — Storage limits (default)
+- `path-filter` — Glob-based access control (default)
+- `restrictions` — Permission/Link control (default)
+- `read-only` — Write blocking (default)
+- `rate-limit` — Token bucket throttling (default)
+- `metrics` — Prometheus integration (requires `prometheus` crate)
+- `tracing` — Detailed audit logging (requires `tracing` crate)
+
+Use `default-features = false` to cherry-pick exactly what you need.
 
 ---
 

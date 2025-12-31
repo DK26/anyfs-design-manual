@@ -2,6 +2,10 @@
 
 **AnyFS is to filesystems what Axum/Tower is to HTTP.**
 
+It lets you control **how a drive acts, looks, and protects itself.**
+
+Whether it's a real filesystem, a SQLite database, or pure RAM—it all looks like a standard drive to your OS, but with *your* rules: antivirus active defense, live Prometheus metrics, quotas, and audit logging.
+
 A composable middleware stack for filesystem operations with pluggable backends.
 
 ---
@@ -447,9 +451,18 @@ Key documents:
 
 ## Status
 
-**Design complete. Implementation in progress.**
+🚧 **Work In Progress & Experimental** 🚧
 
-The design manual documents the full API, middleware patterns, and implementation guidance.
+The features described here are being actively experimented with. The design is solidifying, but implementation is ongoing.
+
+**We value your feedback!**
+- Have a different use case?
+- Think a design decision is wrong?
+- Want a specific middleware?
+
+Please **open an issue** and push back on our ideas. We want to build something that solves *real* problems, not just theoretical ones.
+
+**Current Phase:** Implementation of core traits and memory backend.
 
 ---
 

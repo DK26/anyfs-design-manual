@@ -337,6 +337,7 @@ let backend = av_plugin.wrap(backend);
 Some middleware benefit from pluggable backends for their own storage or output. The pattern is to inject a trait object or configuration at construction time.
 
 **Metrics Middleware with Prometheus Exporter:**
+*(Requires `features = ["metrics"]`)*
 
 ```rust
 use prometheus::{Counter, Histogram, Registry};
