@@ -79,6 +79,7 @@ Primary docs are where each decision is explained in narrative form. ADRs remain
 | ADR-029 | Path resolution in FileStorage | Accepted |
 | ADR-030 | Layered trait hierarchy | Accepted |
 | ADR-031 | Indexing as middleware | Accepted (Post-v1) |
+| ADR-032 | Path Canonicalization via FsPath Trait | Accepted |
 
 ---
 
@@ -1183,3 +1184,138 @@ The performance cost is negligible (<1% of I/O time), while the ergonomic and fl
 - `IndexLayer::builder().index_file("index.db").consistency(IndexConsistency::Strict)...`
 - Wraps `open_write()` with a counting writer to record final size on close.
 - Updates a `nodes` table and logs `ops` entries per operation.
+
+---
+
+## ADR-032: Path Canonicalization via FsPath Trait
+
+**Status:** Accepted
+
+**Context:** Path canonicalization (resolving `..`, `.`, and symlinks) is needed for consistent path handling. The naive approach of baking this into `FileStorage` has issues:
+- It's not testable in isolation
+- It can't be optimized per-backend
+- N+1 queries for paths like `/a/b/c/d/e` (each component = separate call)
+
+**Decision:** Introduce an `FsPath` trait with `canonicalize()` and `soft_canonicalize()` methods that have **default implementations** but allow **backend-specific optimizations**.
+
+**The Pattern:**
+
+```rust
+pub trait FsPath: FsRead + FsLink {
+    /// Resolve all symlinks and normalize path components.
+    /// Returns error if final path doesn't exist.
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        default_canonicalize(self, path)
+    }
+
+    /// Like canonicalize, but allows non-existent final component.
+    fn soft_canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        default_soft_canonicalize(self, path)
+    }
+}
+
+// Auto-implement for all FsLink implementors
+impl<T: FsRead + FsLink> FsPath for T {}
+```
+
+**Default Implementation:**
+
+```rust
+fn default_canonicalize<F: FsRead + FsLink>(fs: &F, path: &Path) -> Result<PathBuf, FsError> {
+    let mut resolved = PathBuf::from("/");
+    for component in path.components() {
+        match component {
+            Component::RootDir => resolved = PathBuf::from("/"),
+            Component::ParentDir => { resolved.pop(); },
+            Component::CurDir => {},
+            Component::Normal(name) => {
+                resolved.push(name);
+                if let Ok(meta) = fs.symlink_metadata(&resolved) {
+                    if meta.file_type.is_symlink() {
+                        let target = fs.read_link(&resolved)?;
+                        resolved.pop();
+                        resolved = resolve_relative(&resolved, &target);
+                    }
+                }
+            },
+            _ => {},
+        }
+    }
+    // Verify final path exists
+    if !fs.exists(&resolved)? {
+        return Err(FsError::NotFound { path: resolved, operation: "canonicalize" });
+    }
+    Ok(resolved)
+}
+```
+
+**Backend Optimization Examples:**
+
+| Backend | Optimization |
+|---------|--------------|
+| `SqliteBackend` | Single recursive CTE query resolves entire path |
+| `VRootFsBackend` | Delegates to `std::fs::canonicalize()` + containment check |
+| `MemoryBackend` | Uses default (in-memory is fast anyway) |
+
+**SQLite Optimized Implementation:**
+
+```rust
+impl FsPath for SqliteBackend {
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        // Single query with recursive CTE
+        self.conn.query_row(
+            r#"
+            WITH RECURSIVE path_resolve(segment, remaining, resolved, depth) AS (
+                -- Initial: split path into segments
+                SELECT ..., 0
+                UNION ALL
+                -- Recursive: resolve each segment, following symlinks
+                SELECT ...
+                FROM path_resolve
+                JOIN nodes ON ...
+                WHERE depth < 40  -- Loop protection
+            )
+            SELECT resolved FROM path_resolve 
+            WHERE remaining = '' 
+            ORDER BY depth DESC LIMIT 1
+            "#,
+            params![path.to_string_lossy()],
+            |row| Ok(PathBuf::from(row.get::<_, String>(0)?))
+        ).map_err(|e| FsError::NotFound { path: path.into(), operation: "canonicalize" })
+    }
+}
+```
+
+**Why This Design:**
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Portable default** | Works with any `Fs` backend out of the box |
+| **Optimizable** | Backends can override for O(1) queries vs O(n) |
+| **Testable** | Canonicalization logic is separate, can be unit tested |
+| **Composable** | Middleware can wrap/intercept canonicalization |
+
+**FileStorage Integration:**
+
+```rust
+impl<B: Fs + FsPath> FileStorage<B> {
+    pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
+        self.backend.canonicalize(path.as_ref())
+    }
+
+    pub fn soft_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
+        self.backend.soft_canonicalize(path.as_ref())
+    }
+}
+```
+
+**Trade-offs:**
+
+| Approach | Queries | Complexity | Best For |
+|----------|---------|------------|----------|
+| Default impl | O(n) per component | Simple | Memory, small files |
+| SQLite CTE | O(1) single query | Moderate | Large trees, many symlinks |
+| OS delegation | O(1) syscall | Simple | Real filesystem |
+
+**Conclusion:** The `FsPath` trait provides a clean abstraction that works everywhere but can be optimized where it matters. This follows Rust's "zero-cost abstractions" philosophy: you don't pay for what you don't use, and you can optimize hot paths when needed.
+

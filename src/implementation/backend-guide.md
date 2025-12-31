@@ -484,6 +484,114 @@ Return appropriate `FsError` variants:
 
 ---
 
+## Optional Optimizations
+
+Some trait methods have default implementations that work universally but may be suboptimal for specific backends. You can **override these for better performance**.
+
+### Path Canonicalization (FsPath Trait)
+
+The `FsPath` trait provides `canonicalize()` and `soft_canonicalize()` with default implementations that call `read_link()` and `symlink_metadata()` per path component.
+
+**Default behavior:** O(n) calls for a path with n components
+
+**When to override:**
+- Your backend can resolve paths more efficiently (e.g., SQL query)
+- Your backend delegates to OS (which has optimized syscalls)
+
+**SQLite Example - Single Query Resolution:**
+
+```rust
+impl FsPath for SqliteBackend {
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        // Resolve entire path in one recursive CTE query
+        self.conn.query_row(
+            r#"
+            WITH RECURSIVE resolve(current, depth) AS (
+                SELECT :path, 0
+                UNION ALL
+                SELECT 
+                    CASE WHEN n.type = 'symlink' 
+                         THEN n.target 
+                         ELSE resolve.current 
+                    END,
+                    depth + 1
+                FROM resolve
+                LEFT JOIN nodes n ON n.path = resolve.current
+                WHERE n.type = 'symlink' AND depth < 40
+            )
+            SELECT current FROM resolve ORDER BY depth DESC LIMIT 1
+            "#,
+            params![path.to_string_lossy()],
+            |row| Ok(PathBuf::from(row.get::<_, String>(0)?))
+        ).map_err(|_| FsError::NotFound { 
+            path: path.into(), 
+            operation: "canonicalize" 
+        })
+    }
+}
+```
+
+**VRootFsBackend Example - OS Delegation:**
+
+```rust
+impl FsPath for VRootFsBackend {
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        // Delegate to OS, which uses optimized syscalls
+        let host_path = self.root.join(path.strip_prefix("/").unwrap_or(path));
+        let resolved = std::fs::canonicalize(&host_path)
+            .map_err(|e| FsError::NotFound { 
+                path: path.into(), 
+                operation: "canonicalize" 
+            })?;
+        
+        // Verify containment (security check)
+        if !resolved.starts_with(&self.root) {
+            return Err(FsError::AccessDenied {
+                path: path.into(),
+                reason: "path escapes root".into(),
+            });
+        }
+        
+        // Convert back to virtual path
+        Ok(PathBuf::from("/").join(resolved.strip_prefix(&self.root).unwrap()))
+    }
+}
+```
+
+### Other Optimization Opportunities
+
+| Method | Default | Optimization Opportunity |
+|--------|---------|-------------------------|
+| `canonicalize()` | O(n) per component | SQL CTE, OS delegation |
+| `create_dir_all()` | Recursive `create_dir()` | Single SQL INSERT with path hierarchy |
+| `remove_dir_all()` | Recursive traversal | SQL DELETE with LIKE pattern |
+| `copy()` | read + write | Database-level copy, reflink |
+
+**General Pattern:**
+
+```rust
+// Override any trait method with optimized implementation
+impl FsDir for SqliteBackend {
+    fn create_dir_all(&self, path: &Path) -> Result<(), FsError> {
+        // Instead of calling create_dir() for each level,
+        // insert all parent paths in a single transaction
+        self.conn.execute_batch(&format!(
+            "INSERT OR IGNORE INTO nodes (path, type) VALUES {}",
+            generate_ancestor_values(path)
+        ))?;
+        Ok(())
+    }
+}
+```
+
+**When NOT to optimize:**
+
+- `MemoryBackend`: In-memory operations are already fast; keep it simple
+- Low-volume operations: Optimize where it matters (hot paths)
+- Prototype phase: Get correctness first, optimize later
+
+See [ADR-032](../architecture/adrs.md#adr-032-path-canonicalization-via-fspath-trait) for the full design rationale.
+
 ## Testing Your Backend
 
 Use the conformance test suite:
