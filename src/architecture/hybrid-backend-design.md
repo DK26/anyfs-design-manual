@@ -27,8 +27,9 @@ A **hybrid backend** separates:
 │  └─────────────────────┘    └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 
-IndexedBackend implements this pattern with local disk blobs.
 Custom backends can use S3, cloud storage, or other blob stores.
+IndexedBackend implements a simpler variant with UUID-named local blobs
+(optimized for streaming; see note below on storage models).
 ```
 
 **Why this pattern?**
@@ -36,6 +37,23 @@ Custom backends can use S3, cloud storage, or other blob stores.
 - Blob stores scale better for large file content
 - Content-addressing enables deduplication
 - Separating concerns enables independent scaling
+
+### Storage Model Variants
+
+| Model                 | Blob Naming              | Dedup | Best For                          |
+| --------------------- | ------------------------ | ----- | --------------------------------- |
+| **Content-Addressed** | SHA-256 of content       | ✅ Yes | Cloud/S3, archival, multi-tenant  |
+| **UUID+Timestamp**    | `{uuid}-{timestamp}.bin` | ❌ No  | Streaming large files, simplicity |
+
+**IndexedBackend** uses **UUID+Timestamp** naming because:
+- Large files can be streamed without buffering the entire file to compute a hash
+- Write latency is consistent (no hash computation)
+- Simpler garbage collection (delete blob when reference removed)
+
+**Custom implementations** may prefer **content-addressed** storage when:
+- Deduplication is valuable (many users uploading same files)
+- Using cloud blob stores with native CAS support (S3, GCS)
+- Building archival systems where write latency is acceptable
 
 ---
 

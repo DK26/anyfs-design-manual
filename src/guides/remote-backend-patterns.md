@@ -32,20 +32,20 @@ AnyFS backends are local by design. To go remote, you need:
 
 Map `Fs` trait methods to RPC operations:
 
-| Trait Method | RPC Operation | Notes |
-|--------------|---------------|-------|
-| `read(path)` | `Read(path, range?)` | Support partial reads |
-| `write(path, data)` | `Write(path, data)` | Chunked for large files |
-| `exists(path)` | `Exists(path)` | Or combine with Metadata |
-| `metadata(path)` | `Metadata(path)` | Return full stat |
-| `read_dir(path)` | `ListDir(path, cursor?)` | Paginated for large dirs |
-| `create_dir(path)` | `CreateDir(path)` | |
-| `create_dir_all(path)` | `CreateDirAll(path)` | Or client-side loop |
-| `remove_file(path)` | `Remove(path)` | |
-| `remove_dir(path)` | `RemoveDir(path)` | |
-| `remove_dir_all(path)` | `RemoveDirAll(path)` | Recursive |
-| `rename(from, to)` | `Rename(from, to)` | |
-| `copy(from, to)` | `Copy(from, to)` | Server-side copy |
+| Trait Method           | RPC Operation            | Notes                    |
+| ---------------------- | ------------------------ | ------------------------ |
+| `read(path)`           | `Read(path, range?)`     | Support partial reads    |
+| `write(path, data)`    | `Write(path, data)`      | Chunked for large files  |
+| `exists(path)`         | `Exists(path)`           | Or combine with Metadata |
+| `metadata(path)`       | `Metadata(path)`         | Return full stat         |
+| `read_dir(path)`       | `ListDir(path, cursor?)` | Paginated for large dirs |
+| `create_dir(path)`     | `CreateDir(path)`        |                          |
+| `create_dir_all(path)` | `CreateDirAll(path)`     | Or client-side loop      |
+| `remove_file(path)`    | `Remove(path)`           |                          |
+| `remove_dir(path)`     | `RemoveDir(path)`        |                          |
+| `remove_dir_all(path)` | `RemoveDirAll(path)`     | Recursive                |
+| `rename(from, to)`     | `Rename(from, to)`       |                          |
+| `copy(from, to)`       | `Copy(from, to)`         | Server-side copy         |
 
 ### Request/Response Format
 
@@ -137,12 +137,12 @@ message DirEntry {
 
 ### Protocol Choices
 
-| Protocol | Pros | Cons | Use When |
-|----------|------|------|----------|
-| **gRPC** | Fast, typed, streaming | Complex setup | High performance |
-| **REST/JSON** | Simple, debuggable | Slower, no streaming | Compatibility |
-| **WebSocket** | Bidirectional, real-time | More complex | Live updates |
-| **Custom TCP** | Maximum control | Build everything | Special needs |
+| Protocol       | Pros                     | Cons                 | Use When         |
+| -------------- | ------------------------ | -------------------- | ---------------- |
+| **gRPC**       | Fast, typed, streaming   | Complex setup        | High performance |
+| **REST/JSON**  | Simple, debuggable       | Slower, no streaming | Compatibility    |
+| **WebSocket**  | Bidirectional, real-time | More complex         | Live updates     |
+| **Custom TCP** | Maximum control          | Build everything     | Special needs    |
 
 **Recommendation:** Start with gRPC (tonic in Rust). Fall back to REST for web clients.
 
@@ -634,12 +634,12 @@ impl<B: FsWrite> FsWrite for CachingBackend<B> {
 
 ### Cache Invalidation Strategies
 
-| Strategy | How | When to Use |
-|----------|-----|-------------|
-| **TTL** | Expire after N seconds | Read-heavy, eventual consistency OK |
-| **Write-through** | Invalidate on local write | Single client |
-| **Server push** | WebSocket notifications | Real-time consistency |
-| **Version/ETag** | Check version on read | Balance of consistency/perf |
+| Strategy          | How                       | When to Use                         |
+| ----------------- | ------------------------- | ----------------------------------- |
+| **TTL**           | Expire after N seconds    | Read-heavy, eventual consistency OK |
+| **Write-through** | Invalidate on local write | Single client                       |
+| **Server push**   | WebSocket notifications   | Real-time consistency               |
+| **Version/ETag**  | Check version on read     | Balance of consistency/perf         |
 
 ---
 
@@ -972,7 +972,7 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &Path) -> Result<(), Box<dyn E
 To build a complete cloud filesystem service:
 
 ### Server Side
-1. Wrap your backend (e.g., `HybridBackend`) with middleware
+1. Wrap your backend (e.g., `IndexedBackend` or custom) with middleware
 2. Expose via gRPC/REST server
 3. Add authentication, rate limiting, idempotency
 
@@ -1001,8 +1001,8 @@ To build a complete cloud filesystem service:
 │  └─────────────────┘    └─────────────┬───────────────┘    │
 │                                        ▼                    │
 │                         ┌─────────────────────────────┐    │
-│                         │     HybridBackend           │    │
-│                         │  SQLite + Blob Store        │    │
+│                         │     IndexedBackend          │    │
+│                         │  SQLite Index + Disk Blobs  │    │
 │                         └─────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -1012,5 +1012,5 @@ This gives you a complete cloud filesystem with:
 - Offline support
 - Caching for performance
 - Server-side quotas and logging
-- Scalable blob storage with dedup
+- Large file streaming performance
 
