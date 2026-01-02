@@ -492,5 +492,13 @@ Please **open an issue** and push back on our ideas. We want to build something 
 
 ## License
 
-This project is licensed under the MIT License or Apache 2.0 License.
+This repository contains the design manual and code examples for AnyFS.
+
+### Documentation
+The text, diagrams, and media in this manual are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+### Code
+Code examples and snippets are licensed under the **MIT License** and **Apache License 2.0** to allow free use in your own projects.
+
+See [LICENSE](LICENSE) for full details.
 
