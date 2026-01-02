@@ -221,6 +221,7 @@ This is a future idea that depends on the mounting crate and is not implemented 
 | `SqliteBackend`       |    ✅    |   ✅   |   ✅   |   ✅   |
 | `SqliteCipherBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
 | `IndexedBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
+| `StdFsBackend`        |    ✅    |   ✅   |   ✅   |   ❌   |
 | `VRootFsBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
 
 Virtual backends work identically everywhere - paths are just keys, symlinks are stored data.

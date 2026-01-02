@@ -1853,12 +1853,14 @@ AnyFS is designed for cross-platform use. Virtual backends work everywhere; real
 
 ### Backend Compatibility
 
-| Backend          | Windows | Linux | macOS | WASM  |
-| ---------------- | :-----: | :---: | :---: | :---: |
-| `MemoryBackend`  |    ✅    |   ✅   |   ✅   |   ✅   |
-| `SqliteBackend`  |    ✅    |   ✅   |   ✅   |  ✅*   |
-| `VRootFsBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
-| `StdFsBackend`   |    ✅    |   ✅   |   ✅   |   ❌   |
+| Backend               | Windows | Linux | macOS | WASM  |
+| --------------------- | :-----: | :---: | :---: | :---: |
+| `MemoryBackend`       |    ✅    |   ✅   |   ✅   |   ✅   |
+| `SqliteBackend`       |    ✅    |   ✅   |   ✅   |  ✅*   |
+| `SqliteCipherBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
+| `IndexedBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
+| `StdFsBackend`        |    ✅    |   ✅   |   ✅   |   ❌   |
+| `VRootFsBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
 
 *SQLite on WASM requires `wasm32` build of rusqlite with bundled SQLite.
 
