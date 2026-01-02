@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0cc552b6.js";
+            window.path_to_searchindex_js = "../searchindex-b87b4dc8.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f2dc2851.js"></script>
+        <script src="../toc-ed1a2457.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -327,7 +327,7 @@ fs.symlink("/target", "/link")?;  // ❌ Compile error
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>Isolated in process memory</td></tr>
 <tr><td><code>SqliteBackend</code></td><td>Each container is a separate <code>.db</code> file</td></tr>
-<tr><td><code>IndexedBackend</code></td><td>SQLite index + isolated blob directory (content-addressable)</td></tr>
+<tr><td><code>IndexedBackend</code></td><td>SQLite index + isolated blob directory (UUID-named blobs)</td></tr>
 <tr><td><code>StdFsBackend</code></td><td><strong>None</strong> - full filesystem access (do NOT use with untrusted input)</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td>Uses <code>strict-path::VirtualRoot</code> to contain paths</td></tr>
 </tbody>

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-0cc552b6.js";
+            window.path_to_searchindex_js = "searchindex-b87b4dc8.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f2dc2851.js"></script>
+        <script src="toc-ed1a2457.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -481,6 +481,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>sqlite</code> — SQLite-backed persistent storage</li>
 <li><code>sqlite-cipher</code> — Encrypted SQLite via SQLCipher (mutually exclusive with <code>sqlite</code>)</li>
+<li><code>indexed</code> — SQLite index + disk blobs for large file performance</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment (uses <code>strict-path</code>)</li>
 </ul>
@@ -3269,8 +3270,10 @@ impl From&lt;std::io::Error&gt; for FsError {
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
 <tr><td><code>SqliteBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅*</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td><code>SqliteCipherBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td><code>IndexedBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td><code>StdFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 </tbody>
 </table>
 </div>
@@ -4820,8 +4823,9 @@ impl&lt;T: FsRead + FsLink&gt; FsPath for T {}
 │  └─────────────────────┘    └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 
-IndexedBackend implements this pattern with local disk blobs.
 Custom backends can use S3, cloud storage, or other blob stores.
+IndexedBackend implements a simpler variant with UUID-named local blobs
+(optimized for streaming; see note below on storage models).
 </code></pre>
 <p><strong>Why this pattern?</strong></p>
 <ul>
@@ -4829,6 +4833,30 @@ Custom backends can use S3, cloud storage, or other blob stores.
 <li>Blob stores scale better for large file content</li>
 <li>Content-addressing enables deduplication</li>
 <li>Separating concerns enables independent scaling</li>
+</ul>
+<h3 id="storage-model-variants"><a class="header" href="#storage-model-variants">Storage Model Variants</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Model</th><th>Blob Naming</th><th>Dedup</th><th>Best For</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Content-Addressed</strong></td><td>SHA-256 of content</td><td>✅ Yes</td><td>Cloud/S3, archival, multi-tenant</td></tr>
+<tr><td><strong>UUID+Timestamp</strong></td><td><code>{uuid}-{timestamp}.bin</code></td><td>❌ No</td><td>Streaming large files, simplicity</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>IndexedBackend</strong> uses <strong>UUID+Timestamp</strong> naming because:</p>
+<ul>
+<li>Large files can be streamed without buffering the entire file to compute a hash</li>
+<li>Write latency is consistent (no hash computation)</li>
+<li>Simpler garbage collection (delete blob when reference removed)</li>
+</ul>
+<p><strong>Custom implementations</strong> may prefer <strong>content-addressed</strong> storage when:</p>
+<ul>
+<li>Deduplication is valuable (many users uploading same files)</li>
+<li>Using cloud blob stores with native CAS support (S3, GCS)</li>
+<li>Building archival systems where write latency is acceptable</li>
 </ul>
 <hr>
 <h2 id="framework-validation"><a class="header" href="#framework-validation">Framework Validation</a></h2>
@@ -5837,7 +5865,7 @@ pub trait FsDir: Send + Sync {
 </div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="indexing-middleware-design-plan"><a class="header" href="#indexing-middleware-design-plan">Indexing Middleware (Design Plan)</a></h1>
-<p><strong>Status:</strong> Proposed (post-v1)
+<p><strong>Status:</strong> Accepted (Post-v1) — See ADR-031
 <strong>Scope:</strong> Design plan only (no API break)</p>
 <hr>
 <h2 id="summary-1"><a class="header" href="#summary-1">Summary</a></h2>
@@ -10689,7 +10717,7 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 <p>To build a complete cloud filesystem service:</p>
 <h3 id="server-side"><a class="header" href="#server-side">Server Side</a></h3>
 <ol>
-<li>Wrap your backend (e.g., <code>HybridBackend</code>) with middleware</li>
+<li>Wrap your backend (e.g., <code>IndexedBackend</code> or custom) with middleware</li>
 <li>Expose via gRPC/REST server</li>
 <li>Add authentication, rate limiting, idempotency</li>
 </ol>
@@ -10717,8 +10745,8 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 │  └─────────────────┘    └─────────────┬───────────────┘    │
 │                                        ▼                    │
 │                         ┌─────────────────────────────┐    │
-│                         │     HybridBackend           │    │
-│                         │  SQLite + Blob Store        │    │
+│                         │     IndexedBackend          │    │
+│                         │  SQLite Index + Disk Blobs  │    │
 │                         └─────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
@@ -10728,7 +10756,7 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 <li>Offline support</li>
 <li>Caching for performance</li>
 <li>Server-side quotas and logging</li>
-<li>Scalable blob storage with dedup</li>
+<li>Large file streaming performance</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="anyfs-comparison-positioning--honest-assessment"><a class="header" href="#anyfs-comparison-positioning--honest-assessment">AnyFS: Comparison, Positioning &amp; Honest Assessment</a></h1>
@@ -11245,7 +11273,7 @@ fs.symlink("/target", "/link")?;  // ❌ Compile error
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>Isolated in process memory</td></tr>
 <tr><td><code>SqliteBackend</code></td><td>Each container is a separate <code>.db</code> file</td></tr>
-<tr><td><code>IndexedBackend</code></td><td>SQLite index + isolated blob directory (content-addressable)</td></tr>
+<tr><td><code>IndexedBackend</code></td><td>SQLite index + isolated blob directory (UUID-named blobs)</td></tr>
 <tr><td><code>StdFsBackend</code></td><td><strong>None</strong> - full filesystem access (do NOT use with untrusted input)</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td>Uses <code>strict-path::VirtualRoot</code> to contain paths</td></tr>
 </tbody>
@@ -22450,6 +22478,53 @@ let quota = QuotaLayer::builder()
 <li><strong>Minor:</strong> Documentation gaps (being addressed)</li>
 </ol>
 <p>With these fixes, the design should be well-received by the Rust community.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="license"><a class="header" href="#license">License</a></h1>
+<p>This project is dual-licensed to allow for open collaboration on the design while ensuring the resulting code examples can be freely used in software implementations.</p>
+<hr>
+<h2 id="documentation-text-and-media"><a class="header" href="#documentation-text-and-media">Documentation (Text and Media)</a></h2>
+<p>The text, diagrams, and other media in this design manual are licensed under the <strong>Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)</strong> license.</p>
+<p><strong>You are free to:</strong></p>
+<ul>
+<li><strong>Share</strong> — copy and redistribute the material in any medium or format</li>
+<li><strong>Adapt</strong> — remix, transform, and build upon the material for any purpose, even commercially</li>
+</ul>
+<p><strong>Under the following terms:</strong></p>
+<ul>
+<li><strong>Attribution</strong> — You must give appropriate credit, provide a link to the license, and indicate if changes were made</li>
+<li><strong>ShareAlike</strong> — If you remix, transform, or build upon the material, you must distribute your contributions under the same license as the original</li>
+</ul>
+<p><a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode">Full CC BY-SA 4.0 Legal Text</a></p>
+<hr>
+<h2 id="code-samples"><a class="header" href="#code-samples">Code Samples</a></h2>
+<p>Any code snippets, examples, or software implementation details contained within this manual are dual-licensed under your choice of:</p>
+<ul>
+<li><strong>MIT License</strong> — <a href="https://opensource.org/licenses/MIT">Full Text</a></li>
+<li><strong>Apache License 2.0</strong> — <a href="https://www.apache.org/licenses/LICENSE-2.0">Full Text</a></li>
+</ul>
+<p>This is the same licensing model used by the Rust ecosystem.</p>
+<hr>
+<h2 id="summary-11"><a class="header" href="#summary-11">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Content Type</th><th>License</th></tr>
+</thead>
+<tbody>
+<tr><td>Documentation text</td><td>CC BY-SA 4.0</td></tr>
+<tr><td>Diagrams and media</td><td>CC BY-SA 4.0</td></tr>
+<tr><td>Code snippets</td><td>MIT OR Apache-2.0</td></tr>
+<tr><td>Example implementations</td><td>MIT OR Apache-2.0</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="attribution"><a class="header" href="#attribution">Attribution</a></h2>
+<p>When attributing this work, please use:</p>
+<blockquote>
+<p>AnyFS Design Manual by David Krasnitsky, licensed under CC BY-SA 4.0 (documentation) and MIT/Apache-2.0 (code samples).
+https://github.com/DK26/anyfs-design-manual</p>
+</blockquote>
 
                     </main>
 

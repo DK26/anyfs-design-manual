@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0cc552b6.js";
+            window.path_to_searchindex_js = "../searchindex-b87b4dc8.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f2dc2851.js"></script>
+        <script src="../toc-ed1a2457.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -205,8 +205,9 @@
 │  └─────────────────────┘    └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 
-IndexedBackend implements this pattern with local disk blobs.
 Custom backends can use S3, cloud storage, or other blob stores.
+IndexedBackend implements a simpler variant with UUID-named local blobs
+(optimized for streaming; see note below on storage models).
 </code></pre>
 <p><strong>Why this pattern?</strong></p>
 <ul>
@@ -214,6 +215,30 @@ Custom backends can use S3, cloud storage, or other blob stores.
 <li>Blob stores scale better for large file content</li>
 <li>Content-addressing enables deduplication</li>
 <li>Separating concerns enables independent scaling</li>
+</ul>
+<h3 id="storage-model-variants"><a class="header" href="#storage-model-variants">Storage Model Variants</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Model</th><th>Blob Naming</th><th>Dedup</th><th>Best For</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Content-Addressed</strong></td><td>SHA-256 of content</td><td>✅ Yes</td><td>Cloud/S3, archival, multi-tenant</td></tr>
+<tr><td><strong>UUID+Timestamp</strong></td><td><code>{uuid}-{timestamp}.bin</code></td><td>❌ No</td><td>Streaming large files, simplicity</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>IndexedBackend</strong> uses <strong>UUID+Timestamp</strong> naming because:</p>
+<ul>
+<li>Large files can be streamed without buffering the entire file to compute a hash</li>
+<li>Write latency is consistent (no hash computation)</li>
+<li>Simpler garbage collection (delete blob when reference removed)</li>
+</ul>
+<p><strong>Custom implementations</strong> may prefer <strong>content-addressed</strong> storage when:</p>
+<ul>
+<li>Deduplication is valuable (many users uploading same files)</li>
+<li>Using cloud blob stores with native CAS support (S3, GCS)</li>
+<li>Building archival systems where write latency is acceptable</li>
 </ul>
 <hr>
 <h2 id="framework-validation"><a class="header" href="#framework-validation">Framework Validation</a></h2>

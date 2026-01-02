@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0cc552b6.js";
+            window.path_to_searchindex_js = "../searchindex-b87b4dc8.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f2dc2851.js"></script>
+        <script src="../toc-ed1a2457.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1128,7 +1128,7 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 <p>To build a complete cloud filesystem service:</p>
 <h3 id="server-side"><a class="header" href="#server-side">Server Side</a></h3>
 <ol>
-<li>Wrap your backend (e.g., <code>HybridBackend</code>) with middleware</li>
+<li>Wrap your backend (e.g., <code>IndexedBackend</code> or custom) with middleware</li>
 <li>Expose via gRPC/REST server</li>
 <li>Add authentication, rate limiting, idempotency</li>
 </ol>
@@ -1156,8 +1156,8 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 │  └─────────────────┘    └─────────────┬───────────────┘    │
 │                                        ▼                    │
 │                         ┌─────────────────────────────┐    │
-│                         │     HybridBackend           │    │
-│                         │  SQLite + Blob Store        │    │
+│                         │     IndexedBackend          │    │
+│                         │  SQLite Index + Disk Blobs  │    │
 │                         └─────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
@@ -1167,7 +1167,7 @@ pub fn mount_remote(backend: impl Fs, mountpoint: &amp;Path) -&gt; Result&lt;(),
 <li>Offline support</li>
 <li>Caching for performance</li>
 <li>Server-side quotas and logging</li>
-<li>Scalable blob storage with dedup</li>
+<li>Large file streaming performance</li>
 </ul>
 
                     </main>

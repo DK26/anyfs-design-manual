@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0cc552b6.js";
+            window.path_to_searchindex_js = "../searchindex-b87b4dc8.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f2dc2851.js"></script>
+        <script src="../toc-ed1a2457.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -265,6 +265,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>sqlite</code> — SQLite-backed persistent storage</li>
 <li><code>sqlite-cipher</code> — Encrypted SQLite via SQLCipher (mutually exclusive with <code>sqlite</code>)</li>
+<li><code>indexed</code> — SQLite index + disk blobs for large file performance</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment (uses <code>strict-path</code>)</li>
 </ul>
