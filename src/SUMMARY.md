@@ -75,3 +75,9 @@
 
 - [Open Questions & Future](./review/open-questions.md)
 - [Design Review: Rust Community Alignment](./review/design-review.md)
+
+---
+
+# Appendix
+
+- [License](./appendix/license.md)
