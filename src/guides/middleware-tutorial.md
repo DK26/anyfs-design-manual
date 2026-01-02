@@ -421,13 +421,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## The Middleware Pattern Cheat Sheet
 
-| What You Want | Intercept | Delegate | Return |
-|---------------|-----------|----------|--------|
-| Count operations | Before call | Always | Inner result |
-| Block some paths | Before call | If allowed | Error or inner result |
-| Block writes | Write methods | Read methods | Error or inner result |
-| Transform data | read/write | Everything else | Modified data |
-| Log operations | Before/after | Always | Inner result |
+| What You Want    | Intercept     | Delegate        | Return                |
+| ---------------- | ------------- | --------------- | --------------------- |
+| Count operations | Before call   | Always          | Inner result          |
+| Block some paths | Before call   | If allowed      | Error or inner result |
+| Block writes     | Write methods | Read methods    | Error or inner result |
+| Transform data   | read/write    | Everything else | Modified data         |
+| Log operations   | Before/after  | Always          | Inner result          |
 
 ### Three Types of Middleware
 
@@ -624,8 +624,9 @@ let fs = MemoryBackend::new()
     .layer(ReadOnlyLayer)           // Make read-only
     .layer(CounterLayer);           // Count operations
 
-// Order matters! Outermost runs first.
-// Request: Counter → ReadOnly → SecretBlocker → MemoryBackend
+// Layers wrap from inside out. For a request:
+// Counter (outermost) → ReadOnly → SecretBlocker → MemoryBackend (innermost)
+// The innermost middleware (closest to backend) applies first to the actual operation.
 ```
 
 ---

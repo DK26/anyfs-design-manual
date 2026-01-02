@@ -90,6 +90,7 @@ anyfs/                      # Crate 2: backends + middleware + FileStorage
       memory.rs             # MemoryBackend
       sqlite.rs             # SqliteBackend
       sqlite_cipher.rs      # SqliteCipherBackend (feature: sqlite-cipher)
+      indexed.rs            # IndexedBackend (feature: indexed)
       stdfs.rs              # StdFsBackend (no containment)
       vrootfs.rs            # VRootFsBackend (with containment)
     middleware/
@@ -230,13 +231,18 @@ fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { /* only accepts Sandbox
 
 ## Built-in Backends
 
-| Backend               | Description                                             |
-| --------------------- | ------------------------------------------------------- |
-| `MemoryBackend`       | In-memory storage, implements `Clone` for snapshots     |
-| `SqliteBackend`       | Single-file portable database                           |
-| `SqliteCipherBackend` | Encrypted SQLite via SQLCipher (AES-256)                |
-| `StdFsBackend`        | Direct `std::fs` delegation (no containment)            |
-| `VRootFsBackend`      | Host filesystem with path containment (via strict-path) |
+| Backend               | Description                                                    |
+| --------------------- | -------------------------------------------------------------- |
+| `MemoryBackend`       | In-memory storage, implements `Clone` for snapshots            |
+| `SqliteBackend`       | Single-file portable database                                  |
+| `SqliteCipherBackend` | Encrypted SQLite via SQLCipher (AES-256)                       |
+| `IndexedBackend`      | Virtual paths + disk blobs (large file support with isolation) |
+| `StdFsBackend`        | Direct `std::fs` delegation (no containment)                   |
+| `VRootFsBackend`      | Host filesystem with path containment (via strict-path)        |
+
+> **Backend vs Middleware:** A backend is WHERE data lives. Middleware WRAPS a backend to add behavior.
+> `IndexedBackend` is a backend (stores virtual paths in SQLite index + file content as disk blobs).
+> `Indexing<B>` middleware (different thing) adds queryable audit trail to ANY backend.
 
 ### MemoryBackend Snapshots
 
@@ -435,4 +441,36 @@ OPT-IN TYPE ERASURE:
 2. **Thread Safety** - `MemoryBackend` uses `Arc<RwLock<...>>`, `SqliteBackend` uses WAL mode
 3. **Error Context** - Include path and operation in all errors
 4. **Path Edge Cases** - Handle `/../`, `//`, empty paths, unicode, long paths
+
+---
+
+## Critical: Reviewer & AI Guidelines
+
+**Before suggesting removal or renaming of any backend, middleware, or API:**
+
+1. **Understand the difference between backends and middleware:**
+   - Backend = WHERE data is stored (MemoryBackend, SqliteBackend, IndexedBackend, etc.)
+   - Middleware = WRAPS a backend to add behavior (Quota, Tracing, Indexing, etc.)
+   - These are NOT interchangeable. You cannot replace a backend with middleware.
+
+2. **IndexedBackend vs Indexing<B> middleware - DIFFERENT THINGS:**
+   - `IndexedBackend` = A backend that stores virtual paths in SQLite + file content as disk blobs
+   - `Indexing<B>` = Middleware that adds queryable audit trail to any backend
+   - One stores data. The other observes operations. Not the same.
+
+3. **Do NOT remove backends because "it can be done with middleware":**
+   - If the component defines WHERE data lives, it's a backend
+   - Middleware cannot create new storage locations
+
+4. **Naming consistency:**
+   - Use `VRootFsBackend` (not `VirtualRootBackend`)
+   - Use `IndexedBackend` (not `HybridBackend` or `MappedBackend`)
+   - Check AGENTS.md Built-in Backends table for canonical names
+
+5. **AnyFS makes promises and delivers:**
+   - Every backend supports ALL filesystem operations (read, write, streaming, large files)
+   - Performance tradeoffs exist, but functionality is complete
+   - Do NOT claim "X isn't designed for Y" - if it's in the API, it works
+
+6. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
 
