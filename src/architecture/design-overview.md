@@ -1131,25 +1131,31 @@ fn run_agent(fs: &SandboxFs) { ... }
 
 ```rust
 use std::marker::PhantomData;
+use anyfs_backend::PathResolver;
+use anyfs::resolvers::IterativeResolver;
 
 /// Zero-cost ergonomic wrapper.
-/// Generic over backend (B) and marker (M).
-pub struct FileStorage<B, M = ()> {
+/// Generic over backend (B), resolver (R), and marker (M).
+pub struct FileStorage<B, R = IterativeResolver, M = ()> {
     backend: B,
+    resolver: R,
     _marker: PhantomData<M>,
 }
 
-impl<B: Fs, M> FileStorage<B, M> {
+impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
+    /// Create with default resolver (IterativeResolver).
     /// Marker type is specified via type annotation:
-    /// `let fs: FileStorage<_, MyMarker> = FileStorage::new(backend);`
-    pub fn new(backend: B) -> Self {
-        FileStorage { backend, _marker: PhantomData }
-    }
+    /// `let fs: FileStorage<_, _, MyMarker> = FileStorage::new(backend);`
+    pub fn new(backend: B) -> Self { ... }
+}
+
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
+    /// Create with custom path resolver (see ADR-033).
+    pub fn with_resolver(backend: B, resolver: R) -> Self { ... }
 
     /// Type-erase the backend (opt-in boxing).
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, M> {
-        FileStorage { backend: Box::new(self.backend), _marker: PhantomData }
-    }
+    /// Note: resolver type is preserved.
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M> { ... }
 }
 ```
 

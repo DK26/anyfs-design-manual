@@ -165,38 +165,49 @@ For virtual backends, FileStorage performs symlink-aware path resolution before 
 
 ```rust
 use std::marker::PhantomData;
-use anyfs_backend::Fs;
+use anyfs_backend::{Fs, PathResolver};
+use anyfs::resolvers::IterativeResolver;
 
 /// Zero-cost ergonomic wrapper.
-/// Generic over backend (B) and marker (M).
-pub struct FileStorage<B, M = ()> {
+/// Generic over backend (B), resolver (R), and marker (M).
+pub struct FileStorage<B, R = IterativeResolver, M = ()> {
     backend: B,
+    resolver: R,
     _marker: PhantomData<M>,
 }
 
-impl<B: Fs, M> FileStorage<B, M> {
+impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
     /// Create a new FileStorage with default resolver (IterativeResolver).
     /// Marker type is specified via type annotation:
-    /// `let fs: FileStorage<_, MyMarker> = FileStorage::new(backend);`
+    /// `let fs: FileStorage<_, _, MyMarker> = FileStorage::new(backend);`
     pub fn new(backend: B) -> Self {
-        FileStorage { backend, _marker: PhantomData }
+        FileStorage {
+            backend,
+            resolver: IterativeResolver::new(),
+            _marker: PhantomData,
+        }
     }
+}
 
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
     /// Create FileStorage with a custom path resolver.
     /// See ADR-033 for PathResolver trait details.
-    pub fn with_resolver(backend: B, resolver: impl PathResolver) -> Self {
-        // Uses provided resolver instead of default IterativeResolver
-        FileStorage { backend, _marker: PhantomData }
-    }
-    
-    /// Builder pattern for advanced configuration.
-    pub fn builder(backend: B) -> FileStorageBuilder<B, M> {
-        FileStorageBuilder::new(backend)
+    pub fn with_resolver(backend: B, resolver: R) -> Self {
+        FileStorage {
+            backend,
+            resolver,
+            _marker: PhantomData,
+        }
     }
 
     /// Type-erase the backend for simpler types (opt-in boxing).
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, M> {
-        FileStorage { backend: Box::new(self.backend), _marker: PhantomData }
+    /// Note: resolver type is preserved (no boxing).
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M> {
+        FileStorage {
+            backend: Box::new(self.backend),
+            resolver: self.resolver,
+            _marker: PhantomData,
+        }
     }
 }
 ```
@@ -209,7 +220,7 @@ FileStorage handles path resolution for virtual backends via the `PathResolver` 
 use anyfs::{FileStorage, MemoryBackend};
 use anyfs::resolvers::{IterativeResolver, CachingResolver};
 
-// Default: uses IterativeResolver
+// Default: uses IterativeResolver (zero-cost, likely ZST)
 let fs = FileStorage::new(MemoryBackend::new());
 
 // Custom: with caching resolver for read-heavy workloads
@@ -217,15 +228,9 @@ let fs = FileStorage::with_resolver(
     MemoryBackend::new(),
     CachingResolver::new(IterativeResolver::default())
 );
-
-// Builder pattern for more options
-let fs = FileStorage::builder(MemoryBackend::new())
-    .with_resolver(CachingResolver::default())
-    .build();
 ```
 
 Backends implementing `SelfResolving` (like `VRootFsBackend`) skip resolution since the OS handles it.
-```
 
 ---
 

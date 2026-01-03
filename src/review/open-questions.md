@@ -55,7 +55,7 @@ impl SelfResolving for VRootFsBackend {}
 2. Path resolution is pluggable via `PathResolver` trait (ADR-033). Built-in resolvers include:
    - `IterativeResolver` - default symlink-aware resolution
    - `NoOpResolver` - for `SelfResolving` backends
-   - `CachingResolver` - LRU cache wrapper
+   - `CachingResolver` - LRU cache with TTL expiration (best-effort, eventually consistent)
 
 ---
 

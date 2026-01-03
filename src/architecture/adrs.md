@@ -1404,24 +1404,19 @@ pub struct CachingResolver<R: PathResolver> {
 **Integration with FileStorage:**
 
 ```rust
-impl<B: Fs, M> FileStorage<B, M> {
-    /// Create FileStorage with default resolver.
+impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
     pub fn new(backend: B) -> Self { ... }
-    
-    /// Create FileStorage with custom resolver.
-    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self {
-        Self {
-            backend,
-            resolver: Box::new(resolver),
-            _marker: PhantomData,
-        }
+}
+
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
+    pub fn with_resolver(backend: B, resolver: R) -> Self {
+        Self { backend, resolver, _marker: PhantomData }
     }
 }
 
-// Or via builder pattern
-FileStorage::builder(backend)
-    .with_resolver(CachingResolver::new(IterativeResolver::default()))
-    .build()
+// Usage
+let fs = FileStorage::new(backend);  // Uses IterativeResolver
+let fs = FileStorage::with_resolver(backend, CachingResolver::new(IterativeResolver::default()));
 ```
 
 **Relationship with FsPath Trait:**
@@ -1475,22 +1470,19 @@ Or backends can override entirely for optimized implementations (e.g., SQLite CT
 **Example Use Cases:**
 
 ```rust
-// Default: case-sensitive, symlink-aware
+// Default: case-sensitive, symlink-aware (IterativeResolver is ZST, zero-cost)
 let fs = FileStorage::new(MemoryBackend::new());
 
-// Aggressive caching for read-heavy workloads
-let fs = FileStorage::builder(backend)
-    .with_resolver(CachingResolver::new(IterativeResolver::default()))
-    .build();
+// Caching for read-heavy workloads
+let fs = FileStorage::with_resolver(
+    backend,
+    CachingResolver::new(IterativeResolver::default())
+);
 
 // Custom resolver (user-implemented)
-let fs = FileStorage::builder(backend)
-    .with_resolver(MyCustomResolver::new())
-    .build();
-    .with_resolver(CachingResolver::new(IterativeResolver::default()))
-    .build();
+let fs = FileStorage::with_resolver(backend, MyCustomResolver::new());
 
-// Testing: verify resolution behavior
+// Testing: verify resolution behavior in isolation
 #[test]
 fn test_symlink_loop_detection() {
     let resolver = IterativeResolver::new();
@@ -1500,17 +1492,7 @@ fn test_symlink_loop_detection() {
 }
 ```
 
-**Trade-offs:**
-
-| Approach                  | Pros                            | Cons                               |
-| ------------------------- | ------------------------------- | ---------------------------------- |
-| Trait object (`Box<dyn>`) | Simple API, runtime flexibility | ~50ns per call (negligible vs I/O) |
-| Generic parameter         | Zero-cost, compile-time         | Adds complexity to FileStorage     |
-| Associated type on FsPath | Trait-level, backend controls   | Complicates blanket impl           |
-
-**Recommendation:** Use trait object (`Box<dyn PathResolver>`) for simplicity. Following ADR-025 (Strategic Boxing), the ~50ns box overhead is <1% of actual I/O time and enables maximum flexibility.
-
-**Conclusion:** The `PathResolver` trait provides clean separation of concerns, making path resolution testable, benchmarkable, and extensible. It complements `FsPath` (backend optimization hook) and can replace or work alongside `SelfResolving` (via `NoOpResolver`). This design follows the Tower/Axum philosophy of composable, swappable components.
+**Conclusion:** The `PathResolver` trait provides clean separation of concerns, making path resolution testable, benchmarkable, and extensible. It complements `FsPath` (backend optimization hook) and can replace or work alongside `SelfResolving` (via `NoOpResolver`).
 
 ---
 

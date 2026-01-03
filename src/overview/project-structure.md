@@ -58,7 +58,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
     resolvers/
       iterative.rs          # IterativeResolver (default)
       noop.rs               # NoOpResolver (for SelfResolving backends)
-      caching.rs            # CachingResolver (LRU cache wrapper)
+      caching.rs            # CachingResolver (LRU cache with TTL, best-effort)
     container.rs            # FileStorage<B, M>
     stack.rs                # BackendStack builder
 ```

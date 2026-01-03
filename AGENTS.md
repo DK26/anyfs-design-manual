@@ -248,17 +248,19 @@ impl<T: Fs + FsLink + FsPermissions + FsSync + FsStats> FsFull for T {}
 
 ---
 
-## FileStorage<B, M> (Zero-Cost Wrapper)
+## FileStorage<B, R, M> (Zero-Cost Wrapper)
 
 ```rust
-pub struct FileStorage<B, M = ()> {
+pub struct FileStorage<B, R = IterativeResolver, M = ()> {
     backend: B,
+    resolver: R,
     _marker: PhantomData<M>,
 }
 
-impl<B: Fs, M> FileStorage<B, M> {
-    pub fn new(backend: B) -> Self;
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, M>;  // Opt-in type erasure
+impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
+    pub fn new(backend: B) -> Self;                     // Default IterativeResolver
+    pub fn with_resolver<R2: PathResolver>(backend: B, resolver: R2) -> FileStorage<B, R2, M>;
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, IterativeResolver, M>;  // Opt-in type erasure
 }
 ```
 
@@ -268,10 +270,10 @@ impl<B: Fs, M> FileStorage<B, M> {
 struct Sandbox;
 struct UserData;
 
-let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
 
-fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { /* only accepts Sandbox */ }
+fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { /* only accepts Sandbox */ }
 ```
 
 ---
@@ -529,5 +531,12 @@ OPT-IN TYPE ERASURE:
    - Suggested features must be implementable in the real world and make sense within AnyFS's architecture
    - Ask: "How would this actually be implemented? Does it fit our trait hierarchy and middleware pattern?"
 
-7. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
+7. **Do NOT add justification for "decisions" that were never actually made:**
+   - This is a design manual, not a changelog
+   - Document what the design IS, not what it isn't
+   - If you make an error and then fix it, don't document "why we didn't do the wrong thing"
+   - ADRs may include rejected alternatives when there was a real design dilemma
+   - But implementation docs should not explain why non-options weren't chosen
+
+8. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
 
