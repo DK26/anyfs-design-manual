@@ -4,6 +4,25 @@ READ THIS FIRST before making any changes to this repository.
 
 ---
 
+## ⚠️ CRITICAL: Authoritative Source of Truth
+
+**AGENTS.md is the ONLY authoritative source for design decisions.**
+
+Other files (README.md, docs/*.html, archived files) may be **OUTDATED**. If you see conflicts:
+1. **AGENTS.md wins.** Always.
+2. Fix the outdated file to match AGENTS.md.
+3. Never propagate outdated patterns from other files.
+
+**Common outdated patterns to REJECT:**
+- `anyfs-mount` as a separate crate → WRONG. Mounting is `anyfs` crate with `fuse`/`winfsp` features.
+- `anyfs_mount::MountHandle` → WRONG. Use `anyfs::MountHandle`.
+- "v1", "v2", "post-v1", "v1.1" → WRONG. We plan ONE version. Use "Future Considerations".
+- `Box<dyn PathResolver>` → WRONG. Use generic parameter `R: PathResolver`.
+
+**Before making changes:** If you see a pattern in README.md or other docs that contradicts AGENTS.md, **fix the outdated doc**, do not follow it.
+
+---
+
 ## Project Overview
 
 > **This repository contains the design manual only.**

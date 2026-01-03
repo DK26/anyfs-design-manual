@@ -4,7 +4,7 @@
 
 It lets you control **how a drive acts, looks, and protects itself.**
 
-Whether it's a real filesystem, a SQLite database, or pure RAM, it can be mounted to look like a standard drive to your OS (planned companion crate; roadmap defined), but with *your* rules: quotas, audit logging, and sandbox controls. (Prometheus metrics planned post-v1.)
+Whether it's a real filesystem, a SQLite database, or pure RAM, it can be mounted to look like a standard drive to your OS (via `fuse` and `winfsp` feature flags), but with *your* rules: quotas, audit logging, and sandbox controls.
 
 A composable middleware stack for filesystem operations with pluggable backends.
 
@@ -169,12 +169,12 @@ fs.save_to("state.bin")?;
 let fs = MemoryBackend::load_from("state.bin")?;
 ```
 
-### Cross-Platform Virtual Drive Mounting (Planned, Roadmap Defined)
+### Cross-Platform Virtual Drive Mounting
 
-Mount any compatible backend (requires `FsFuse`) as a real filesystem drive via the planned companion crate (`anyfs-mount`). API sketch:
+Mount any compatible backend (requires `FsFuse`) as a real filesystem drive via the `fuse` (Linux/macOS) or `winfsp` (Windows) feature flags:
 
 ```rust
-use anyfs_mount::MountHandle;
+use anyfs::MountHandle;
 
 let mount = MountHandle::mount(backend, "/mnt/virtual")?;
 // Now any application can access /mnt/virtual
@@ -186,7 +186,7 @@ let mount = MountHandle::mount(backend, "/mnt/virtual")?;
 | macOS    | macFUSE       |
 | Windows  | WinFsp        |
 
-**Roadmap:** Milestones and MVP scope are tracked in `src/guides/mounting.md`.
+**Details:** Full mounting documentation is in `src/guides/mounting.md`.
 
 ### Security by Design
 
@@ -200,7 +200,7 @@ let mount = MountHandle::mount(backend, "/mnt/virtual")?;
 
 ### Killer Feature: Live Mount Observability 🚀
 
-Future concept: mount your AnyFS stack as a real drive (FUSE/WinFsp) and get **real-time visibility** into OS operations.
+Mount your AnyFS stack as a real drive (FUSE/WinFsp) and get **real-time visibility** into OS operations.
 
 Because AnyFS sits *between* the OS and the storage:
 
@@ -208,8 +208,6 @@ Because AnyFS sits *between* the OS and the storage:
 - **Active Defense**: Scan files for viruses *as they are written* by any external app.
 - **Audit Logs**: See exactly which files legacy applications are touching.
 - **Access Control**: Revoke write permissions dynamically while the drive is mounted.
-
-This is a future idea that depends on the mounting crate and is not implemented in v1.
 
 ---
 
@@ -421,21 +419,18 @@ let content = fs.read_to_string("/docs/hello.txt")?;
 
 ## Crate Structure
 
-| Crate           | Purpose                                                                         |
-| --------------- | ------------------------------------------------------------------------------- |
-| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors |
-| `anyfs`         | Built-in backends, middleware, `FileStorage<B, M>` wrapper                      |
-| `anyfs-mount`   | Companion crate for cross-platform mounting (planned)                           |
-
-Core AnyFS is the two-crate split (`anyfs-backend`, `anyfs`). `anyfs-mount` is a planned companion crate (design complete; implementation pending), not part of the core crates.
+| Crate           | Purpose                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors                  |
+| `anyfs`         | Built-in backends, middleware, `FileStorage<B, M>` wrapper, mounting (`fuse`, `winfsp` features) |
 
 ```toml
 [dependencies]
 anyfs = { version = "0.1", features = ["sqlite"] }
 
-# Optional: for mounting as virtual drive
-# Planned companion crate (not yet published):
-# anyfs-mount = "0.1"
+# For mounting as virtual drive:
+anyfs = { version = "0.1", features = ["sqlite", "fuse"] }  # Linux/macOS
+anyfs = { version = "0.1", features = ["sqlite", "winfsp"] } # Windows
 ```
 
 ---
