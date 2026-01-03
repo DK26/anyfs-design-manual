@@ -56,6 +56,7 @@
 - [Technical Comparison with Alternatives](./comparisons/technical-comparison.md)
 - [Build vs Reuse Analysis](./comparisons/build-vs-reuse.md)
 - [Prior Art Analysis](./comparisons/prior-art-analysis.md)
+- [Benchmarking Plan](./comparisons/benchmarking-plan.md)
 
 ---
 
