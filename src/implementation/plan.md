@@ -455,9 +455,9 @@ Required CI checks:
 
 ---
 
-## Phase 6: `anyfs-mount` - Mount as Real Filesystem (planned)
+## Phase 6: Mounting Support (`fuse`, `winfsp` features)
 
-**Goal:** Ship a companion crate that makes mounting AnyFS stacks easy, safe, and enjoyable for programmers, without compromising backend semantics.
+**Goal:** Make mounting AnyFS stacks easy, safe, and enjoyable for programmers. Mounting is part of the `anyfs` crate behind feature flags.
 
 ### Milestones
 
@@ -481,8 +481,7 @@ Required CI checks:
 **API sketch (subject to change):**
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer, FsFuse};
-use anyfs_mount::MountHandle;
+use anyfs::{MemoryBackend, QuotaLayer, FsFuse, MountHandle};
 
 // RAM drive with 1GB quota
 let backend = MemoryBackend::new()
@@ -501,13 +500,13 @@ let mount = MountHandle::mount(backend, "/mnt/ramdisk")?;
 
 **Cross-Platform Support (planned):**
 
-| Platform | Provider | Rust Crate | User Must Install                     |
-| -------- | -------- | ---------- | ------------------------------------- |
-| Linux    | FUSE     | `fuser`    | `fuse3` package                       |
-| macOS    | macFUSE  | `fuser`    | [macFUSE](https://osxfuse.github.io/) |
-| Windows  | WinFsp   | `winfsp`   | [WinFsp](https://winfsp.dev/)         |
+| Platform | Provider | Rust Crate | Feature Flag | User Must Install                     |
+| -------- | -------- | ---------- | ------------ | ------------------------------------- |
+| Linux    | FUSE     | `fuser`    | `fuse`       | `fuse3` package                       |
+| macOS    | macFUSE  | `fuser`    | `fuse`       | [macFUSE](https://osxfuse.github.io/) |
+| Windows  | WinFsp   | `winfsp`   | `winfsp`     | [WinFsp](https://winfsp.dev/)         |
 
-`anyfs-mount` provides a unified API across platforms:
+The `anyfs` crate provides a unified API across platforms:
 
 ```rust
 impl MountHandle {
@@ -562,7 +561,7 @@ let sandbox = MountHandle::mount(
 ┌────────────────────────────────────────────────┐
 │  /mnt/myfs (FUSE mount point)                  │
 ├────────────────────────────────────────────────┤
-│  anyfs-mount                                   │
+│  anyfs::mount (fuse/winfsp feature)            │
 │    - Linux/macOS: fuser                        │
 │    - Windows: winfsp                           │
 ├────────────────────────────────────────────────┤
@@ -597,12 +596,12 @@ let sandbox = MountHandle::mount(
 - Companion shell (`anyfs-shell`) for interactive exploration of backends and middleware
 - **Language bindings** (`anyfs-python` via PyO3, C bindings) - see design-overview.md for approach
 - **Dynamic middleware plugin system** (`MiddlewarePlugin` trait for runtime-loaded `.so`/`.dll` plugins)
-- **Metrics middleware** with Prometheus exporter (`GET /metrics` endpoint) - post-v1
+- **Metrics middleware** with Prometheus exporter (`GET /metrics` endpoint)
 - **Configurable tracing/logging backends** (structured logs, CEF events, remote sinks)
 
 ### `anyfs-shell` - Local Companion Shell
 
-Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a post-v1 companion crate, not part of the core libraries.
+Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a companion crate, not part of the core libraries.
 
 **Goals:**
 - Route all operations through `FileStorage` to exercise middleware and backend composition.
@@ -749,7 +748,7 @@ aws s3 cp s3://user-files/document.pdf ./local.pdf --endpoint-url http://yourser
 
 #### `anyfs-remote` - Remote Backend Client
 
-An `Fs` implementation that connects to a remote server. Works with `FileStorage` or `anyfs-mount`.
+An `Fs` implementation that connects to a remote server. Works with `FileStorage` or mounting.
 
 ```rust
 use anyfs_remote::RemoteBackend;
@@ -769,7 +768,7 @@ fs.write("/documents/report.pdf", data)?;
 
 ```rust
 use anyfs_remote::RemoteBackend;
-use anyfs_mount::MountHandle;
+use anyfs::MountHandle;
 
 // Mount remote storage as local directory
 let remote = RemoteBackend::connect("https://yourserver.com")?;
@@ -919,8 +918,7 @@ Give users a real SSH shell where their home directory is backed by `FsFuse`.
 **Server implementation:**
 
 ```rust
-use anyfs::{SqliteBackend, Quota};
-use anyfs_mount::MountHandle;
+use anyfs::{SqliteBackend, Quota, MountHandle};
 use anyfs_ssh_shell::SshShellServer;
 
 // On user login, mount their isolated storage as $HOME
@@ -981,16 +979,16 @@ alice@server:~$ du -sh .
 
 #### Access Pattern Summary
 
-| Access Method | Crate                             | Client Requirement     | Best For                       |
-| ------------- | --------------------------------- | ---------------------- | ------------------------------ |
-| S3 API        | `anyfs-s3-server`                 | AWS SDK (any language) | Object storage, web apps       |
-| SFTP          | `anyfs-sftp-server`               | Any SFTP client        | Shell-like file access         |
-| SSH Shell     | `anyfs-ssh-shell` + `anyfs-mount` | SSH client             | Full shell with sandboxed home |
-| gRPC          | `anyfs-grpc`                      | Generated client       | High-performance apps          |
-| REST          | Custom adapter                    | HTTP client            | Simple integrations            |
-| FUSE mount    | `anyfs-mount` + `anyfs-remote`    | FUSE installed         | Transparent local access       |
-| WebDAV        | `anyfs-webdav`                    | WebDAV client/OS       | File manager access            |
-| NFS           | `anyfs-nfs`                       | NFS client             | Unix network shares            |
+| Access Method | Crate                                      | Client Requirement     | Best For                       |
+| ------------- | ------------------------------------------ | ---------------------- | ------------------------------ |
+| S3 API        | `anyfs-s3-server`                          | AWS SDK (any language) | Object storage, web apps       |
+| SFTP          | `anyfs-sftp-server`                        | Any SFTP client        | Shell-like file access         |
+| SSH Shell     | `anyfs-ssh-shell` + `anyfs` (fuse feature) | SSH client             | Full shell with sandboxed home |
+| gRPC          | `anyfs-grpc`                               | Generated client       | High-performance apps          |
+| REST          | Custom adapter                             | HTTP client            | Simple integrations            |
+| FUSE mount    | `anyfs` (fuse feature) + `anyfs-remote`    | FUSE installed         | Transparent local access       |
+| WebDAV        | `anyfs-webdav`                             | WebDAV client/OS       | File manager access            |
+| NFS           | `anyfs-nfs`                                | NFS client             | Unix network shares            |
 
 ---
 

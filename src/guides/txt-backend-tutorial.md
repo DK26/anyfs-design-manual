@@ -48,12 +48,12 @@ One line per entry. Four comma-separated fields. Dead simple:
 path,type,mode,data
 ```
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| `path` | Absolute path | `/docs/file.txt` |
-| `type` | `file` or `dir` | `file` |
-| `mode` | Unix permissions (octal) | `644` |
-| `data` | Base64-encoded content | `SGVsbG8=` |
+| Field  | Description              | Example          |
+| ------ | ------------------------ | ---------------- |
+| `path` | Absolute path            | `/docs/file.txt` |
+| `type` | `file` or `dir`          | `file`           |
+| `mode` | Unix permissions (octal) | `644`            |
+| `data` | Base64-encoded content   | `SGVsbG8=`       |
 
 Directories have empty data field. That's the entire format. Open in Notepad, add a line, you created a file.
 
@@ -839,12 +839,12 @@ If you're feeling brave:
 
 ---
 
-## Bonus: Mount It as a Drive (Planned)
+## Bonus: Mount It as a Drive
 
-With the planned `anyfs-mount` companion crate, you can mount your text file as a real filesystem:
+With the `fuse` feature enabled, you can mount your text file as a real filesystem:
 
 ```rust
-use anyfs_mount::MountHandle;
+use anyfs::MountHandle;
 
 let backend = TxtBackend::open("filesystem.txt")?;
 let mount = MountHandle::mount(backend, "/mnt/txt")?;

@@ -185,7 +185,7 @@ CacheLayer::builder()
 
 ---
 
-## IndexLayer Methods (Post-v1)
+## IndexLayer Methods (Future)
 
 ```rust
 // Builder pattern (required - set index path)

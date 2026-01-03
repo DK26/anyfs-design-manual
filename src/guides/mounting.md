@@ -2,13 +2,11 @@
 
 **Mounting AnyFS backends as real filesystem mount points**
 
-**Status:** Planned companion crate (`anyfs-mount`). Design and roadmap are complete; implementation is pending.
-
 ---
 
 ## Overview
 
-AnyFS backends are intended to be mountable as real filesystem drives that any application can access once `anyfs-mount` ships. This requires platform-specific adapters because each OS uses different userspace filesystem technologies. The design is captured here while `anyfs-mount` moves from spec to implementation.
+AnyFS backends implementing `FsFuse` can be mounted as real filesystem drives that any application can access. This is part of the `anyfs` crate (behind feature flags: `fuse` for Linux/macOS, `winfsp` for Windows) because mounting is a core promise of AnyFS, not an optional extra.
 
 ---
 
@@ -51,7 +49,7 @@ Mounting is a core AnyFS promise: make filesystem composition easy, safe, and ge
 
 ---
 
-## Non-goals for v1
+## Non-goals
 
 - Kernel drivers or kernel-space code
 - WASM or browser environments
@@ -61,12 +59,12 @@ Mounting is a core AnyFS promise: make filesystem composition easy, safe, and ge
 
 ## Platform Technologies
 
-| Platform | Technology | Rust Crate | User Installation |
-|----------|------------|------------|-------------------|
-| Linux | FUSE | `fuser` | Usually pre-installed |
-| macOS | macFUSE | `fuser` | [macFUSE](https://osxfuse.github.io/) |
-| Windows | WinFsp | `winfsp` | [WinFsp](https://winfsp.dev/) |
-| Windows | Dokan | `dokan` | [Dokan](https://dokan-dev.github.io/) |
+| Platform | Technology | Rust Crate | User Installation                     |
+| -------- | ---------- | ---------- | ------------------------------------- |
+| Linux    | FUSE       | `fuser`    | Usually pre-installed                 |
+| macOS    | macFUSE    | `fuser`    | [macFUSE](https://osxfuse.github.io/) |
+| Windows  | WinFsp     | `winfsp`   | [WinFsp](https://winfsp.dev/)         |
+| Windows  | Dokan      | `dokan`    | [Dokan](https://dokan-dev.github.io/) |
 
 **Key insight:** Linux and macOS both use FUSE (via `fuser` crate), but Windows requires a completely different API (WinFsp or Dokan).
 
@@ -158,46 +156,47 @@ impl Drop for MountHandle {
 
 ---
 
-## Crate Structure
+## Module Structure
+
+Mounting is part of the `anyfs` crate:
 
 ```
-anyfs-mount/                    # Unified mounting crate
-  Cargo.toml
+anyfs/
   src/
-    lib.rs                      # MountHandle, MountError
-    error.rs                    # MountError definitions
-    handle.rs                   # MountHandle, MountOptions, builder
+    mount/
+      mod.rs                    # MountHandle, MountError, re-exports
+      error.rs                  # MountError definitions
+      handle.rs                 # MountHandle, MountOptions, builder
 
-    unix/
-      mod.rs                    # cfg(unix)
-      fuse_adapter.rs           # FUSE implementation via fuser
+      unix/
+        mod.rs                  # cfg(unix)
+        fuse_adapter.rs         # FUSE implementation via fuser
 
-    windows/
-      mod.rs                    # cfg(windows)
-      winfsp_adapter.rs         # WinFsp implementation
-      dokan_adapter.rs          # Dokan implementation (alternative)
+      windows/
+        mod.rs                  # cfg(windows)
+        winfsp_adapter.rs       # WinFsp implementation
 ```
 
-### Cargo.toml
+### Feature Flags in anyfs Cargo.toml
 
 ```toml
 [package]
-name = "anyfs-mount"
+name = "anyfs"
 version = "0.1.0"
 
 [dependencies]
 anyfs-backend = { version = "0.1" }
 
 [target.'cfg(unix)'.dependencies]
-fuser = "0.14"
+fuser = { version = "0.14", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winfsp = "0.4"
-# or: dokan = "0.3"
+winfsp = { version = "0.4", optional = true }
 
 [features]
 default = []
-dokan = ["dep:dokan"]  # Use Dokan instead of WinFsp on Windows
+fuse = ["dep:fuser"]      # Enable mounting on Linux/macOS
+winfsp = ["dep:winfsp"]   # Enable mounting on Windows
 ```
 
 ---
@@ -348,8 +347,7 @@ fn to_ntstatus(e: FsError) -> NTSTATUS {
 ### Basic Mount
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer};
-use anyfs_mount::MountHandle;
+use anyfs::{MemoryBackend, QuotaLayer, MountHandle};
 
 // Create backend with middleware
 let backend = MemoryBackend::new()
@@ -445,8 +443,7 @@ pub enum MountError {
 All middleware works transparently when mounted:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, PathFilter, Tracing, RateLimit};
-use anyfs_mount::MountHandle;
+use anyfs::{SqliteBackend, Quota, PathFilter, Tracing, RateLimit, MountHandle};
 
 // Build secure, audited, rate-limited mount
 let backend = SqliteBackend::open("data.db")?
@@ -531,12 +528,12 @@ let mount = MountHandle::mount(cached, "/mnt/cloud")?;
 
 ## Platform Requirements Summary
 
-| Platform | Driver | Install Command / URL |
-|----------|--------|----------------------|
-| Linux | FUSE | Usually pre-installed. If not: `apt install fuse3` |
-| macOS | macFUSE | https://osxfuse.github.io/ |
-| Windows | WinFsp | https://winfsp.dev/ (recommended) |
-| Windows | Dokan | https://dokan-dev.github.io/ (alternative) |
+| Platform | Driver  | Install Command / URL                              |
+| -------- | ------- | -------------------------------------------------- |
+| Linux    | FUSE    | Usually pre-installed. If not: `apt install fuse3` |
+| macOS    | macFUSE | https://osxfuse.github.io/                         |
+| Windows  | WinFsp  | https://winfsp.dev/ (recommended)                  |
+| Windows  | Dokan   | https://dokan-dev.github.io/ (alternative)         |
 
 ---
 
@@ -554,11 +551,11 @@ let mount = MountHandle::mount(cached, "/mnt/cloud")?;
 
 For many use cases, mounting isn't necessary. AnyFS backends can be used directly:
 
-| Need | With Mounting | Without Mounting |
-|------|---------------|------------------|
-| Build tools | Mount, run tools | Use tool's VFS plugin if available |
-| File browser | Mount as drive | Build custom UI with AnyFS API |
-| Backup | Mount, use rsync | Use AnyFS API directly |
-| Database | Mount for SQL tools | Query SQLite directly |
+| Need         | With Mounting       | Without Mounting                   |
+| ------------ | ------------------- | ---------------------------------- |
+| Build tools  | Mount, run tools    | Use tool's VFS plugin if available |
+| File browser | Mount as drive      | Build custom UI with AnyFS API     |
+| Backup       | Mount, use rsync    | Use AnyFS API directly             |
+| Database     | Mount for SQL tools | Query SQLite directly              |
 
 **Rule of thumb:** Only mount when you need compatibility with external applications that expect real filesystem paths.

@@ -138,11 +138,11 @@ anyfs-backend (trait + types)
 
 ---
 
-## Future Ideas (Post-v1)
+## Future Considerations
 
-These are optional extensions to explore after the core is stable. They are intentionally not part of v1.
+These are optional extensions to explore after the core is stable.
 
-**Keep (post-v1 add-ons that fit the current design):**
+**Keep (add-ons that fit the current design):**
 - URL-based backend registry (`sqlite://`, `mem://`, `stdfs://`) as a helper crate, not in core APIs.
 - Bulk operation helpers (`read_many`, `write_many`, `copy_many`, `glob`, `walk`) as `FsExt` or a utilities crate.
 - Early async adapter crate (`anyfs-async`) to support remote backends without changing sync traits.
@@ -241,7 +241,7 @@ print(data)  # b"Hello from Python!"
 | Middleware composition         | Pre-build common stacks, expose as factory functions      |
 | Error handling                 | Convert `FsError` to language-native exceptions           |
 
-**Future crate:** `anyfs-python` (post-v1)
+**Future crate:** `anyfs-python`
 
 ### Dynamic Middleware
 
@@ -334,13 +334,13 @@ let backend = av_plugin.wrap(backend);
 | Config-driven middleware | `Box<dyn Fs>` chaining   | ~50ns per layer     |
 | Runtime-loaded plugins   | `MiddlewarePlugin` trait | ~50ns + plugin load |
 
-**Verdict:** The current design supports dynamic middleware via `Box<dyn Fs>`. A formal `MiddlewarePlugin` trait for hot-loading is a post-v1 enhancement.
+**Verdict:** The current design supports dynamic middleware via `Box<dyn Fs>`. A formal `MiddlewarePlugin` trait for hot-loading is a future enhancement.
 
 ### Middleware with Configurable Backends
 
 Some middleware benefit from pluggable backends for their own storage or output. The pattern is to inject a trait object or configuration at construction time.
 
-**Metrics Middleware with Prometheus Exporter (Post-v1):**
+**Metrics Middleware with Prometheus Exporter:**
 *(Requires `features = ["metrics"]`)*
 
 ```rust
@@ -700,13 +700,12 @@ fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) {
 }
 ```
 
-### FUSE Mount (Companion Crate in Progress)
+### FUSE Mount
 
-Mounting is delivered by `anyfs-mount` with a staged roadmap; see `src/guides/mounting.md`.
+Mounting is part of `anyfs` crate with `fuse` and `winfsp` feature flags; see `src/guides/mounting.md`.
 
 ```rust
-use anyfs::FsFuse;
-use anyfs_mount::MountHandle;
+use anyfs::{FsFuse, MountHandle};
 
 fn mount_filesystem(fs: impl FsFuse) {
     MountHandle::mount(fs, "/mnt/myfs")?;

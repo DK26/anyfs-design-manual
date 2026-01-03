@@ -508,7 +508,7 @@ For high-security scenarios where memory dumps are a threat:
 
 #### Encrypted Memory Backend (Illustrative Pattern)
 
-> **Note:** `EncryptedMemoryBackend` is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend in v1. Users can implement this pattern using the guidance below.
+> **Note:** `EncryptedMemoryBackend` is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend. Users can implement this pattern using the guidance below.
 
 Keep data encrypted even in RAM - decrypt only during active use:
 

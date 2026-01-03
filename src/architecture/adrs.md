@@ -46,42 +46,42 @@ Primary docs are where each decision is explained in narrative form. ADRs remain
 
 ## ADR Index
 
-| ADR     | Title                                       | Status             |
-| ------- | ------------------------------------------- | ------------------ |
-| ADR-001 | Path-based `Fs` trait                       | Accepted           |
-| ADR-002 | Two-crate structure                         | Accepted           |
-| ADR-003 | Object-safe path parameters                 | Accepted           |
-| ADR-004 | Tower-style middleware pattern              | Accepted           |
-| ADR-005 | `std::fs`-aligned method names              | Accepted           |
-| ADR-006 | Quota for quota enforcement                 | Accepted           |
-| ADR-007 | Restrictions for least-privilege            | Accepted           |
-| ADR-008 | FileStorage as thin ergonomic wrapper       | Accepted           |
-| ADR-009 | Built-in backends are feature-gated         | Accepted           |
-| ADR-010 | Sync-first, async-ready design              | Accepted           |
-| ADR-011 | Layer trait for standardized composition    | Accepted           |
-| ADR-012 | Tracing for instrumentation                 | Accepted           |
-| ADR-013 | FsExt for extension methods                 | Accepted           |
-| ADR-014 | Optional Bytes support                      | Accepted           |
-| ADR-015 | Contextual FsError                          | Accepted           |
-| ADR-016 | PathFilter for path-based access control    | Accepted           |
-| ADR-017 | ReadOnly for preventing writes              | Accepted           |
-| ADR-018 | RateLimit for operation throttling          | Accepted           |
-| ADR-019 | DryRun for testing and debugging            | Accepted           |
-| ADR-020 | Cache for read performance                  | Accepted           |
-| ADR-021 | Overlay for union filesystem                | Accepted           |
-| ADR-022 | Builder pattern for configurable middleware | Accepted           |
-| ADR-023 | Interior mutability for all trait methods   | Accepted           |
-| ADR-024 | Async Strategy                              | Accepted           |
-| ADR-025 | Strategic Boxing (Tower-style)              | Accepted           |
-| ADR-026 | Companion shell (anyfs-shell)               | Accepted (Post-v1) |
-| ADR-027 | Permissive core; security via middleware    | Accepted           |
-| ADR-028 | Linux-like semantics for virtual backends   | Accepted           |
-| ADR-029 | Path resolution in FileStorage              | Accepted           |
-| ADR-030 | Layered trait hierarchy                     | Accepted           |
-| ADR-031 | Indexing as middleware                      | Accepted (Post-v1) |
-| ADR-032 | Path Canonicalization via FsPath Trait      | Accepted           |
-| ADR-033 | PathResolver Trait for Pluggable Resolution | Accepted           |
-| ADR-034 | LLM-Oriented Architecture (LOA)             | Accepted           |
+| ADR     | Title                                       | Status            |
+| ------- | ------------------------------------------- | ----------------- |
+| ADR-001 | Path-based `Fs` trait                       | Accepted          |
+| ADR-002 | Two-crate structure                         | Accepted          |
+| ADR-003 | Object-safe path parameters                 | Accepted          |
+| ADR-004 | Tower-style middleware pattern              | Accepted          |
+| ADR-005 | `std::fs`-aligned method names              | Accepted          |
+| ADR-006 | Quota for quota enforcement                 | Accepted          |
+| ADR-007 | Restrictions for least-privilege            | Accepted          |
+| ADR-008 | FileStorage as thin ergonomic wrapper       | Accepted          |
+| ADR-009 | Built-in backends are feature-gated         | Accepted          |
+| ADR-010 | Sync-first, async-ready design              | Accepted          |
+| ADR-011 | Layer trait for standardized composition    | Accepted          |
+| ADR-012 | Tracing for instrumentation                 | Accepted          |
+| ADR-013 | FsExt for extension methods                 | Accepted          |
+| ADR-014 | Optional Bytes support                      | Accepted          |
+| ADR-015 | Contextual FsError                          | Accepted          |
+| ADR-016 | PathFilter for path-based access control    | Accepted          |
+| ADR-017 | ReadOnly for preventing writes              | Accepted          |
+| ADR-018 | RateLimit for operation throttling          | Accepted          |
+| ADR-019 | DryRun for testing and debugging            | Accepted          |
+| ADR-020 | Cache for read performance                  | Accepted          |
+| ADR-021 | Overlay for union filesystem                | Accepted          |
+| ADR-022 | Builder pattern for configurable middleware | Accepted          |
+| ADR-023 | Interior mutability for all trait methods   | Accepted          |
+| ADR-024 | Async Strategy                              | Accepted          |
+| ADR-025 | Strategic Boxing (Tower-style)              | Accepted          |
+| ADR-026 | Companion shell (anyfs-shell)               | Accepted (Future) |
+| ADR-027 | Permissive core; security via middleware    | Accepted          |
+| ADR-028 | Linux-like semantics for virtual backends   | Accepted          |
+| ADR-029 | Path resolution in FileStorage              | Accepted          |
+| ADR-030 | Layered trait hierarchy                     | Accepted          |
+| ADR-031 | Indexing as middleware                      | Accepted (Future) |
+| ADR-032 | Path Canonicalization via FsPath Trait      | Accepted          |
+| ADR-033 | PathResolver Trait for Pluggable Resolution | Accepted          |
+| ADR-034 | LLM-Oriented Architecture (LOA)             | Accepted          |
 
 ---
 
@@ -260,7 +260,7 @@ let backend = RestrictionsLayer::builder()
 
 ## ADR-010: Sync-first, async-ready design
 
-**Decision:** `Fs` traits are synchronous for v1. The API is designed to allow adding `AsyncFs` later without breaking changes.
+**Decision:** `Fs` traits are synchronous. The API is designed to allow adding `AsyncFs` later without breaking changes.
 
 **Rationale:**
 - All built-in backends are naturally synchronous:
@@ -1091,7 +1091,7 @@ The performance cost is negligible (<1% of I/O time), while the ergonomic and fl
 
 ## ADR-026: Companion shell (anyfs-shell)
 
-**Status:** Accepted (Post-v1)
+**Status:** Accepted (Future)
 
 **Context:** Users want a low-friction way to explore how different backends and middleware behave without writing a full application.
 
@@ -1185,7 +1185,7 @@ The performance cost is negligible (<1% of I/O time), while the ergonomic and fl
 
 ## ADR-031: Indexing as middleware
 
-**Status:** Accepted (Post-v1)
+**Status:** Accepted (Future)
 
 **Context:** We want a durable, queryable index of file activity and metadata (for audit trails, drive management tools, and statistics). This indexing should be optional, configurable, and work across all backends.
 

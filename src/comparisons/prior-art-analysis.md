@@ -305,9 +305,9 @@ fn resolve(path: &str) -> Result<PathBuf, FsError> {
 
 ## Future Ideas to Consider
 
-These are optional extensions inspired by other ecosystems. They are intentionally not part of the core v1 scope.
+These are optional extensions inspired by other ecosystems. They are intentionally not part of the core scope.
 
-**Keep (post-v1 add-ons that fit the current design):**
+**Keep (add-ons that fit the current design):**
 - URL-based backend registry (`sqlite://`, `mem://`, `stdfs://`) as a helper crate, not in core APIs.
 - Bulk operation helpers (`read_many`, `write_many`, `copy_many`, `glob`, `walk`) as `FsExt` or a utilities crate.
 - Early async adapter crate (`anyfs-async`) to support remote backends without changing sync traits.
@@ -403,7 +403,7 @@ fn test_many_open_handles() {
 
 ## Action Items
 
-### High Priority (Before v1.0)
+### High Priority
 
 | Task                                        | Source                  | Priority   |
 | ------------------------------------------- | ----------------------- | ---------- |
@@ -412,7 +412,7 @@ fn test_many_open_handles() {
 | Add symlink loop detection                  | PyFilesystem2 #171      | 🔴 Critical |
 | Verify `strict-path` handles all edge cases | Afero BasePathFs issues | 🔴 Critical |
 
-### Medium Priority (v1.1+)
+### Medium Priority (Future)
 
 | Task                                        | Source                     | Priority       |
 | ------------------------------------------- | -------------------------- | -------------- |

@@ -76,10 +76,7 @@ anyfs-backend (trait + types)
 
 **Key points:**
 - Custom backends depend only on `anyfs-backend`
-- `anyfs` provides built-in backends, middleware, and the ergonomic `FileStorage<B, M>` wrapper
-
-**Companion crate (planned):**
-- `anyfs-mount` (FUSE/WinFsp mounting) is planned; design and roadmap are documented in `src/guides/mounting.md`.
+- `anyfs` provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic `FileStorage<B, M>` wrapper
 
 ---
 

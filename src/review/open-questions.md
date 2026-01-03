@@ -1,11 +1,11 @@
 # Open Questions & Future Considerations
 
-**Status:** Resolved for v1 (future considerations tracked)
+**Status:** Resolved (future considerations tracked)
 **Last Updated:** 2025-12-28
 
 ---
 
-This document captures previously open questions and design considerations. Unless explicitly marked as future, the items below are resolved for v1.
+This document captures previously open questions and design considerations. Unless explicitly marked as future, the items below are resolved.
 
 > **Note:** Final decisions live in the Architecture Decision Records.
 
@@ -176,7 +176,7 @@ The [vfs crate](https://docs.rs/vfs/) provides virtual filesystem abstractions w
 
 ## FUSE Mount Support
 
-**Status:** Planned - Roadmap and API shape documented in `anyfs-mount` guide
+**Status:** Designed - Part of `anyfs` crate (feature flags: `fuse`, `winfsp`)
 
 **What is FUSE?**
 [FUSE (Filesystem in Userspace)](https://en.wikipedia.org/wiki/Filesystem_in_Userspace) allows implementing filesystems in userspace rather than kernel code. It enables:
@@ -184,10 +184,10 @@ The [vfs crate](https://docs.rs/vfs/) provides virtual filesystem abstractions w
 - Using standard Unix tools (ls, cat, etc.) on AnyFS containers
 - Integration with existing workflows
 
-**Resolution:** Planned via an optional `anyfs-mount` companion crate with cross-platform support:
-- Linux: FUSE (native)
-- macOS: macFUSE
-- Windows: WinFsp
+**Resolution:** Part of `anyfs` crate with feature flags:
+- Linux: FUSE (native) - `fuse` feature
+- macOS: macFUSE - `fuse` feature
+- Windows: WinFsp - `winfsp` feature
 
 See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 
@@ -271,13 +271,13 @@ Based on review feedback, the following naming concerns were raised:
 
 ## Summary
 
-| Topic                     | v1 Decision                                                                   |
+| Topic                     | Decision                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | Symlink security          | Backend-defined (`FsLink`); VRootFsBackend uses `strict-path` for containment |
 | Path resolution           | FileStorage (symlink-aware); VRootFs = OS via `SelfResolving`                 |
 | Compression/encryption    | Backend responsibility                                                        |
 | Hooks/callbacks           | `Tracing` middleware                                                          |
-| FUSE mount                | Planned `anyfs-mount` companion crate (cross-platform)                        |
+| FUSE mount                | Part of `anyfs` crate (`fuse`, `winfsp` feature flags)                        |
 | Type-system protection    | `FileStorage<B, M>` marker types                                              |
 | POSIX compatibility       | Not a goal                                                                    |
 | `truncate`                | Added to `FsWrite`                                                            |

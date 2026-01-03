@@ -308,20 +308,20 @@ For `VRootFsBackend` (wrapping real filesystem):
 
 ## Feature Matrix
 
-| Feature               |     AnyFS      |  `vfs`  |   `virtual-fs`    | AgentFS | OpenDAL |
-| --------------------- | :------------: | :-----: | :---------------: | :-----: | :-----: |
-| Composable middleware |       ✅        |    ❌    |         ❌         |    ❌    |    ✅    |
-| Multiple backends     |       ✅        |    ✅    |         ✅         |    ❌    |    ✅    |
-| SQLite backend        |       ✅        |    ❌    |         ❌         |    ✅    |    ❌    |
-| Memory backend        |       ✅        |    ✅    |         ✅         |    ❌    |    ✅    |
-| Quota enforcement     |       ✅        |    ❌    |         ❌         |    ❌    |    ❌    |
-| Rate limiting         |       ✅        |    ❌    |         ❌         |    ❌    |    ❌    |
-| Type-safe markers     |       ✅        |    ❌    |         ❌         |    ❌    |    ❌    |
-| Path sandboxing       |       ✅        |  Basic  | Basic (2 vectors) |    ❌    |    ❌    |
-| Async API             |       🔜        | Partial |         ❌         |    ❌    |    ✅    |
-| std::fs-aligned API   |       ✅        | Custom  |         ✅         |    ✅    | Custom  |
-| FUSE mounting         |   MVP scope    |    ❌    |         ❌         |    ✅    |    ❌    |
-| Conformance tests     | Planned (80+)  | Unknown |      Unknown      | Unknown | Unknown |
+| Feature               |     AnyFS     |  `vfs`  |   `virtual-fs`    | AgentFS | OpenDAL |
+| --------------------- | :-----------: | :-----: | :---------------: | :-----: | :-----: |
+| Composable middleware |       ✅       |    ❌    |         ❌         |    ❌    |    ✅    |
+| Multiple backends     |       ✅       |    ✅    |         ✅         |    ❌    |    ✅    |
+| SQLite backend        |       ✅       |    ❌    |         ❌         |    ✅    |    ❌    |
+| Memory backend        |       ✅       |    ✅    |         ✅         |    ❌    |    ✅    |
+| Quota enforcement     |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
+| Rate limiting         |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
+| Type-safe markers     |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
+| Path sandboxing       |       ✅       |  Basic  | Basic (2 vectors) |    ❌    |    ❌    |
+| Async API             |       🔜       | Partial |         ❌         |    ❌    |    ✅    |
+| std::fs-aligned API   |       ✅       | Custom  |         ✅         |    ✅    | Custom  |
+| FUSE mounting         |   MVP scope   |    ❌    |         ❌         |    ✅    |    ❌    |
+| Conformance tests     | Planned (80+) | Unknown |      Unknown      | Unknown | Unknown |
 
 ---
 
@@ -341,7 +341,7 @@ For `VRootFsBackend` (wrapping real filesystem):
 - **AI agent runtime** - AgentFS has more features for that specific use case
 - **Cloud storage** - OpenDAL is async-first with cloud backends
 - **Async-first codebases** - Wait for AnyFS async support
-- **Must mount filesystem** - Use a FUSE solution directly today (anyfs-mount is planned)
+- **Must mount filesystem** - Use `anyfs` with `fuse`/`winfsp` feature flags
 
 ---
 

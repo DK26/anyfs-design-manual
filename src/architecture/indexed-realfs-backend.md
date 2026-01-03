@@ -1,6 +1,6 @@
 # Indexing Middleware (Design Plan)
 
-**Status:** Accepted (Post-v1) — See ADR-031
+**Status:** Accepted (Future) — See ADR-031
 **Scope:** Design plan only (no API break)
 
 ---
@@ -210,7 +210,7 @@ The default implementation uses SQLite at `index_file`. If/when alternate engine
 
 ## Mounting Scenario
 
-When mounted via the planned `anyfs-mount` companion crate, all access goes through AnyFS. The index becomes an implicit audit trail:
+When mounted via `anyfs` (with `fuse` or `winfsp` feature flags), all access goes through AnyFS. The index becomes an implicit audit trail:
 
 - Every file operation is logged.
 - Queries reflect all operations routed through AnyFS.

@@ -464,7 +464,7 @@ fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
 
 ---
 
-## Example: Indexing Middleware (Post-v1)
+## Example: Indexing Middleware (Future)
 
 Use `IndexLayer` to keep a queryable index of file activity:
 

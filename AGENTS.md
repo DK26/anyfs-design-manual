@@ -12,7 +12,10 @@ READ THIS FIRST before making any changes to this repository.
 
 AnyFS is an open standard for pluggable virtual filesystem backends in Rust. It uses a **middleware/decorator pattern** (like Axum/Tower) for composable functionality.
 
-**Key design principle:** Complete separation of concerns via composable layers.
+**Key design principles:**
+- Complete separation of concerns via composable layers
+- Mounting is a CORE promise (part of `anyfs` crate, not a separate crate)
+- We plan ONE version, not "v1" and "v2" - future considerations are noted but not versioned
 
 **Development methodology:** LLM-Oriented Architecture (LOA) - every component is independently understandable, testable, and fixable with only local context. See [ADR-034](src/architecture/adrs.md#adr-034-llm-oriented-architecture-loa) and the [LLM Development Methodology Guide](src/guides/llm-development-methodology.md).
 
@@ -360,7 +363,7 @@ let backend = Restrictions::new(backend)
 
 ## Virtual Drive Mounting
 
-Backends implementing `FsFuse` can be mounted as real filesystem drives via `anyfs-mount`:
+Backends implementing `FsFuse` can be mounted as real filesystem drives (feature flags: `fuse`, `winfsp`):
 
 | Platform | Technology | Required              |
 | -------- | ---------- | --------------------- |
@@ -369,7 +372,7 @@ Backends implementing `FsFuse` can be mounted as real filesystem drives via `any
 | Windows  | WinFsp     | User must install     |
 
 ```rust
-use anyfs_mount::MountHandle;
+use anyfs::MountHandle;
 
 let mount = MountHandle::mount(backend, "/mnt/drive")?;
 // Now /mnt/drive is a real mount point any app can use
@@ -538,5 +541,16 @@ OPT-IN TYPE ERASURE:
    - ADRs may include rejected alternatives when there was a real design dilemma
    - But implementation docs should not explain why non-options weren't chosen
 
-8. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
+8. **Do NOT plan "v1" and "v2" or "future versions":**
+   - We plan ONE version with future considerations noted
+   - Use "Future Considerations" not "Post-v1" or "v2 features"
+   - Do NOT split features into version roadmaps
+   - If something is out of scope, say "out of scope" or "future consideration", not "v2"
+
+9. **Mounting is part of `anyfs` crate, NOT a separate `anyfs-mount` crate:**
+   - Mounting is a core promise of AnyFS
+   - It's behind feature flags (`fuse`, `winfsp`) in the `anyfs` crate
+   - Use `anyfs::MountHandle`, not `anyfs_mount::MountHandle`
+
+10. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
 

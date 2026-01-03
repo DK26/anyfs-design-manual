@@ -330,9 +330,9 @@ Always check for quota exceeded, feature not enabled, and other errors.
 
 ---
 
-## Advanced Use Cases (Future)
+## Advanced Use Cases
 
-These use cases require `anyfs-mount` (planned companion crate; roadmap defined).
+These use cases require the `fuse` or `winfsp` feature flags.
 
 ### Database-Backed Drive with Live Monitoring
 
@@ -343,7 +343,7 @@ Mount a database-backed filesystem and query it directly for real-time analytics
 │  Database (SQLite, PostgreSQL, etc.)                        │
 ├─────────────────────────────────────────────────────────────┤
 │                         │                                   │
-│    anyfs-mount          │         Stats Dashboard           │
+│    MountHandle          │         Stats Dashboard           │
 │    (write + read)       │         (direct DB queries)       │
 │         │               │               │                   │
 │         ▼               │               ▼                   │
@@ -364,8 +364,7 @@ Mount a database-backed filesystem and query it directly for real-time analytics
 **SQLite Example (API sketch, planned):**
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
-use anyfs_mount::MountHandle;
+use anyfs::{SqliteBackend, QuotaLayer, TracingLayer, MountHandle};
 
 // Mount the drive
 let backend = SqliteBackend::open("tenant.db")?
@@ -424,8 +423,7 @@ This pattern is powerful because the database is the source of truth — you get
 ### RAM Drive
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer};
-use anyfs_mount::MountHandle;
+use anyfs::{MemoryBackend, QuotaLayer, MountHandle};
 
 // 4GB RAM drive
 let mount = MountHandle::mount(
@@ -443,8 +441,7 @@ let mount = MountHandle::mount(
 ### Sandboxed AI Agent Workspace
 
 ```rust
-use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer};
-use anyfs_mount::MountHandle;
+use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, MountHandle};
 
 let mount = MountHandle::mount(
     MemoryBackend::new()

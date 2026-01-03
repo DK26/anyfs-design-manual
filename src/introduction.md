@@ -38,13 +38,12 @@ You get:
 
 ## Two-Crate Structure
 
-| Crate           | Purpose                                                             |
-| --------------- | ------------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract: `Fs` trait + types                                |
-| `anyfs`         | Backends + middleware + ergonomic `FileStorage<B, M>` wrapper       |
-| `anyfs-mount`   | Companion crate for FUSE/WinFsp mounting (planned; roadmap defined) |
+| Crate           | Purpose                                                          |
+| --------------- | ---------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract: `Fs` trait + types                             |
+| `anyfs`         | Backends + middleware + mounting + ergonomic `FileStorage<B, M>` |
 
-**Note:** The core design is two crates (`anyfs-backend`, `anyfs`). `anyfs-mount` is a planned companion crate (design complete; implementation pending), not part of the core crates.
+**Note:** Mounting (`FsFuse` + `MountHandle`) is part of the `anyfs` crate behind feature flags (`fuse`, `winfsp`), not a separate crate.
 
 ---
 
@@ -82,16 +81,16 @@ fs.write("/data/file.txt", b"hello")?;
 
 ---
 
-## Future Ideas (Post-v1)
+## Future Considerations
 
-These are optional extensions that fit the design but are intentionally out of scope for v1:
+These are optional extensions that fit the design but are out of scope for initial release:
 
 - URL-based backend registry and bulk helpers (`FsExt`/utilities)
-- Async adapter crate for remote backends (`anyfs-async`)
-- Companion shell (`anyfs-shell`) for interactive exploration
-- Copy-on-write overlay and archive backends (zip/tar) as separate crates
+- Async adapter for remote backends
+- Companion shell for interactive exploration
+- Copy-on-write overlay and archive backends (zip/tar)
 
-See [Design Overview](./architecture/design-overview.md#future-ideas-post-v1) for the full list and rationale.
+See [Design Overview](./architecture/design-overview.md#future-considerations) for the full list and rationale.
 
 ---
 

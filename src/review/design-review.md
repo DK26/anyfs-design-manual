@@ -6,12 +6,12 @@ This document critically reviews AnyFS design decisions against Rust community e
 
 ## Summary
 
-| Category | Issues Found | Status |
-|----------|--------------|--------|
-| Critical (must fix) | 2 | ✅ Fixed |
-| Should fix | 4 | 🟡 In progress |
-| Document clearly | 3 | 🟢 Ongoing |
-| Non-issues | 5 | ✅ Verified |
+| Category            | Issues Found | Status        |
+| ------------------- | ------------ | ------------- |
+| Critical (must fix) | 2            | ✅ Fixed       |
+| Should fix          | 4            | 🟡 In progress |
+| Document clearly    | 3            | 🟢 Ongoing     |
+| Non-issues          | 5            | ✅ Verified    |
 
 ---
 
@@ -104,7 +104,7 @@ async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError>;
 2. Ensure `Send + Sync` bounds enable `spawn_blocking` wrapper
 3. Consider shipping `anyfs-async` adapter crate early
 
-**Recommendation:** Acceptable for v1.0, but should be high priority for v1.1.
+**Recommendation:** Acceptable. Async support is a future consideration.
 
 ---
 
@@ -282,36 +282,36 @@ let quota = QuotaLayer::builder()
 
 ## Action Items
 
-### Before v0.1 (MVP)
+### Before MVP
 
-| Priority | Issue | Action |
-|----------|-------|--------|
+| Priority   | Issue                  | Action                                         |
+| ---------- | ---------------------- | ---------------------------------------------- |
 | 🔴 Critical | FsError non_exhaustive | Add `#[non_exhaustive]` and `thiserror` derive |
-| 🔴 Critical | &mut in examples | Audit all examples for &self consistency |
-| 🟡 Should | #[must_use] | Add to all Result-returning methods |
-| 🟢 Document | Interior mutability | Add prominent section explaining why |
-| 🟢 Document | Path semantics | Add section on virtual paths |
+| 🔴 Critical | &mut in examples       | Audit all examples for &self consistency       |
+| 🟡 Should   | #[must_use]            | Add to all Result-returning methods            |
+| 🟢 Document | Interior mutability    | Add prominent section explaining why           |
+| 🟢 Document | Path semantics         | Add section on virtual paths                   |
 
-### Before v1.0
+### Should Fix
 
-| Priority | Issue | Action |
-|----------|-------|--------|
-| 🟡 Should | Async support | Ship `anyfs-async` or document workaround |
-| 🟡 Should | Layer trait docs | Document differences from Tower |
-| 🟢 Document | Marker trait pattern | Explain Fs = FsRead + FsWrite + FsDir |
+| Priority   | Issue                | Action                                    |
+| ---------- | -------------------- | ----------------------------------------- |
+| 🟡 Should   | Async support        | Ship `anyfs-async` or document workaround |
+| 🟡 Should   | Layer trait docs     | Document differences from Tower           |
+| 🟢 Document | Marker trait pattern | Explain Fs = FsRead + FsWrite + FsDir     |
 
 ---
 
 ## Comparison to Axum's Success Factors
 
-| Factor | Axum | AnyFS | Assessment |
-|--------|------|-------|------------|
-| Tower integration | Native | Inspired by | 🟡 Different but similar |
-| Async support | Yes | No (planned) | 🟡 Gap, but documented |
-| Error handling | thiserror | Planned | 🔴 Must add |
-| Documentation | Excellent | In progress | 🟡 Continue |
-| Examples | Comprehensive | In progress | 🟡 Continue |
-| Ecosystem fit | tokio native | std::fs native | ✅ Different target |
+| Factor            | Axum          | AnyFS          | Assessment              |
+| ----------------- | ------------- | -------------- | ----------------------- |
+| Tower integration | Native        | Inspired by    | 🟡 Different but similar |
+| Async support     | Yes           | No (planned)   | 🟡 Gap, but documented   |
+| Error handling    | thiserror     | Planned        | 🔴 Must add              |
+| Documentation     | Excellent     | In progress    | 🟡 Continue              |
+| Examples          | Comprehensive | In progress    | 🟡 Continue              |
+| Ecosystem fit     | tokio native  | std::fs native | ✅ Different target      |
 
 ---
 

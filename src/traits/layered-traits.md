@@ -326,9 +326,9 @@ fn create_backup<B: Fs + FsLink>(fs: &FileStorage<B>) -> Result<(), FsError> {
     Ok(())
 }
 
-// Requires FUSE-level support (planned companion crate)
+// Requires FsFuse trait + fuse/winfsp feature
 fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
-    anyfs_mount::MountHandle::mount(fs, "/mnt/myfs")?;
+    anyfs::MountHandle::mount(fs, "/mnt/myfs")?;
     Ok(())
 }
 ```
