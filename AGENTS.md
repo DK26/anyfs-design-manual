@@ -80,6 +80,7 @@ anyfs-backend/              # Crate 1: traits + types (minimal deps: thiserror; 
     layer.rs                # Layer trait (Tower-style)
     ext.rs                  # FsExt (extension methods)
     markers.rs              # SelfResolving marker trait
+    path_resolver.rs        # PathResolver trait (pluggable path resolution)
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
@@ -103,6 +104,11 @@ anyfs/                      # Crate 2: backends + middleware + FileStorage
       dry_run.rs            # DryRun<B>
       cache.rs              # Cache<B>
       overlay.rs            # Overlay<B1, B2>
+    resolvers/
+      iterative.rs          # IterativeResolver (default)
+      noop.rs               # NoOpResolver (for SelfResolving backends)
+      case_folding.rs       # CaseFoldingResolver (case-insensitive)
+      caching.rs            # CachingResolver (LRU cache wrapper)
     container.rs            # FileStorage<B, M>
 ```
 
@@ -126,6 +132,9 @@ Derived traits (auto-implemented):
 
 Marker traits:
   SelfResolving  ← Opt-out of FileStorage path resolution
+
+Strategy traits:
+  PathResolver   ← Pluggable path resolution algorithm
 ```
 
 **Rule:** Implement the lowest level you need. Higher levels include all below.
@@ -384,15 +393,16 @@ let sandbox = MemoryBackend::new()
 
 ## When in Doubt
 
-| Question                          | Answer                                          |
-| --------------------------------- | ----------------------------------------------- |
-| Where do limits go?               | `Quota<B>` middleware                           |
-| Where do feature restrictions go? | `Restrictions<B>` middleware                    |
-| Where does logging go?            | `Tracing<B>` middleware                         |
-| Where does path filtering go?     | `PathFilter<B>` middleware                      |
-| What does FileStorage do?         | Thin std::fs-aligned wrapper + type-safe marker |
-| How to snapshot MemoryBackend?    | `.clone()` or `.save_to()`                      |
-| Sync or async?                    | Sync for v1, async-ready for future             |
+| Question                          | Answer                                              |
+| --------------------------------- | --------------------------------------------------- |
+| Where do limits go?               | `Quota<B>` middleware                               |
+| Where do feature restrictions go? | `Restrictions<B>` middleware                        |
+| Where does logging go?            | `Tracing<B>` middleware                             |
+| Where does path filtering go?     | `PathFilter<B>` middleware                          |
+| Where does path resolution go?    | `PathResolver` strategy (pluggable via FileStorage) |
+| What does FileStorage do?         | Thin std::fs-aligned wrapper + type-safe marker     |
+| How to snapshot MemoryBackend?    | `.clone()` or `.save_to()`                          |
+| Sync or async?                    | Sync for v1, async-ready for future                 |
 
 ---
 

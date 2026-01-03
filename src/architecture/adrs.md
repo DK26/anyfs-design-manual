@@ -80,6 +80,7 @@ Primary docs are where each decision is explained in narrative form. ADRs remain
 | ADR-030 | Layered trait hierarchy                     | Accepted           |
 | ADR-031 | Indexing as middleware                      | Accepted (Post-v1) |
 | ADR-032 | Path Canonicalization via FsPath Trait      | Accepted           |
+| ADR-033 | PathResolver Trait for Pluggable Resolution | Accepted           |
 
 ---
 
@@ -1341,3 +1342,172 @@ impl<B: Fs + FsPath, M> FileStorage<B, M> {
 
 **Conclusion:** The `FsPath` trait provides a clean abstraction that works everywhere but can be optimized where it matters. This follows Rust's "zero-cost abstractions" philosophy: you don't pay for what you don't use, and you can optimize hot paths when needed.
 
+---
+
+## ADR-033: PathResolver Trait for Pluggable Resolution
+
+**Status:** Accepted
+
+**Context:** Path resolution (normalizing `..`, `.`, and following symlinks) is currently handled in two places:
+1. `FsPath` trait methods (`canonicalize`, `soft_canonicalize`) with backend-specific optimizations
+2. `FileStorage` performs pre-resolution for non-`SelfResolving` backends
+3. `SelfResolving` marker trait opts out of FileStorage resolution
+
+This works, but the resolution **algorithm** is not a first-class, testable unit. The logic is spread across components, making it harder to:
+- Test path resolution in isolation
+- Benchmark/profile resolution performance
+- Provide third-party custom resolvers
+- Explore alternative resolution strategies (case-insensitive, caching, etc.)
+
+**Decision:** Introduce a `PathResolver` trait that encapsulates the path resolution algorithm as a standalone, pluggable component.
+
+**The Pattern:**
+
+```rust
+// In anyfs-backend (trait definition)
+/// Strategy trait for path resolution algorithms.
+///
+/// Encapsulates how paths are normalized, symlinks are followed,
+/// and `..`/`.` components are resolved.
+pub trait PathResolver: Send + Sync {
+    /// Resolve path to canonical form (all symlinks resolved, all components exist).
+    fn canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
+    
+    /// Like canonicalize, but allows non-existent final component.
+    fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
+}
+```
+
+**Built-in Implementations (in `anyfs` crate):**
+
+```rust
+/// Default iterative resolver - walks path component by component.
+pub struct IterativeResolver {
+    max_symlink_depth: usize,  // Default: 40
+}
+
+/// No-op resolver for SelfResolving backends (OS handles resolution).
+pub struct NoOpResolver;
+
+/// Case-folding resolver for case-insensitive filesystems.
+pub struct CaseFoldingResolver<R: PathResolver> {
+    inner: R,
+    // Wraps another resolver, normalizing case during lookup
+}
+
+/// Caching resolver for read-heavy workloads.
+pub struct CachingResolver<R: PathResolver> {
+    inner: R,
+    cache: Cache<PathBuf, PathBuf>,
+}
+```
+
+**Integration with FileStorage:**
+
+```rust
+impl<B: Fs, M> FileStorage<B, M> {
+    /// Create FileStorage with default resolver.
+    pub fn new(backend: B) -> Self { ... }
+    
+    /// Create FileStorage with custom resolver.
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self {
+        Self {
+            backend,
+            resolver: Box::new(resolver),
+            _marker: PhantomData,
+        }
+    }
+}
+
+// Or via builder pattern
+FileStorage::builder(backend)
+    .with_resolver(CaseFoldingResolver::new())
+    .build()
+```
+
+**Relationship with FsPath Trait:**
+
+| Component       | Responsibility                                                                  |
+| --------------- | ------------------------------------------------------------------------------- |
+| `PathResolver`  | Algorithm for resolution (first-class, testable, swappable)                     |
+| `FsPath`        | Backend-level optimization hook (can delegate to resolver or override entirely) |
+| `SelfResolving` | Remains as marker OR becomes `NoOpResolver` assignment                          |
+
+`FsPath` can delegate to the resolver:
+
+```rust
+pub trait FsPath: FsRead + FsLink {
+    fn resolver(&self) -> &dyn PathResolver {
+        static DEFAULT: IterativeResolver = IterativeResolver::new();
+        &DEFAULT
+    }
+    
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        self.resolver().canonicalize(path, self)
+    }
+}
+```
+
+Or backends can override entirely for optimized implementations (e.g., SQLite CTE).
+
+**Why This Design:**
+
+| Benefit                    | Explanation                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| **Testable in isolation**  | Unit test resolvers without full backend setup                 |
+| **Benchmarkable**          | Profile resolution algorithms independently                    |
+| **Third-party extensible** | Custom resolvers without touching `Fs` traits                  |
+| **Maintainable**           | Path resolution is one focused, isolated component             |
+| **New capabilities**       | Case-insensitive, caching, Windows-style resolvers become easy |
+| **Backwards compatible**   | Existing FsPath overrides still work; resolver is additive     |
+
+**Crate Placement:**
+
+| Component               | Crate           | Rationale                        |
+| ----------------------- | --------------- | -------------------------------- |
+| `PathResolver` trait    | `anyfs-backend` | Core contract, minimal deps      |
+| `IterativeResolver`     | `anyfs`         | Default impl, needs Fs methods   |
+| `NoOpResolver`          | `anyfs`         | For SelfResolving backends       |
+| `CaseFoldingResolver`   | `anyfs`         | Optional, wraps other resolvers  |
+| `CachingResolver`       | `anyfs`         | Optional, needs cache impl       |
+| FileStorage integration | `anyfs`         | Uses resolvers for path handling |
+
+**Example Use Cases:**
+
+```rust
+// Case-insensitive filesystem emulation
+let fs = FileStorage::builder(MemoryBackend::new())
+    .with_resolver(CaseFoldingResolver::default())
+    .build();
+
+// Windows-style path resolution (backslash normalization, drive letters)
+let fs = FileStorage::builder(backend)
+    .with_resolver(WindowsPathResolver::new())
+    .build();
+
+// Aggressive caching for read-heavy workloads
+let fs = FileStorage::builder(backend)
+    .with_resolver(CachingResolver::new(IterativeResolver::default()))
+    .build();
+
+// Testing: verify resolution behavior
+#[test]
+fn test_symlink_loop_detection() {
+    let resolver = IterativeResolver::new();
+    let mock_fs = MockFs::with_symlink_loop();
+    let result = resolver.canonicalize(Path::new("/loop"), &mock_fs);
+    assert!(matches!(result, Err(FsError::InvalidData { .. })));
+}
+```
+
+**Trade-offs:**
+
+| Approach                  | Pros                            | Cons                               |
+| ------------------------- | ------------------------------- | ---------------------------------- |
+| Trait object (`Box<dyn>`) | Simple API, runtime flexibility | ~50ns per call (negligible vs I/O) |
+| Generic parameter         | Zero-cost, compile-time         | Adds complexity to FileStorage     |
+| Associated type on FsPath | Trait-level, backend controls   | Complicates blanket impl           |
+
+**Recommendation:** Use trait object (`Box<dyn PathResolver>`) for simplicity. Following ADR-025 (Strategic Boxing), the ~50ns box overhead is <1% of actual I/O time and enables maximum flexibility.
+
+**Conclusion:** The `PathResolver` trait provides clean separation of concerns, making path resolution testable, benchmarkable, and extensible. It complements `FsPath` (backend optimization hook) and can replace or work alongside `SelfResolving` (via `NoOpResolver`). This design follows the Tower/Axum philosophy of composable, swappable components.
