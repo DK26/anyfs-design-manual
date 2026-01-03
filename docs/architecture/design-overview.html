@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -315,9 +315,9 @@ let sandbox: FileStorage&lt;_, AiSandbox&gt; = FileStorage::new(
            ^-- vrootfs feature may use strict-path
 </code></pre>
 <hr>
-<h2 id="future-ideas-post-v1"><a class="header" href="#future-ideas-post-v1">Future Ideas (Post-v1)</a></h2>
-<p>These are optional extensions to explore after the core is stable. They are intentionally not part of v1.</p>
-<p><strong>Keep (post-v1 add-ons that fit the current design):</strong></p>
+<h2 id="future-considerations"><a class="header" href="#future-considerations">Future Considerations</a></h2>
+<p>These are optional extensions to explore after the core is stable.</p>
+<p><strong>Keep (add-ons that fit the current design):</strong></p>
 <ul>
 <li>URL-based backend registry (<code>sqlite://</code>, <code>mem://</code>, <code>stdfs://</code>) as a helper crate, not in core APIs.</li>
 <li>Bulk operation helpers (<code>read_many</code>, <code>write_many</code>, <code>copy_many</code>, <code>glob</code>, <code>walk</code>) as <code>FsExt</code> or a utilities crate.</li>
@@ -421,7 +421,7 @@ print(data)  # b"Hello from Python!"
 </tbody>
 </table>
 </div>
-<p><strong>Future crate:</strong> <code>anyfs-python</code> (post-v1)</p>
+<p><strong>Future crate:</strong> <code>anyfs-python</code></p>
 <h3 id="dynamic-middleware"><a class="header" href="#dynamic-middleware">Dynamic Middleware</a></h3>
 <p>The current design uses <strong>compile-time generics</strong> for zero-cost middleware composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -511,10 +511,10 @@ let backend = av_plugin.wrap(backend);
 </tbody>
 </table>
 </div>
-<p><strong>Verdict:</strong> The current design supports dynamic middleware via <code>Box&lt;dyn Fs&gt;</code>. A formal <code>MiddlewarePlugin</code> trait for hot-loading is a post-v1 enhancement.</p>
+<p><strong>Verdict:</strong> The current design supports dynamic middleware via <code>Box&lt;dyn Fs&gt;</code>. A formal <code>MiddlewarePlugin</code> trait for hot-loading is a future enhancement.</p>
 <h3 id="middleware-with-configurable-backends"><a class="header" href="#middleware-with-configurable-backends">Middleware with Configurable Backends</a></h3>
 <p>Some middleware benefit from pluggable backends for their own storage or output. The pattern is to inject a trait object or configuration at construction time.</p>
-<p><strong>Metrics Middleware with Prometheus Exporter (Post-v1):</strong>
+<p><strong>Metrics Middleware with Prometheus Exporter:</strong>
 <em>(Requires <code>features = ["metrics"]</code>)</em></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -849,12 +849,11 @@ fn with_symlinks&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) {
     fs.symlink("/target.txt", "/link.txt")?;
 }
 <span class="boring">}</span></code></pre>
-<h3 id="fuse-mount-companion-crate-in-progress"><a class="header" href="#fuse-mount-companion-crate-in-progress">FUSE Mount (Companion Crate in Progress)</a></h3>
-<p>Mounting is delivered by <code>anyfs-mount</code> with a staged roadmap; see <code>src/guides/mounting.md</code>.</p>
+<h3 id="fuse-mount"><a class="header" href="#fuse-mount">FUSE Mount</a></h3>
+<p>Mounting is part of <code>anyfs</code> crate with <code>fuse</code> and <code>winfsp</code> feature flags; see <code>src/guides/mounting.md</code>.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::FsFuse;
-use anyfs_mount::MountHandle;
+</span>use anyfs::{FsFuse, MountHandle};
 
 fn mount_filesystem(fs: impl FsFuse) {
     MountHandle::mount(fs, "/mnt/myfs")?;

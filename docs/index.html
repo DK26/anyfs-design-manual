@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25c4523f.js"></script>
@@ -216,12 +216,11 @@
 </thead>
 <tbody>
 <tr><td><code>anyfs-backend</code></td><td>Minimal contract: <code>Fs</code> trait + types</td></tr>
-<tr><td><code>anyfs</code></td><td>Backends + middleware + ergonomic <code>FileStorage&lt;B, M&gt;</code> wrapper</td></tr>
-<tr><td><code>anyfs-mount</code></td><td>Companion crate for FUSE/WinFsp mounting (planned; roadmap defined)</td></tr>
+<tr><td><code>anyfs</code></td><td>Backends + middleware + mounting + ergonomic <code>FileStorage&lt;B, M&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Note:</strong> The core design is two crates (<code>anyfs-backend</code>, <code>anyfs</code>). <code>anyfs-mount</code> is a planned companion crate (design complete; implementation pending), not part of the core crates.</p>
+<p><strong>Note:</strong> Mounting (<code>FsFuse</code> + <code>MountHandle</code>) is part of the <code>anyfs</code> crate behind feature flags (<code>fuse</code>, <code>winfsp</code>), not a separate crate.</p>
 <hr>
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -259,15 +258,15 @@ fs.write("/data/file.txt", b"hello")?;
 </table>
 </div>
 <hr>
-<h2 id="future-ideas-post-v1"><a class="header" href="#future-ideas-post-v1">Future Ideas (Post-v1)</a></h2>
-<p>These are optional extensions that fit the design but are intentionally out of scope for v1:</p>
+<h2 id="future-considerations"><a class="header" href="#future-considerations">Future Considerations</a></h2>
+<p>These are optional extensions that fit the design but are out of scope for initial release:</p>
 <ul>
 <li>URL-based backend registry and bulk helpers (<code>FsExt</code>/utilities)</li>
-<li>Async adapter crate for remote backends (<code>anyfs-async</code>)</li>
-<li>Companion shell (<code>anyfs-shell</code>) for interactive exploration</li>
-<li>Copy-on-write overlay and archive backends (zip/tar) as separate crates</li>
+<li>Async adapter for remote backends</li>
+<li>Companion shell for interactive exploration</li>
+<li>Copy-on-write overlay and archive backends (zip/tar)</li>
 </ul>
-<p>See <a href="./architecture/design-overview.html#future-ideas-post-v1">Design Overview</a> for the full list and rationale.</p>
+<p>See <a href="./architecture/design-overview.html#future-considerations">Design Overview</a> for the full list and rationale.</p>
 <hr>
 <h2 id="status"><a class="header" href="#status">Status</a></h2>
 <div class="table-wrapper">

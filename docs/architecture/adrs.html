@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -258,12 +258,12 @@
 <tr><td>ADR-023</td><td>Interior mutability for all trait methods</td><td>Accepted</td></tr>
 <tr><td>ADR-024</td><td>Async Strategy</td><td>Accepted</td></tr>
 <tr><td>ADR-025</td><td>Strategic Boxing (Tower-style)</td><td>Accepted</td></tr>
-<tr><td>ADR-026</td><td>Companion shell (anyfs-shell)</td><td>Accepted (Post-v1)</td></tr>
+<tr><td>ADR-026</td><td>Companion shell (anyfs-shell)</td><td>Accepted (Future)</td></tr>
 <tr><td>ADR-027</td><td>Permissive core; security via middleware</td><td>Accepted</td></tr>
 <tr><td>ADR-028</td><td>Linux-like semantics for virtual backends</td><td>Accepted</td></tr>
 <tr><td>ADR-029</td><td>Path resolution in FileStorage</td><td>Accepted</td></tr>
 <tr><td>ADR-030</td><td>Layered trait hierarchy</td><td>Accepted</td></tr>
-<tr><td>ADR-031</td><td>Indexing as middleware</td><td>Accepted (Post-v1)</td></tr>
+<tr><td>ADR-031</td><td>Indexing as middleware</td><td>Accepted (Future)</td></tr>
 <tr><td>ADR-032</td><td>Path Canonicalization via FsPath Trait</td><td>Accepted</td></tr>
 <tr><td>ADR-033</td><td>PathResolver Trait for Pluggable Resolution</td><td>Accepted</td></tr>
 <tr><td>ADR-034</td><td>LLM-Oriented Architecture (LOA)</td><td>Accepted</td></tr>
@@ -431,7 +431,7 @@ fs.symlink("/target", "/link")?;  // ❌ Won't compile - no FsLink impl
 <p><strong>Why:</strong> Minimizes binary size and compile time for users who don’t need all backends.</p>
 <hr>
 <h2 id="adr-010-sync-first-async-ready-design"><a class="header" href="#adr-010-sync-first-async-ready-design">ADR-010: Sync-first, async-ready design</a></h2>
-<p><strong>Decision:</strong> <code>Fs</code> traits are synchronous for v1. The API is designed to allow adding <code>AsyncFs</code> later without breaking changes.</p>
+<p><strong>Decision:</strong> <code>Fs</code> traits are synchronous. The API is designed to allow adding <code>AsyncFs</code> later without breaking changes.</p>
 <p><strong>Rationale:</strong></p>
 <ul>
 <li>All built-in backends are naturally synchronous:
@@ -1264,7 +1264,7 @@ pub trait FsReadTyped: FsRead {
 <p>The performance cost is negligible (&lt;1% of I/O time), while the ergonomic and flexibility benefits are substantial.</p>
 <hr>
 <h2 id="adr-026-companion-shell-anyfs-shell"><a class="header" href="#adr-026-companion-shell-anyfs-shell">ADR-026: Companion shell (anyfs-shell)</a></h2>
-<p><strong>Status:</strong> Accepted (Post-v1)</p>
+<p><strong>Status:</strong> Accepted (Future)</p>
 <p><strong>Context:</strong> Users want a low-friction way to explore how different backends and middleware behave without writing a full application.</p>
 <p><strong>Decision:</strong> Provide a separate companion crate (e.g., <code>anyfs-shell</code>) that exposes a bash-style navigation and file management interface built on <code>FileStorage</code>.</p>
 <p><strong>Scope:</strong></p>
@@ -1343,7 +1343,7 @@ pub trait FsReadTyped: FsRead {
 </ul>
 <hr>
 <h2 id="adr-031-indexing-as-middleware"><a class="header" href="#adr-031-indexing-as-middleware">ADR-031: Indexing as middleware</a></h2>
-<p><strong>Status:</strong> Accepted (Post-v1)</p>
+<p><strong>Status:</strong> Accepted (Future)</p>
 <p><strong>Context:</strong> We want a durable, queryable index of file activity and metadata (for audit trails, drive management tools, and statistics). This indexing should be optional, configurable, and work across all backends.</p>
 <p><strong>Decision:</strong> Indexing is implemented as middleware (<code>Indexing&lt;B&gt;</code> with <code>IndexLayer</code>), not as a specialized backend. The middleware writes to a sidecar index (SQLite by default) and can evolve to support alternate index engines.</p>
 <p><strong>Naming:</strong> Use <code>IndexLayer</code> (builder) and <code>Indexing&lt;B&gt;</code> (middleware), consistent with existing layer naming.</p>

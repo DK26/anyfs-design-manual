@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -181,7 +181,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="indexing-middleware-design-plan"><a class="header" href="#indexing-middleware-design-plan">Indexing Middleware (Design Plan)</a></h1>
-<p><strong>Status:</strong> Accepted (Post-v1) — See ADR-031
+<p><strong>Status:</strong> Accepted (Future) — See ADR-031
 <strong>Scope:</strong> Design plan only (no API break)</p>
 <hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS config (
 </ul>
 <hr>
 <h2 id="mounting-scenario"><a class="header" href="#mounting-scenario">Mounting Scenario</a></h2>
-<p>When mounted via the planned <code>anyfs-mount</code> companion crate, all access goes through AnyFS. The index becomes an implicit audit trail:</p>
+<p>When mounted via <code>anyfs</code> (with <code>fuse</code> or <code>winfsp</code> feature flags), all access goes through AnyFS. The index becomes an implicit audit trail:</p>
 <ul>
 <li>Every file operation is logged.</li>
 <li>Queries reflect all operations routed through AnyFS.</li>

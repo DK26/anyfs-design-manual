@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -248,11 +248,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
 <p><strong>Key points:</strong></p>
 <ul>
 <li>Custom backends depend only on <code>anyfs-backend</code></li>
-<li><code>anyfs</code> provides built-in backends, middleware, and the ergonomic <code>FileStorage&lt;B, M&gt;</code> wrapper</li>
-</ul>
-<p><strong>Companion crate (planned):</strong></p>
-<ul>
-<li><code>anyfs-mount</code> (FUSE/WinFsp mounting) is planned; design and roadmap are documented in <code>src/guides/mounting.md</code>.</li>
+<li><code>anyfs</code> provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic <code>FileStorage&lt;B, M&gt;</code> wrapper</li>
 </ul>
 <hr>
 <h2 id="middleware-pattern"><a class="header" href="#middleware-pattern">Middleware Pattern</a></h2>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -627,8 +627,8 @@ strategy:
 <li><input disabled="" type="checkbox"> Documentation builds without warnings</li>
 </ul>
 <hr>
-<h2 id="phase-6-anyfs-mount---mount-as-real-filesystem-planned"><a class="header" href="#phase-6-anyfs-mount---mount-as-real-filesystem-planned">Phase 6: <code>anyfs-mount</code> - Mount as Real Filesystem (planned)</a></h2>
-<p><strong>Goal:</strong> Ship a companion crate that makes mounting AnyFS stacks easy, safe, and enjoyable for programmers, without compromising backend semantics.</p>
+<h2 id="phase-6-mounting-support-fuse-winfsp-features"><a class="header" href="#phase-6-mounting-support-fuse-winfsp-features">Phase 6: Mounting Support (<code>fuse</code>, <code>winfsp</code> features)</a></h2>
+<p><strong>Goal:</strong> Make mounting AnyFS stacks easy, safe, and enjoyable for programmers. Mounting is part of the <code>anyfs</code> crate behind feature flags.</p>
 <h3 id="milestones"><a class="header" href="#milestones">Milestones</a></h3>
 <ul>
 <li><strong>Phase 0 (design complete):</strong> API shape and roadmap
@@ -665,8 +665,7 @@ strategy:
 <p><strong>API sketch (subject to change):</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, QuotaLayer, FsFuse};
-use anyfs_mount::MountHandle;
+</span>use anyfs::{MemoryBackend, QuotaLayer, FsFuse, MountHandle};
 
 // RAM drive with 1GB quota
 let backend = MemoryBackend::new()
@@ -686,16 +685,16 @@ let mount = MountHandle::mount(backend, "/mnt/ramdisk")?;
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Platform</th><th>Provider</th><th>Rust Crate</th><th>User Must Install</th></tr>
+<tr><th>Platform</th><th>Provider</th><th>Rust Crate</th><th>Feature Flag</th><th>User Must Install</th></tr>
 </thead>
 <tbody>
-<tr><td>Linux</td><td>FUSE</td><td><code>fuser</code></td><td><code>fuse3</code> package</td></tr>
-<tr><td>macOS</td><td>macFUSE</td><td><code>fuser</code></td><td><a href="https://osxfuse.github.io/">macFUSE</a></td></tr>
-<tr><td>Windows</td><td>WinFsp</td><td><code>winfsp</code></td><td><a href="https://winfsp.dev/">WinFsp</a></td></tr>
+<tr><td>Linux</td><td>FUSE</td><td><code>fuser</code></td><td><code>fuse</code></td><td><code>fuse3</code> package</td></tr>
+<tr><td>macOS</td><td>macFUSE</td><td><code>fuser</code></td><td><code>fuse</code></td><td><a href="https://osxfuse.github.io/">macFUSE</a></td></tr>
+<tr><td>Windows</td><td>WinFsp</td><td><code>winfsp</code></td><td><code>winfsp</code></td><td><a href="https://winfsp.dev/">WinFsp</a></td></tr>
 </tbody>
 </table>
 </div>
-<p><code>anyfs-mount</code> provides a unified API across platforms:</p>
+<p>The <code>anyfs</code> crate provides a unified API across platforms:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl MountHandle {
@@ -751,7 +750,7 @@ let sandbox = MountHandle::mount(
 <pre><code>┌────────────────────────────────────────────────┐
 │  /mnt/myfs (FUSE mount point)                  │
 ├────────────────────────────────────────────────┤
-│  anyfs-mount                                   │
+│  anyfs::mount (fuse/winfsp feature)            │
 │    - Linux/macOS: fuser                        │
 │    - Windows: winfsp                           │
 ├────────────────────────────────────────────────┤
@@ -785,11 +784,11 @@ let sandbox = MountHandle::mount(
 <li>Companion shell (<code>anyfs-shell</code>) for interactive exploration of backends and middleware</li>
 <li><strong>Language bindings</strong> (<code>anyfs-python</code> via PyO3, C bindings) - see design-overview.md for approach</li>
 <li><strong>Dynamic middleware plugin system</strong> (<code>MiddlewarePlugin</code> trait for runtime-loaded <code>.so</code>/<code>.dll</code> plugins)</li>
-<li><strong>Metrics middleware</strong> with Prometheus exporter (<code>GET /metrics</code> endpoint) - post-v1</li>
+<li><strong>Metrics middleware</strong> with Prometheus exporter (<code>GET /metrics</code> endpoint)</li>
 <li><strong>Configurable tracing/logging backends</strong> (structured logs, CEF events, remote sinks)</li>
 </ul>
 <h3 id="anyfs-shell---local-companion-shell"><a class="header" href="#anyfs-shell---local-companion-shell"><code>anyfs-shell</code> - Local Companion Shell</a></h3>
-<p>Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a post-v1 companion crate, not part of the core libraries.</p>
+<p>Minimal interactive shell for exploring AnyFS behavior without writing a full app. This is a companion crate, not part of the core libraries.</p>
 <p><strong>Goals:</strong></p>
 <ul>
 <li>Route all operations through <code>FileStorage</code> to exercise middleware and backend composition.</li>
@@ -929,7 +928,7 @@ aws s3 ls s3://user-files/ --endpoint-url http://yourserver:9000
 aws s3 cp s3://user-files/document.pdf ./local.pdf --endpoint-url http://yourserver:9000
 </code></pre>
 <h4 id="anyfs-remote---remote-backend-client"><a class="header" href="#anyfs-remote---remote-backend-client"><code>anyfs-remote</code> - Remote Backend Client</a></h4>
-<p>An <code>Fs</code> implementation that connects to a remote server. Works with <code>FileStorage</code> or <code>anyfs-mount</code>.</p>
+<p>An <code>Fs</code> implementation that connects to a remote server. Works with <code>FileStorage</code> or mounting.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs_remote::RemoteBackend;
@@ -948,7 +947,7 @@ fs.write("/documents/report.pdf", data)?;
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs_remote::RemoteBackend;
-use anyfs_mount::MountHandle;
+use anyfs::MountHandle;
 
 // Mount remote storage as local directory
 let remote = RemoteBackend::connect("https://yourserver.com")?;
@@ -1080,8 +1079,7 @@ sftp&gt; rm old_file.txt
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota};
-use anyfs_mount::MountHandle;
+</span>use anyfs::{SqliteBackend, Quota, MountHandle};
 use anyfs_ssh_shell::SshShellServer;
 
 // On user login, mount their isolated storage as $HOME
@@ -1150,10 +1148,10 @@ alice@server:~$ du -sh .
 <tbody>
 <tr><td>S3 API</td><td><code>anyfs-s3-server</code></td><td>AWS SDK (any language)</td><td>Object storage, web apps</td></tr>
 <tr><td>SFTP</td><td><code>anyfs-sftp-server</code></td><td>Any SFTP client</td><td>Shell-like file access</td></tr>
-<tr><td>SSH Shell</td><td><code>anyfs-ssh-shell</code> + <code>anyfs-mount</code></td><td>SSH client</td><td>Full shell with sandboxed home</td></tr>
+<tr><td>SSH Shell</td><td><code>anyfs-ssh-shell</code> + <code>anyfs</code> (fuse feature)</td><td>SSH client</td><td>Full shell with sandboxed home</td></tr>
 <tr><td>gRPC</td><td><code>anyfs-grpc</code></td><td>Generated client</td><td>High-performance apps</td></tr>
 <tr><td>REST</td><td>Custom adapter</td><td>HTTP client</td><td>Simple integrations</td></tr>
-<tr><td>FUSE mount</td><td><code>anyfs-mount</code> + <code>anyfs-remote</code></td><td>FUSE installed</td><td>Transparent local access</td></tr>
+<tr><td>FUSE mount</td><td><code>anyfs</code> (fuse feature) + <code>anyfs-remote</code></td><td>FUSE installed</td><td>Transparent local access</td></tr>
 <tr><td>WebDAV</td><td><code>anyfs-webdav</code></td><td>WebDAV client/OS</td><td>File manager access</td></tr>
 <tr><td>NFS</td><td><code>anyfs-nfs</code></td><td>NFS client</td><td>Unix network shares</td></tr>
 </tbody>

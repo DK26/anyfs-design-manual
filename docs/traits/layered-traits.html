@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -474,9 +474,9 @@ fn create_backup&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Resu
     Ok(())
 }
 
-// Requires FUSE-level support (planned companion crate)
+// Requires FsFuse trait + fuse/winfsp feature
 fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), FsError&gt; {
-    anyfs_mount::MountHandle::mount(fs, "/mnt/myfs")?;
+    anyfs::MountHandle::mount(fs, "/mnt/myfs")?;
     Ok(())
 }
 <span class="boring">}</span></code></pre>

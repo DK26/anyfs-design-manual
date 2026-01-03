@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -512,7 +512,7 @@ fs.write("/test.txt", b"hello")?;
 <li><strong>AI agent runtime</strong> - AgentFS has more features for that specific use case</li>
 <li><strong>Cloud storage</strong> - OpenDAL is async-first with cloud backends</li>
 <li><strong>Async-first codebases</strong> - Wait for AnyFS async support</li>
-<li><strong>Must mount filesystem</strong> - Use a FUSE solution directly today (anyfs-mount is planned)</li>
+<li><strong>Must mount filesystem</strong> - Use <code>anyfs</code> with <code>fuse</code>/<code>winfsp</code> feature flags</li>
 </ul>
 <hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>

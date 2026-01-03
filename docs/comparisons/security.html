@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-462c7a48.js";
+            window.path_to_searchindex_js = "../searchindex-921872f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -675,7 +675,7 @@ impl&lt;B: Fs&gt; FsRead for IntegrityVerified&lt;B&gt; {
 </div>
 <h4 id="encrypted-memory-backend-illustrative-pattern"><a class="header" href="#encrypted-memory-backend-illustrative-pattern">Encrypted Memory Backend (Illustrative Pattern)</a></h4>
 <blockquote>
-<p><strong>Note:</strong> <code>EncryptedMemoryBackend</code> is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend in v1. Users can implement this pattern using the guidance below.</p>
+<p><strong>Note:</strong> <code>EncryptedMemoryBackend</code> is an illustrative pattern for users who need encrypted RAM storage. It is not a built-in backend. Users can implement this pattern using the guidance below.</p>
 </blockquote>
 <p>Keep data encrypted even in RAM - decrypt only during active use:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
