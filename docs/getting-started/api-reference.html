@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-921872f2.js";
+            window.path_to_searchindex_js = "../searchindex-04de7841.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -773,9 +773,12 @@ backend.change_password("new-password")?;
 <tr><th>Type</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FileStorage&lt;B, M&gt;</code></td><td>Zero-cost ergonomic wrapper (generic backend, optional marker)</td></tr>
+<tr><td><code>FileStorage&lt;B, R, M&gt;</code></td><td>Zero-cost ergonomic wrapper (generic backend, resolver, marker)</td></tr>
 <tr><td><code>BackendStack</code></td><td>Fluent builder for middleware stacks</td></tr>
 <tr><td><code>.boxed()</code></td><td>Opt-in type erasure for <code>FileStorage</code></td></tr>
+<tr><td><code>IterativeResolver</code></td><td>Default path resolver (symlink-aware for backends with <code>FsLink</code>)</td></tr>
+<tr><td><code>NoOpResolver</code></td><td>No-op resolver for <code>SelfResolving</code> backends</td></tr>
+<tr><td><code>CachingResolver&lt;R&gt;</code></td><td>LRU cache wrapper around another resolver</td></tr>
 </tbody>
 </table>
 </div>

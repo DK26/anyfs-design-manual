@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-921872f2.js";
+            window.path_to_searchindex_js = "../searchindex-04de7841.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -374,11 +374,11 @@ mod tests {
 Contract: Implement `PathResolver` trait (see anyfs-backend/src/path_resolver.rs).
 
 Requirements:
-- Wrap another resolver
-- Cache resolved paths in LRU cache with TTL expiration
-- Cache is best-effort (stale entries acceptable, eventually consistent)
+- Wrap another resolver with LRU cache
+- Cache resolved canonical paths keyed by input path
+- Bounded cache size (configurable max entries)
 
-Test: Write a test showing cached resolution is faster than repeated resolution.
+Test: Write a test verifying cache hit returns same result as cache miss.
 </code></pre>
 <h3 id="pattern-2-fix-a-bug"><a class="header" href="#pattern-2-fix-a-bug">Pattern 2: Fix a Bug</a></h3>
 <pre><code>Bug: `Quota&lt;B&gt;` doesn't account for existing file size when checking write limits.

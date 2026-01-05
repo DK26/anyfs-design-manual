@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-921872f2.js";
+            window.path_to_searchindex_js = "../searchindex-04de7841.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25c4523f.js"></script>
@@ -235,9 +235,9 @@
 <ol start="2">
 <li>Path resolution is pluggable via <code>PathResolver</code> trait (ADR-033). Built-in resolvers include:
 <ul>
-<li><code>IterativeResolver</code> - default symlink-aware resolution</li>
+<li><code>IterativeResolver</code> - default symlink-aware resolution (when backend implements <code>FsLink</code>)</li>
 <li><code>NoOpResolver</code> - for <code>SelfResolving</code> backends</li>
-<li><code>CachingResolver</code> - LRU cache with TTL expiration (best-effort, eventually consistent)</li>
+<li><code>CachingResolver</code> - LRU cache wrapper around another resolver</li>
 </ul>
 </li>
 </ol>
