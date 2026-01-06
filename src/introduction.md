@@ -38,10 +38,10 @@ You get:
 
 ## Two-Crate Structure
 
-| Crate           | Purpose                                                          |
-| --------------- | ---------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract: `Fs` trait + types                             |
-| `anyfs`         | Backends + middleware + mounting + ergonomic `FileStorage<B, M>` |
+| Crate           | Purpose                                                             |
+| --------------- | ------------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract: `Fs` trait + types                                |
+| `anyfs`         | Backends + middleware + mounting + ergonomic `FileStorage<B, R, M>` |
 
 **Note:** Mounting (`FsFuse` + `MountHandle`) is part of the `anyfs` crate behind feature flags (`fuse`, `winfsp`), not a separate crate.
 

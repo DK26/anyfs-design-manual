@@ -277,10 +277,11 @@ Each backend implements the traits it supports:
 - `Cache<B>` + `CacheLayer` - LRU read cache
 - `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
 
-### FileStorage<B, M> (Ergonomic Wrapper)
+### FileStorage<B, R, M> (Ergonomic Wrapper)
 
-- `FileStorage<B, M>` - Zero-cost wrapper with `std::fs`-aligned API
+- `FileStorage<B, R, M>` - Zero-cost wrapper with `std::fs`-aligned API
   - Generic backend `B` (no boxing, static dispatch)
+  - Generic resolver `R` (default: `IterativeResolver`)
   - Optional marker type `M` for compile-time container differentiation
   - `.boxed()` method for opt-in type erasure when needed
 - `BackendStack` builder for fluent middleware composition

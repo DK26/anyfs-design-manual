@@ -86,9 +86,9 @@ process_sandbox(&userdata);  // Compile error! Type mismatch
 Both dimensions are meaningful:
 
 ```rust
-FileStorage<SqliteBackend, TenantA>   // SQLite storage for TenantA
-FileStorage<MemoryBackend, Sandbox>   // In-memory sandbox
-FileStorage<StdFsBackend, Production> // Real filesystem, production
+FileStorage<SqliteBackend, IterativeResolver, TenantA>   // SQLite storage for TenantA
+FileStorage<MemoryBackend, IterativeResolver, Sandbox>   // In-memory sandbox
+FileStorage<StdFsBackend, IterativeResolver, Production> // Real filesystem, production
 ```
 
 ### Type Aliases for Clean Code

@@ -1051,10 +1051,11 @@ let backend = Overlay::new(base, upper);
 
 ---
 
-## FileStorage<B, M> (in `anyfs`)
+## FileStorage<B, R, M> (in `anyfs`)
 
-`FileStorage<B, M>` is a **zero-cost ergonomic wrapper** with:
+`FileStorage<B, R, M>` is a **zero-cost ergonomic wrapper** with:
 - **`B`** - Backend type (generic, no boxing)
+- **`R`** - PathResolver type (default: `IterativeResolver`)
 - **`M`** - Optional marker type for compile-time safety
 
 **Axum-style design:** Zero-cost by default, type erasure opt-in via `.boxed()`.
@@ -1083,16 +1084,16 @@ use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 struct Sandbox;
 struct UserData;
 
-// Specify marker, infer backend with _
-let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+// Specify marker, infer backend and resolver with _
+let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
 
 // Type-safe function signatures prevent mixing containers
-fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) {
+fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) {
     // Can only accept Sandbox-marked containers
 }
 
-fn save_user_file(fs: &FileStorage<impl Fs, UserData>, name: &str, data: &[u8]) {
+fn save_user_file(fs: &FileStorage<impl Fs, IterativeResolver, UserData>, name: &str, data: &[u8]) {
     // Can only accept UserData-marked containers
 }
 
@@ -1106,9 +1107,9 @@ process_sandbox(&userdata);  // Compile error! Type mismatch
 Both type parameters are meaningful:
 
 ```rust
-FileStorage<SqliteBackend, TenantA>   // SQLite storage for TenantA
-FileStorage<MemoryBackend, Sandbox>   // In-memory sandbox
-FileStorage<StdFsBackend, Production> // Real filesystem, production
+FileStorage<SqliteBackend, IterativeResolver, TenantA>   // SQLite storage for TenantA
+FileStorage<MemoryBackend, IterativeResolver, Sandbox>   // In-memory sandbox
+FileStorage<StdFsBackend, IterativeResolver, Production> // Real filesystem, production
 ```
 
 ### Type Aliases for Clean Code

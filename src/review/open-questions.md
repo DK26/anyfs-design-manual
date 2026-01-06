@@ -200,7 +200,7 @@ See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 
 **Question:** Should we use the type system to prevent accidentally mixing data between containers?
 
-**Resolution:** Implemented via `FileStorage<B, M>` where `M` is a marker type:
+**Resolution:** Implemented via `FileStorage<B, R, M>` where `M` is a marker type:
 
 ```rust
 struct Sandbox;

@@ -224,7 +224,7 @@ let backend = RestrictionsLayer::builder()
 
 ## ADR-008: FileStorage as thin ergonomic wrapper
 
-**Decision:** `FileStorage<B, M>` is a thin wrapper that provides std::fs-aligned ergonomics and centralized path resolution for virtual backends. It contains NO policy logic.
+**Decision:** `FileStorage<B, R, M>` is a thin wrapper that provides std::fs-aligned ergonomics and centralized path resolution for virtual backends. It contains NO policy logic.
 
 **What it does:**
 - Provides familiar method names
@@ -569,7 +569,6 @@ fs.write("/test.txt", b"hello")?;  // Logged but not written
 CacheLayer::builder()
     .max_entries(1000)
     .max_entry_size(1024 * 1024)  // 1MB max per entry
-    .ttl(Duration::from_secs(60))
     .build()
     .layer(backend)
 ```
@@ -1322,7 +1321,7 @@ impl FsPath for SqliteBackend {
 **FileStorage Integration:**
 
 ```rust
-impl<B: Fs + FsPath, M> FileStorage<B, M> {
+impl<B: Fs + FsPath, R: PathResolver, M> FileStorage<B, R, M> {
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
         self.backend.canonicalize(path.as_ref())
     }
