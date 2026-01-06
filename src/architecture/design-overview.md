@@ -1349,15 +1349,23 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
 ### Core Methods
 
 ```rust
-impl<B: Fs + FsLink, R: PathResolver, M> FileStorage<B, R, M> {
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
     /// Strict canonicalization - entire path must exist.
     ///
-    /// Resolves all symlinks and normalizes the path using the resolver.
+    /// Delegates to the PathResolver to resolve symlinks and normalize the path.
     /// Returns error if any component doesn't exist.
-    pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
+    pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
+        self.resolver.canonicalize(path.as_ref(), &self.backend)
+    }
 
     /// Soft canonicalization - resolves existing components,
     /// appends non-existent remainder lexically.
+    ///
+    /// Delegates to the PathResolver.
+    pub fn soft_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
+        self.resolver.soft_canonicalize(path.as_ref(), &self.backend)
+    }
+}
     ///
     /// Walks path component-by-component via the resolver:
     /// 1. For existing components → resolve symlinks, follow them

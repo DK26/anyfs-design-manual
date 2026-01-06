@@ -577,7 +577,6 @@ CacheLayer::builder()
 - Read operations check cache first, populate on miss.
 - Write operations invalidate relevant cache entries.
 - LRU eviction when max entries exceeded.
-- TTL-based expiration for freshness.
 
 **Why:**
 - Improves performance for repeated reads.
