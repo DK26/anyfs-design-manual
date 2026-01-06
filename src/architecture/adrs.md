@@ -1319,14 +1319,32 @@ impl FsPath for SqliteBackend {
 
 **FileStorage Integration:**
 
+> **Note:** ADR-033 introduces `PathResolver` as the primary resolution strategy. `FsPath` remains
+> as an optional backend optimization hook. When a backend implements both `FsPath` and the default
+> traits, the backend can choose to delegate to its resolver or provide fully custom logic (e.g.,
+> SQLite CTE queries).
+
+FileStorage uses `PathResolver` for its resolution (see ADR-033):
+
 ```rust
-impl<B: Fs + FsPath, R: PathResolver, M> FileStorage<B, R, M> {
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
-        self.backend.canonicalize(path.as_ref())
+        self.resolver.canonicalize(path.as_ref(), &self.backend as &dyn Fs)
     }
 
     pub fn soft_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
-        self.backend.soft_canonicalize(path.as_ref())
+        self.resolver.soft_canonicalize(path.as_ref(), &self.backend as &dyn Fs)
+    }
+}
+```
+
+Backends implementing `FsPath` can provide optimized implementations that the resolver MAY use:
+
+```rust
+impl FsPath for SqliteBackend {
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        // Optimized: single CTE query instead of iterative resolution
+        self.conn.query_row(/* ... */)
     }
 }
 ```
