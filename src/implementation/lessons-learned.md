@@ -258,7 +258,7 @@ This validates our middleware approach.
 - **Batch operations** where possible in `SqliteBackend`
 - **Use transactions** for multi-file operations
 - **Document performance characteristics** per backend
-- **Keep mounting optional** - core AnyFS stays a library; mount concerns live in a companion crate
+- **Keep mounting optional** - core AnyFS stays a library; mount concerns are behind feature flags (`fuse`, `winfsp`)
 
 **Documentation requirement:**
 ```rust
@@ -286,7 +286,7 @@ pub struct SqliteBackend { ... }
 
 ### AnyFS Response
 
-- **Core stays a library** - daemon/mount shutdown concerns belong in the companion crate
+- **Core stays a library** - daemon/mount shutdown concerns are behind feature flags
 - **Ensure `Drop` implementations clean up properly**
 - **`SqliteBackend` flushes on drop**
 
@@ -350,16 +350,16 @@ strategy:
 
 Our design decisions already prevent these problems:
 
-| Problem in Others        | AnyFS Solution                       |
-| ------------------------ | ------------------------------------ |
-| No middleware pattern    | Tower-style composable middleware    |
-| No quota enforcement     | `Quota<B>` middleware                |
-| No read-only mode        | `ReadOnly<B>` middleware             |
-| Symlink complexity       | `FsLink` trait (compile-time)        |
-| Path escape via symlinks | `strict-path` canonicalization       |
-| FUSE complexity          | Isolated in optional companion crate |
-| SQLite-only              | Multiple backends                    |
-| Monolithic features      | Composable middleware                |
+| Problem in Others        | AnyFS Solution                    |
+| ------------------------ | --------------------------------- |
+| No middleware pattern    | Tower-style composable middleware |
+| No quota enforcement     | `Quota<B>` middleware             |
+| No read-only mode        | `ReadOnly<B>` middleware          |
+| Symlink complexity       | `FsLink` trait (compile-time)     |
+| Path escape via symlinks | `strict-path` canonicalization    |
+| FUSE complexity          | Isolated behind feature flags     |
+| SQLite-only              | Multiple backends                 |
+| Monolithic features      | Composable middleware             |
 
 ---
 

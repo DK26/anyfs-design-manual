@@ -80,7 +80,7 @@ See [LLM Development Methodology](src/guides/llm-development-methodology.md) for
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, M>                      │  ← Ergonomics + type-safe marker
+│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │                                         │
@@ -102,19 +102,19 @@ See [LLM Development Methodology](src/guides/llm-development-methodology.md) for
 
 Each layer has **exactly one responsibility**:
 
-| Layer              | Responsibility                                   |
-| ------------------ | ------------------------------------------------ |
-| Backend (`Fs`+)    | Storage + filesystem semantics                   |
-| `Quota<B>`         | Resource limits (size, count, depth)             |
-| `Restrictions<B>`  | Block permission changes                         |
-| `PathFilter<B>`    | Path-based access control (sandbox)              |
-| `ReadOnly<B>`      | Prevent all write operations                     |
-| `RateLimit<B>`     | Fixed-window rate limiting                       |
-| `Tracing<B>`       | Instrumentation / audit trail                    |
-| `DryRun<B>`        | Log operations without executing                 |
-| `Cache<B>`         | LRU cache for reads                              |
-| `Overlay<B1,B2>`   | Union filesystem (base + upper)                  |
-| `FileStorage<B,M>` | Ergonomic std::fs-aligned API + type-safe marker |
+| Layer                | Responsibility                                   |
+| -------------------- | ------------------------------------------------ |
+| Backend (`Fs`+)      | Storage + filesystem semantics                   |
+| `Quota<B>`           | Resource limits (size, count, depth)             |
+| `Restrictions<B>`    | Block permission changes                         |
+| `PathFilter<B>`      | Path-based access control (sandbox)              |
+| `ReadOnly<B>`        | Prevent all write operations                     |
+| `RateLimit<B>`       | Fixed-window rate limiting                       |
+| `Tracing<B>`         | Instrumentation / audit trail                    |
+| `DryRun<B>`          | Log operations without executing                 |
+| `Cache<B>`           | LRU cache for reads                              |
+| `Overlay<B1,B2>`     | Union filesystem (base + upper)                  |
+| `FileStorage<B,R,M>` | Ergonomic std::fs-aligned API + type-safe marker |
 
 ---
 
@@ -168,7 +168,7 @@ anyfs/                      # Crate 2: backends + middleware + FileStorage
       iterative.rs          # IterativeResolver (default)
       noop.rs               # NoOpResolver (for SelfResolving backends)
       caching.rs            # CachingResolver (LRU cache wrapper)
-    container.rs            # FileStorage<B, M>
+    container.rs            # FileStorage<B, R, M>
     stack.rs                # BackendStack builder
 ```
 
@@ -282,7 +282,10 @@ pub struct FileStorage<B, R = IterativeResolver, M = ()> {
 impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
     pub fn new(backend: B) -> Self;                     // Default IterativeResolver
     pub fn with_resolver<R2: PathResolver>(backend: B, resolver: R2) -> FileStorage<B, R2, M>;
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, IterativeResolver, M>;  // Opt-in type erasure
+}
+
+impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M>;  // Opt-in type erasure, preserves resolver
 }
 ```
 

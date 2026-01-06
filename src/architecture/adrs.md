@@ -97,10 +97,10 @@ Primary docs are where each decision is explained in narrative form. ADRs remain
 
 **Decision:**
 
-| Crate           | Purpose                                                                  |
-| --------------- | ------------------------------------------------------------------------ |
-| `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types              |
-| `anyfs`         | Backends + middleware + ergonomics (`FileStorage<B, M>`, `BackendStack`) |
+| Crate           | Purpose                                                                     |
+| --------------- | --------------------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types                 |
+| `anyfs`         | Backends + middleware + ergonomics (`FileStorage<B, R, M>`, `BackendStack`) |
 
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
@@ -178,7 +178,7 @@ let backend = SqliteBackend::open("data.db")?
 
 ## ADR-007: Capability via Trait Bounds
 
-**Decision:** Symlink and hard-link capability is determined by whether the backend implements `FsLink`. There is NO runtime toggle.
+**Decision:** Symlink and hard-link capability is determined by whether the backend implements `FsLink`. The default `PathResolver` (IterativeResolver) follows symlinks when `FsLink` is available.
 
 ### The Rule
 

@@ -3,7 +3,7 @@
 This plan describes a phased rollout of the AnyFS ecosystem:
 
 - `anyfs-backend`: Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`) + `Layer` + types
-- `anyfs`: Built-in backends + middleware (feature-gated) + `FileStorage<B, M>` ergonomic wrapper
+- `anyfs`: Built-in backends + middleware (feature-gated) + `FileStorage<B, R, M>` ergonomic wrapper
 
 ---
 
@@ -608,7 +608,7 @@ Minimal interactive shell for exploring AnyFS behavior without writing a full ap
 - Provide a familiar, low-noise CLI for navigation and file management.
 - Keep scope intentionally small (no scripting, pipes, job control).
 
-**Command set (v1):**
+**Command set:**
 - `ls [path]` - list directory entries (default: current directory).
 - `cd <path>` - change working directory.
 - `pwd` - print current directory.

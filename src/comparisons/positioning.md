@@ -196,10 +196,10 @@ Add, remove, or reorder middleware without touching backends. Write middleware o
 struct Sandbox;
 struct UserData;
 
-let sandbox: FileStorage<_, Sandbox> = FileStorage::new(memory_backend);
-let userdata: FileStorage<_, UserData> = FileStorage::new(sqlite_backend);
+let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(memory_backend);
+let userdata: FileStorage<_, _, UserData> = FileStorage::new(sqlite_backend);
 
-fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { ... }
+fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { ... }
 
 process_sandbox(&sandbox);   // OK
 process_sandbox(&userdata);  // COMPILE ERROR

@@ -1340,7 +1340,7 @@ The most complex middleware, but uses well-established patterns from OverlayFS. 
 | RateLimit    | Moderate   | Atomic counter + time window                |
 | DryRun       | Moderate   | Log writes, return Ok without executing     |
 | PathFilter   | Moderate   | Glob matching + filtered ReadDirIter        |
-| Cache        | Moderate   | LRU with TTL, invalidate on writes          |
+| Cache        | Moderate   | LRU cache, invalidate on writes             |
 | Quota        | High       | Usage counters + QuotaWriter wrapper        |
 | Overlay      | High       | Whiteout markers + merged directory listing |
 

@@ -508,10 +508,10 @@ fn test_filestorage_marker_types() {
     struct Sandbox;
     struct Production;
 
-    let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
-    let prod: FileStorage<_, Production> = FileStorage::new(MemoryBackend::new());
+    let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
+    let prod: FileStorage<_, _, Production> = FileStorage::new(MemoryBackend::new());
 
-    fn only_sandbox(_fs: &FileStorage<impl Fs, Sandbox>) {}
+    fn only_sandbox(_fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) {}
 
     only_sandbox(&sandbox);  // Compiles
     // only_sandbox(&prod);  // Would not compile

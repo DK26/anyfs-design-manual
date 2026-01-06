@@ -19,7 +19,7 @@ You get:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, M>                   │  ← Ergonomics (std::fs API)
+│  FileStorage<B, R, M>                │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
 │    Quota<B>                    │  ← Quotas

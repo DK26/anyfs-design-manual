@@ -206,16 +206,16 @@ See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 struct Sandbox;
 struct UserData;
 
-let sandbox: FileStorage<_, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
+let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
 
-fn process_sandbox(fs: &FileStorage<impl Fs, Sandbox>) { /* only accepts Sandbox */ }
+fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { /* only accepts Sandbox */ }
 
 process_sandbox(&sandbox);   // OK
 process_sandbox(&userdata);  // Compile error!
 ```
 
-See [FileStorage<B, M>](../traits/files-container.md) for details.
+See [FileStorage<B, R, M>](../traits/files-container.md) for details.
 
 ---
 

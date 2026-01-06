@@ -20,7 +20,7 @@ You get:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, M>                      │  ← Ergonomics + type-safe marker
+│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
 │    Quota<B>                             │  ← Quotas

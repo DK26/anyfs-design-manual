@@ -98,9 +98,9 @@ FileStorage<StdFsBackend, Production> // Real filesystem, production
 type SecureBackend = Tracing<Restrictions<Quota<SqliteBackend>>>;
 
 // Type aliases for common combinations
-type SandboxFs = FileStorage<MemoryBackend, Sandbox>;
-type UserDataFs = FileStorage<SecureBackend, UserData>;
-type TenantFs<T> = FileStorage<SecureBackend, T>;
+type SandboxFs = FileStorage<MemoryBackend, IterativeResolver, Sandbox>;
+type UserDataFs = FileStorage<SecureBackend, IterativeResolver, UserData>;
+type TenantFs<T> = FileStorage<SecureBackend, IterativeResolver, T>;
 
 // Now signatures are clean AND informative
 fn run_agent(fs: &SandboxFs) { ... }

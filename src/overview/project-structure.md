@@ -76,14 +76,14 @@ anyfs-backend (trait + types)
 
 **Key points:**
 - Custom backends depend only on `anyfs-backend`
-- `anyfs` provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic `FileStorage<B, M>` wrapper
+- `anyfs` provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic `FileStorage<B, R, M>` wrapper
 
 ---
 
 ## Middleware Pattern
 
 ```
-FileStorage<B, M>
+FileStorage<B, R, M>
     wraps -> Tracing<B>
         wraps -> Restrictions<B>
             wraps -> Quota<B>

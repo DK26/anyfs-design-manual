@@ -28,7 +28,7 @@ Anyone can:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, M>                      │  ← Ergonomics + type-safe marker
+│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │                                         │
@@ -104,7 +104,7 @@ use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, FileStorage};
 struct AiSandbox;  // Marker type
 
 // Application composes secure defaults (marker in type annotation)
-let sandbox: FileStorage<_, AiSandbox> = FileStorage::new(
+let sandbox: FileStorage<_, _, AiSandbox> = FileStorage::new(
     MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(50 * 1024 * 1024)
@@ -1013,7 +1013,6 @@ use anyfs::{SqliteBackend, Cache, FileStorage};
 let backend = CacheLayer::builder()
     .max_size(100 * 1024 * 1024)      // 100 MB cache
     .max_entries(10_000)              // Max 10K entries
-    .ttl(Duration::from_secs(300))    // 5 min TTL
     .build()
     .layer(SqliteBackend::open("data.db")?);
 let fs = FileStorage::new(backend);

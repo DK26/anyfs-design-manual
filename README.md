@@ -32,7 +32,7 @@ AnyFS separates **what** you store from **how** you store it and **what rules** 
 ┌─────────────────────────────────────────┐
 │  Your Application                       │
 ├─────────────────────────────────────────┤
-│  FileStorage<B, M> (std::fs-like API)   │
+│  FileStorage<B, R, M> (std::fs-like)    │
 ├─────────────────────────────────────────┤
 │  Middleware Stack (composable):         │
 │    Quota, PathFilter, RateLimit,        │
@@ -265,7 +265,7 @@ struct TenantMarker;
 pub fn create_tenant_storage(
     tenant_id: &str, 
     encryption_key: &[u8; 32]
-) -> Result<FileStorage<Box<dyn Fs>, TenantMarker>, FsError> {
+) -> Result<FileStorage<Box<dyn Fs>, IterativeResolver, TenantMarker>, FsError> {
     let db_path = format!("/data/tenants/{}.db", tenant_id);
     
     let backend = SqliteCipherBackend::open(&db_path, encryption_key)?
@@ -279,7 +279,7 @@ pub fn create_tenant_storage(
 }
 
 // Type system prevents accidentally mixing FileStorages meant for different purposes
-fn process_tenant<M>(fs: &FileStorage<impl Fs, M>) { /* ... */ }
+fn process_tenant<R: PathResolver, M>(fs: &FileStorage<impl Fs, R, M>) { /* ... */ }
 ```
 
 **Benefits:** Per-tenant encryption, automatic quota enforcement, audit trail, compile-time isolation.
@@ -419,10 +419,10 @@ let content = fs.read_to_string("/docs/hello.txt")?;
 
 ## Crate Structure
 
-| Crate           | Purpose                                                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------ |
-| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors                  |
-| `anyfs`         | Built-in backends, middleware, `FileStorage<B, M>` wrapper, mounting (`fuse`, `winfsp` features) |
+| Crate           | Purpose                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors                     |
+| `anyfs`         | Built-in backends, middleware, `FileStorage<B, R, M>` wrapper, mounting (`fuse`, `winfsp` features) |
 
 ```toml
 [dependencies]
