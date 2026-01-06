@@ -1,22 +1,22 @@
-# Hybrid Backend Design
+# IndexedBackend Pattern
 
 **SQLite Metadata + Content-Addressed Blob Storage**
 
-This document validates that AnyFS can support hybrid backends and provides implementation patterns for this advanced use case.
+This document describes the IndexedBackend architecture pattern: separating filesystem metadata (stored in SQLite) from file content (stored as blobs). This enables efficient queries, large file support, and flexible storage backends.
 
-> **Built-in Implementation:** AnyFS ships `IndexedBackend` as a production-ready implementation of this pattern using local disk blobs. See the [Backends Guide](../guides/backends-guide.md#indexedbackend) for usage. This document covers the underlying design pattern for those building custom hybrid backends (e.g., with S3, cloud storage, or custom blob stores).
+> **Built-in Implementation:** AnyFS ships `IndexedBackend` as a production-ready implementation using local disk blobs. See the [Backends Guide](../guides/backends-guide.md#indexedbackend) for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).
 
 ---
 
 ## Overview
 
-A **hybrid backend** separates:
+The **IndexedBackend pattern** separates:
 - **Metadata** (directory structure, inodes, permissions) → SQLite
 - **Content** (file bytes) → Content-Addressed Storage (CAS)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│            Hybrid Backend (pattern)                     │
+│            IndexedBackend (pattern)                     │
 │  ┌─────────────────────┐    ┌────────────────────────┐  │
 │  │   SQLite Metadata   │    │   Blob Store (CAS)     │  │
 │  │                     │    │                        │  │
