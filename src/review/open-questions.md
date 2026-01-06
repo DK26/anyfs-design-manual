@@ -279,7 +279,7 @@ Based on review feedback, the following naming concerns were raised:
 | Compression/encryption    | Backend responsibility                                                        |
 | Hooks/callbacks           | `Tracing` middleware                                                          |
 | FUSE mount                | Part of `anyfs` crate (`fuse`, `winfsp` feature flags)                        |
-| Type-system protection    | `FileStorage<B, M>` marker types                                              |
+| Type-system protection    | `FileStorage<B, R, M>` marker types                                           |
 | POSIX compatibility       | Not a goal                                                                    |
 | `truncate`                | Added to `FsWrite`                                                            |
 | `sync` / `fsync`          | Added to `FsSync`                                                             |

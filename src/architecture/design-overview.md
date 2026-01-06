@@ -122,10 +122,10 @@ The backend is permissive. The application adds restrictions appropriate for its
 
 ## Crates
 
-| Crate           | Purpose                            | Contains                                                                              |
-| --------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract                   | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt`   |
-| `anyfs`         | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<B, M>`, `BackendStack` builder |
+| Crate           | Purpose                            | Contains                                                                                 |
+| --------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract                   | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt`      |
+| `anyfs`         | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<B, R, M>`, `BackendStack` builder |
 
 ### Dependency Graph
 
@@ -234,12 +234,12 @@ print(data)  # b"Hello from Python!"
 
 **Key considerations for FFI:**
 
-| Concern                        | Solution                                                  |
-| ------------------------------ | --------------------------------------------------------- |
-| Generics (`FileStorage<B, M>`) | Use `FileStorage<Box<dyn Fs>>` (boxed form) for FFI layer |
-| Streaming (`Box<dyn Read>`)    | Wrap in language-native class with `read(n)` method       |
-| Middleware composition         | Pre-build common stacks, expose as factory functions      |
-| Error handling                 | Convert `FsError` to language-native exceptions           |
+| Concern                           | Solution                                                        |
+| --------------------------------- | --------------------------------------------------------------- |
+| Generics (`FileStorage<B, R, M>`) | Use `FileStorage<Box<dyn Fs>, R, M>` (boxed form) for FFI layer |
+| Streaming (`Box<dyn Read>`)       | Wrap in language-native class with `read(n)` method             |
+| Middleware composition            | Pre-build common stacks, expose as factory functions            |
+| Error handling                    | Convert `FsError` to language-native exceptions                 |
 
 **Future crate:** `anyfs-python`
 

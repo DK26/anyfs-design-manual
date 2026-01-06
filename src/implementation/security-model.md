@@ -357,9 +357,9 @@ Tenant B uploads same file → instantly deduped → B knows A has that file
 **Recommendation:** Only deduplicate within a tenant, not across tenants.
 
 ```rust
-// Pattern for any hybrid backend (e.g., IndexedBackend or custom implementations)
+// Pattern for any hybrid backend (IndexedBackend or custom implementations)
 // See hybrid-backend-design.md for the full pattern
-impl HybridBackend {
+impl IndexedBackend {
     fn blob_id_for_tenant(&self, tenant_id: &TenantId, data: &[u8]) -> String {
         // Include tenant ID in hash to prevent cross-tenant dedup
         let mut hasher = Sha256::new();
