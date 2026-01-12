@@ -182,11 +182,12 @@ The AnyFS design is **FFI-friendly** and can be exposed to other languages with 
 ```rust
 // anyfs-python/src/lib.rs
 use pyo3::prelude::*;
-use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs};
+use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs, IterativeResolver};
 
 #[pyclass]
 struct PyFileStorage {
-    inner: FileStorage<Box<dyn Fs>>,  // Type-erased for FFI
+    // Type-erased for FFI (resolver and marker use defaults)
+    inner: FileStorage<Box<dyn Fs>, IterativeResolver, ()>,
 }
 
 #[pymethods]
@@ -257,7 +258,7 @@ let fs: Tracing<Quota<MemoryBackend>> = MemoryBackend::new()
 For **runtime-configured** middleware (e.g., based on config files), use `Box<dyn Fs>`:
 
 ```rust
-fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>> {
+fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>, IterativeResolver, ()> {
     let mut backend: Box<dyn Fs> = Box::new(MemoryBackend::new());
 
     if config.enable_quota {
@@ -1163,8 +1164,8 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
 When you need uniform types (e.g., collections), use `.boxed()`:
 
 ```rust
-// Type-erased for uniform storage
-let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
+// Type-erased for uniform storage (resolver and marker preserved)
+let filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
     FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
 ];

@@ -39,6 +39,7 @@
 # Guides
 
 - [Built-in Backends Guide](./guides/backends-guide.md)
+- [PathResolver Explained](./guides/path-resolver-explained.md)
 - [Which Crate Should I Use?](./guides/which-layer.md)
 - [Consumer Documentation Planning](./guides/llm-context.md)
 - [LLM Development Methodology](./guides/llm-development-methodology.md)

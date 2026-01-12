@@ -240,10 +240,10 @@ Backends implementing `SelfResolving` (like `VRootFsBackend`) skip resolution si
 When you need simpler types (e.g., storing in collections), use `.boxed()`:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs};
+use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs, IterativeResolver};
 
-// Type-erased for uniform storage
-let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
+// Type-erased for uniform storage (R and M use defaults)
+let filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
     FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
     FileStorage::new(SqliteBackend::open("b.db")?).boxed(),

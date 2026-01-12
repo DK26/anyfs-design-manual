@@ -556,25 +556,38 @@ OPT-IN TYPE ERASURE:
    - Suggested features must be implementable in the real world and make sense within AnyFS's architecture
    - Ask: "How would this actually be implemented? Does it fit our trait hierarchy and middleware pattern?"
 
-7. **Do NOT add justification for "decisions" that were never actually made:**
+7. **Features and examples must have clear business value:**
+   - Every feature we document is a promise that it solves a REAL problem
+   - The business value must be obvious—if you can't explain WHY someone needs this, don't add it
+   - Ask: "What user problem does this solve? Who asked for this? What's the use case?"
+   - Features exist to help users accomplish goals, not to demonstrate technical cleverness
+   - Every code example is a commitment that it WILL work when implemented
+   - Examples must be realistic and useful—not theoretical demonstrations
+   - If you show `fs.write("/path", data)`, that operation MUST be supported
+   - Do NOT include examples of features that don't exist or won't be implemented
+   - Ask: "Can a user copy-paste this example and have it work?" If not, don't write it
+   - Examples should solve real problems users actually have, not contrived scenarios
+   - When in doubt, show the simplest working example, not the most impressive one
+
+8. **Do NOT add justification for "decisions" that were never actually made:**
    - This is a design manual, not a changelog
    - Document what the design IS, not what it isn't
    - If you make an error and then fix it, don't document "why we didn't do the wrong thing"
    - ADRs may include rejected alternatives when there was a real design dilemma
    - But implementation docs should not explain why non-options weren't chosen
 
-8. **Do NOT plan "v1" and "v2" or "future versions":**
+9. **Do NOT plan "v1" and "v2" or "future versions":**
    - We plan ONE version with future considerations noted
    - Use "Future Considerations" not "Post-v1" or "v2 features"
    - Do NOT split features into version roadmaps
    - If something is out of scope, say "out of scope" or "future consideration", not "v2"
 
-9. **Mounting is part of `anyfs` crate, NOT a separate `anyfs-mount` crate:**
+10. **Mounting is part of `anyfs` crate, NOT a separate `anyfs-mount` crate:**
    - Mounting is a core promise of AnyFS
    - It's behind feature flags (`fuse`, `winfsp`) in the `anyfs` crate
    - Use `anyfs::MountHandle`, not `anyfs_mount::MountHandle`
 
-10. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
+11. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
 
 ---
 

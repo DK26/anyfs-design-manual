@@ -522,8 +522,8 @@ fn test_filestorage_boxed() {
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
     let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
 
-    // Both can be stored in same collection
-    let _filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![fs1, fs2];
+    // Both can be stored in same collection (resolver and marker preserved)
+    let _filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![fs1, fs2];
 }
 ```
 
