@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ea1e7c9c.js";
+            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-060c2755.js"></script>
+        <script src="../toc-1628b8da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -284,7 +284,7 @@
 </thead>
 <tbody>
 <tr><td><code>anyfs-backend</code></td><td>Minimal contract: <code>Fs</code> trait, <code>Layer</code> trait, <code>FsExt</code>, types</td></tr>
-<tr><td><code>anyfs</code></td><td>Backends + middleware + ergonomics (<code>FileStorage&lt;B, R, M&gt;</code>, <code>BackendStack</code>)</td></tr>
+<tr><td><code>anyfs</code></td><td>Backends + middleware + ergonomics (<code>FileStorage&lt;B&gt;</code>, <code>BackendStack</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -398,12 +398,12 @@ fs.symlink("/target", "/link")?;  // ❌ Won't compile - no FsLink impl
 <p><strong>Symlink following:</strong> Controlled by the <code>PathResolver</code>. The default <code>IterativeResolver</code> follows symlinks when <code>FsLink</code> is available. Custom resolvers can implement different behaviors. OS-backed backends delegate to the OS (strict-path prevents escapes).</p>
 <hr>
 <h2 id="adr-008-filestorage-as-thin-ergonomic-wrapper"><a class="header" href="#adr-008-filestorage-as-thin-ergonomic-wrapper">ADR-008: FileStorage as thin ergonomic wrapper</a></h2>
-<p><strong>Decision:</strong> <code>FileStorage&lt;B, R, M&gt;</code> is a thin wrapper that provides std::fs-aligned ergonomics and centralized path resolution for virtual backends. It contains NO policy logic.</p>
+<p><strong>Decision:</strong> <code>FileStorage&lt;B&gt;</code> is a thin wrapper that provides std::fs-aligned ergonomics and path resolution for virtual backends. It contains NO policy logic.</p>
 <p><strong>What it does:</strong></p>
 <ul>
 <li>Provides familiar method names</li>
 <li>Accepts <code>impl AsRef&lt;Path&gt;</code> for convenience and forwards to the core <code>&amp;Path</code> traits</li>
-<li>Supports an optional marker type <code>M</code> for compile-time segregation of containers</li>
+<li>Delegates path resolution to a boxed <code>PathResolver</code> (cold path, boxing OK per ADR-025)</li>
 <li>Delegates all operations to the wrapped backend</li>
 </ul>
 <p><strong>What it does NOT do:</strong></p>
@@ -411,14 +411,16 @@ fs.symlink("/target", "/link")?;  // ❌ Won't compile - no FsLink impl
 <li>Quota enforcement (use Quota)</li>
 <li>Feature gating (use Restrictions)</li>
 <li>Instrumentation (use Tracing)</li>
+<li>Marker types (users create wrapper newtypes if needed)</li>
 <li>Any other policy</li>
 </ul>
 <p><strong>Why:</strong></p>
 <ul>
 <li>Single responsibility - ergonomics + path resolution (no policy).</li>
-<li>Users who don’t need ergonomics can use backends directly.</li>
+<li>One generic parameter keeps the API simple.</li>
+<li>Resolver is boxed because path resolution is a cold path.</li>
+<li>Users who need type-safe markers can create their own wrapper types.</li>
 <li>Policy is composable via middleware, not hardcoded.</li>
-<li>Marker types prevent accidental mixing of different storage domains without runtime tags.</li>
 </ul>
 <hr>
 <h2 id="adr-009-built-in-backends-are-feature-gated"><a class="header" href="#adr-009-built-in-backends-are-feature-gated">ADR-009: Built-in backends are feature-gated</a></h2>
@@ -1158,7 +1160,7 @@ SETUP (once at startup - zero-cost):
 
 OPT-IN TYPE ERASURE (when explicitly needed):
 ┌─────────────────────────────────────────────────────────────┐
-│  FileStorage::boxed() -&gt; FileStorage&lt;Box&lt;dyn Fs&gt;, R, M&gt;    │  ← Like Tower's BoxService
+│  FileStorage::boxed() -&gt; FileStorage&lt;Box&lt;dyn Fs&gt;&gt;          │  ← Like Tower's BoxService
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
 <h3 id="what-gets-boxed-and-why"><a class="header" href="#what-gets-boxed-and-why">What Gets Boxed and Why</a></h3>
@@ -1485,10 +1487,10 @@ as an optional backend optimization hook. When a backend implements both <code>F
 traits, the backend can choose to delegate to its resolver or provide fully custom logic (e.g.,
 SQLite CTE queries).</p>
 </blockquote>
-<p>FileStorage uses <code>PathResolver</code> for its resolution (see ADR-033):</p>
+<p>FileStorage uses a boxed <code>PathResolver</code> internally for resolution (see ADR-033):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>impl&lt;B: Fs, R: PathResolver, M&gt; FileStorage&lt;B, R, M&gt; {
+</span>impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
     pub fn canonicalize(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;PathBuf, FsError&gt; {
         self.resolver.canonicalize(path.as_ref(), &amp;self.backend as &amp;dyn Fs)
     }
@@ -1585,13 +1587,18 @@ pub struct CachingResolver&lt;R: PathResolver&gt; {
 <p><strong>Integration with FileStorage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>impl&lt;B: Fs, M&gt; FileStorage&lt;B, IterativeResolver, M&gt; {
-    pub fn new(backend: B) -&gt; Self { ... }
+</span>pub struct FileStorage&lt;B&gt; {
+    backend: B,
+    resolver: Box&lt;dyn PathResolver&gt;,  // Boxed: resolution is cold path
 }
 
-impl&lt;B: Fs, R: PathResolver, M&gt; FileStorage&lt;B, R, M&gt; {
-    pub fn with_resolver(backend: B, resolver: R) -&gt; Self {
-        Self { backend, resolver, _marker: PhantomData }
+impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
+    pub fn new(backend: B) -&gt; Self {
+        Self { backend, resolver: Box::new(IterativeResolver::default()) }
+    }
+
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -&gt; Self {
+        Self { backend, resolver: Box::new(resolver) }
     }
 }
 

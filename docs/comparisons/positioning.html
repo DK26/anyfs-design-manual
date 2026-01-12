@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ea1e7c9c.js";
+            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-060c2755.js"></script>
+        <script src="../toc-1628b8da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -361,21 +361,22 @@ backend
     .layer(TracingLayer::new());
 <span class="boring">}</span></code></pre>
 <p>Add, remove, or reorder middleware without touching backends. Write middleware once, use with any backend.</p>
-<h3 id="2-type-safe-domain-separation-nobody-else-has-this"><a class="header" href="#2-type-safe-domain-separation-nobody-else-has-this">2. Type-Safe Domain Separation (Nobody Else Has This)</a></h3>
+<h3 id="2-type-safe-domain-separation-user-defined-wrappers"><a class="header" href="#2-type-safe-domain-separation-user-defined-wrappers">2. Type-Safe Domain Separation (User-Defined Wrappers)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>struct Sandbox;
-struct UserData;
+</span>// Users who need type-safe domain separation can create wrapper types
+struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
+struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 
-let sandbox: FileStorage&lt;_, _, Sandbox&gt; = FileStorage::new(memory_backend);
-let userdata: FileStorage&lt;_, _, UserData&gt; = FileStorage::new(sqlite_backend);
+let sandbox = SandboxFs(FileStorage::new(memory_backend));
+let userdata = UserDataFs(FileStorage::new(sqlite_backend));
 
-fn process_sandbox(fs: &amp;FileStorage&lt;impl Fs, IterativeResolver, Sandbox&gt;) { ... }
+fn process_sandbox(fs: &amp;SandboxFs) { ... }
 
 process_sandbox(&amp;sandbox);   // OK
-process_sandbox(&amp;userdata);  // COMPILE ERROR
+process_sandbox(&amp;userdata);  // COMPILE ERROR - different type
 <span class="boring">}</span></code></pre>
-<p>Compile-time prevention of mixing storage domains.</p>
+<p>Compile-time prevention of mixing storage domains via user-defined wrapper types.</p>
 <h3 id="3-backend-agnostic-policies-nobody-else-has-this"><a class="header" href="#3-backend-agnostic-policies-nobody-else-has-this">3. Backend-Agnostic Policies (Nobody Else Has This)</a></h3>
 <div class="table-wrapper">
 <table>

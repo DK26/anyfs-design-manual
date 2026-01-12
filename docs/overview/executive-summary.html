@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ea1e7c9c.js";
+            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-060c2755.js"></script>
+        <script src="../toc-1628b8da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,14 +194,14 @@
 <hr>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
 <pre><code>┌─────────────────────────────────────────┐
-│  FileStorage&lt;B, R, M&gt;                │  ← Ergonomics (std::fs API)
+│  FileStorage&lt;B&gt;                         │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
-│    Quota&lt;B&gt;                    │  ← Quotas
-│    Restrictions&lt;B&gt;               │  ← Security
-│    Tracing&lt;B&gt;                    │  ← Audit
+│    Quota&lt;B&gt;                             │  ← Quotas
+│    Restrictions&lt;B&gt;                      │  ← Security
+│    Tracing&lt;B&gt;                           │  ← Audit
 ├─────────────────────────────────────────┤
-│  Fs                             │  ← Storage
+│  Fs                                     │  ← Storage
 └─────────────────────────────────────────┘
 </code></pre>
 <hr>

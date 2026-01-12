@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ea1e7c9c.js";
+            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-060c2755.js"></script>
+        <script src="../toc-1628b8da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -669,17 +669,18 @@ fn test_filestorage_type_inference() {
 }
 
 #[test]
-fn test_filestorage_marker_types() {
-    struct Sandbox;
-    struct Production;
+fn test_filestorage_wrapper_types() {
+    // Users who need type-safe domain separation create wrapper types
+    struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
+    struct ProductionFs(FileStorage&lt;MemoryBackend&gt;);
 
-    let sandbox: FileStorage&lt;_, _, Sandbox&gt; = FileStorage::new(MemoryBackend::new());
-    let prod: FileStorage&lt;_, _, Production&gt; = FileStorage::new(MemoryBackend::new());
+    let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
+    let prod = ProductionFs(FileStorage::new(MemoryBackend::new()));
 
-    fn only_sandbox(_fs: &amp;FileStorage&lt;impl Fs, IterativeResolver, Sandbox&gt;) {}
+    fn only_sandbox(_fs: &amp;SandboxFs) {}
 
     only_sandbox(&amp;sandbox);  // Compiles
-    // only_sandbox(&amp;prod);  // Would not compile
+    // only_sandbox(&amp;prod);  // Would not compile - different type
 }
 
 #[test]

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ea1e7c9c.js";
+            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-060c2755.js"></script>
+        <script src="../toc-1628b8da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,7 @@
 <p>This plan describes a phased rollout of the AnyFS ecosystem:</p>
 <ul>
 <li><code>anyfs-backend</code>: Layered traits (<code>Fs</code>, <code>FsFull</code>, <code>FsFuse</code>, <code>FsPosix</code>) + <code>Layer</code> + types</li>
-<li><code>anyfs</code>: Built-in backends + middleware (feature-gated) + <code>FileStorage&lt;B, R, M&gt;</code> ergonomic wrapper</li>
+<li><code>anyfs</code>: Built-in backends + middleware (feature-gated) + <code>FileStorage&lt;B&gt;</code> ergonomic wrapper</li>
 </ul>
 <hr>
 <h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
@@ -455,14 +455,14 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li><code>Cache&lt;B&gt;</code> + <code>CacheLayer</code> - LRU read cache</li>
 <li><code>Overlay&lt;B1,B2&gt;</code> + <code>OverlayLayer</code> - Union filesystem</li>
 </ul>
-<h3 id="filestorageb-r-m-ergonomic-wrapper"><a class="header" href="#filestorageb-r-m-ergonomic-wrapper">FileStorage&lt;B, R, M&gt; (Ergonomic Wrapper)</a></h3>
+<h3 id="filestorage-ergonomic-wrapper"><a class="header" href="#filestorage-ergonomic-wrapper">FileStorage<b> (Ergonomic Wrapper)</b></a></h3>
 <ul>
-<li><code>FileStorage&lt;B, R, M&gt;</code> - Zero-cost wrapper with <code>std::fs</code>-aligned API
+<li><code>FileStorage&lt;B&gt;</code> - Thin wrapper with <code>std::fs</code>-aligned API
 <ul>
 <li>Generic backend <code>B</code> (no boxing, static dispatch)</li>
-<li>Generic resolver <code>R</code> (default: <code>IterativeResolver</code>)</li>
-<li>Optional marker type <code>M</code> for compile-time container differentiation</li>
+<li>Boxed <code>PathResolver</code> internally (cold path, boxing OK per ADR-025)</li>
 <li><code>.boxed()</code> method for opt-in type erasure when needed</li>
+<li>Users who need type-safe domains create wrapper types: <code>struct SandboxFs(FileStorage&lt;B&gt;)</code></li>
 </ul>
 </li>
 <li><code>BackendStack</code> builder for fluent middleware composition</li>
