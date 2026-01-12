@@ -215,11 +215,10 @@ pub trait PathResolver: Send + Sync {
     fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
 }
 
-// FileStorage uses it
-pub struct FileStorage<B, R = IterativeResolver, M = ()> {
-    backend: B,      // Where files live
-    resolver: R,     // How to simplify paths
-    _marker: PhantomData<M>,
+// FileStorage uses it (boxed for flexibility)
+pub struct FileStorage<B> {
+    backend: B,                        // Where files live
+    resolver: Box<dyn PathResolver>,   // How to simplify paths (boxed: cold path)
 }
 ```
 

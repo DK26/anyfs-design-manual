@@ -20,14 +20,14 @@ You get:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
+│  FileStorage<B>                         │  ← Ergonomic std::fs-aligned API
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
 │    Quota<B>                             │  ← Quotas
 │    Restrictions<B>                      │  ← Security
 │    Tracing<B>                           │  ← Audit
 ├─────────────────────────────────────────┤
-│  Fs                             │  ← Storage
+│  Fs                                     │  ← Storage
 │  (Memory, SQLite, VRootFs, custom...)   │
 └─────────────────────────────────────────┘
 ```
@@ -38,10 +38,10 @@ You get:
 
 ## Two-Crate Structure
 
-| Crate           | Purpose                                                             |
-| --------------- | ------------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract: `Fs` trait + types                                |
-| `anyfs`         | Backends + middleware + mounting + ergonomic `FileStorage<B, R, M>` |
+| Crate           | Purpose                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract: `Fs` trait + types                          |
+| `anyfs`         | Backends + middleware + mounting + ergonomic `FileStorage<B>` |
 
 **Note:** Mounting (`FsFuse` + `MountHandle`) is part of the `anyfs` crate behind feature flags (`fuse`, `winfsp`), not a separate crate.
 

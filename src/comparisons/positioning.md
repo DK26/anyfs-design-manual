@@ -190,22 +190,23 @@ let fs = SqliteBackend::open("data.db")?
 
 Add, remove, or reorder middleware without touching backends. Write middleware once, use with any backend.
 
-### 2. Type-Safe Domain Separation (Nobody Else Has This)
+### 2. Type-Safe Domain Separation (User-Defined Wrappers)
 
 ```rust
-struct Sandbox;
-struct UserData;
+// Users who need type-safe domain separation can create wrapper types
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(memory_backend);
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(sqlite_backend);
+let sandbox = SandboxFs(FileStorage::new(memory_backend));
+let userdata = UserDataFs(FileStorage::new(sqlite_backend));
 
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { ... }
+fn process_sandbox(fs: &SandboxFs) { ... }
 
 process_sandbox(&sandbox);   // OK
-process_sandbox(&userdata);  // COMPILE ERROR
+process_sandbox(&userdata);  // COMPILE ERROR - different type
 ```
 
-Compile-time prevention of mixing storage domains.
+Compile-time prevention of mixing storage domains via user-defined wrapper types.
 
 ### 3. Backend-Agnostic Policies (Nobody Else Has This)
 

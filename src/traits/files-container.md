@@ -1,26 +1,35 @@
-# FileStorage<B, R, M> (anyfs)
+# FileStorage<B> (anyfs)
 
-**Zero-cost ergonomic wrapper for std::fs-aligned API**
+**Ergonomic wrapper for std::fs-aligned API**
 
 ---
 
 ## Overview
 
-`FileStorage<B, R, M>` is a **thin wrapper** that provides a familiar std::fs-aligned API with:
-- **`B`** - Backend type (generic, zero-cost)
-- **`R`** - PathResolver type (default: `IterativeResolver`, zero-cost)
-- **`M`** - Optional marker type for compile-time safety
+`FileStorage<B>` is a **thin wrapper** that provides a familiar std::fs-aligned API with:
+- **`B`** - Backend type (the only generic)
+- Built-in path resolution via boxed `PathResolver` (swappable at runtime)
 
 It is the intended application-facing API: std::fs-style paths with object-safe core traits under the hood.
 
-**Axum-style design:** Zero-cost by default, type erasure opt-in.
-
-**It does THREE things:**
-1. Ergonomics (std::fs-aligned API)
-2. Optional type-safety via marker types
-3. Pluggable path resolution for virtual backends (via `PathResolver` trait - see ADR-033)
+**It does TWO things:**
+1. Ergonomics (std::fs-aligned API with `impl AsRef<Path>` convenience)
+2. Path resolution for virtual backends (via boxed `PathResolver` - cold path, boxing is acceptable)
 
 All policy (limits, feature gates, logging) is handled by middleware, not FileStorage.
+
+---
+
+## Why Only One Generic?
+
+Previous designs used `FileStorage<B, R, M>` with three type parameters. We simplified to `FileStorage<B>`:
+
+| Old Param | Purpose | Why Removed |
+|-----------|---------|-------------|
+| `R` (Resolver) | Swappable path resolution | Boxed internally—resolution is a cold path (ADR-025) |
+| `M` (Marker) | Compile-time safety | Users can create wrapper newtypes if needed |
+
+**Result:** Simpler API for 90% of users. Those who need type-safe markers wrap `FileStorage` themselves.
 
 ---
 
@@ -29,7 +38,7 @@ All policy (limits, feature gates, logging) is handled by middleware, not FileSt
 ```rust
 use anyfs::{MemoryBackend, FileStorage};
 
-// Simple: ergonomics + path resolution (type inferred)
+// Simple: ergonomics + default path resolution
 let fs = FileStorage::new(MemoryBackend::new());
 ```
 
@@ -38,7 +47,6 @@ With middleware (layer-based):
 ```rust
 use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
-// Type is inferred - no need to write it out
 let fs = FileStorage::new(
     SqliteBackend::open("data.db")?
         .layer(QuotaLayer::builder()
@@ -50,72 +58,61 @@ let fs = FileStorage::new(
 );
 ```
 
+With custom resolver:
+
+```rust
+use anyfs::{MemoryBackend, FileStorage};
+use anyfs::resolvers::CachingResolver;
+
+// Custom resolver for read-heavy workloads
+let fs = FileStorage::with_resolver(
+    MemoryBackend::new(),
+    CachingResolver::new()
+);
+```
+
 ---
 
-## Marker Types (Compile-Time Safety)
+## Type-Safe Markers (User-Defined Wrappers)
 
-Use `_` to infer the backend type while specifying the marker:
+If you need compile-time safety to prevent mixing filesystems, create wrapper newtypes:
 
 ```rust
 use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 
-// Define marker types for your domains
-struct Sandbox;
-struct UserData;
+// Define your own wrapper types
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-// Specify marker in type annotation, infer backend and resolver with _
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
-
-// Type-safe function signatures prevent mixing containers
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) {
-    // Can only accept Sandbox-marked containers
+impl SandboxFs {
+    fn new() -> Self {
+        SandboxFs(FileStorage::new(MemoryBackend::new()))
+    }
 }
 
-fn save_user_file(fs: &FileStorage<impl Fs, IterativeResolver, UserData>, name: &str, data: &[u8]) {
-    // Can only accept UserData-marked containers
+// Type-safe function signatures prevent mixing
+fn process_sandbox(fs: &SandboxFs) {
+    // Can only accept SandboxFs
+}
+
+fn save_user_file(fs: &UserDataFs, name: &str, data: &[u8]) {
+    // Can only accept UserDataFs
 }
 
 // Compile-time safety:
-process_sandbox(&sandbox);   // OK
-process_sandbox(&userdata);  // Compile error! Type mismatch
+let sandbox = SandboxFs::new();
+process_sandbox(&sandbox);     // OK
+// process_sandbox(&userdata); // Compile error! Wrong type
 ```
 
-### Self-Documenting Types
+### When to Use Wrapper Types
 
-Both dimensions are meaningful:
-
-```rust
-FileStorage<SqliteBackend, IterativeResolver, TenantA>   // SQLite storage for TenantA
-FileStorage<MemoryBackend, IterativeResolver, Sandbox>   // In-memory sandbox
-FileStorage<StdFsBackend, IterativeResolver, Production> // Real filesystem, production
-```
-
-### Type Aliases for Clean Code
-
-```rust
-// Define your standard secure stack
-type SecureBackend = Tracing<Restrictions<Quota<SqliteBackend>>>;
-
-// Type aliases for common combinations
-type SandboxFs = FileStorage<MemoryBackend, IterativeResolver, Sandbox>;
-type UserDataFs = FileStorage<SecureBackend, IterativeResolver, UserData>;
-type TenantFs<T> = FileStorage<SecureBackend, IterativeResolver, T>;
-
-// Now signatures are clean AND informative
-fn run_agent(fs: &SandboxFs) { ... }
-fn save_document(fs: &UserDataFs, doc: &Document) { ... }
-```
-
-### When to Use Markers
-
-| Scenario                       | Use Markers? | Why                               |
+| Scenario                       | Use Wrapper? | Why                               |
 | ------------------------------ | ------------ | --------------------------------- |
 | Single container               | No           | `FileStorage<B>` is sufficient    |
 | Multiple containers, same type | **Yes**      | Prevent accidental mixing         |
 | Multi-tenant systems           | **Yes**      | Compile-time tenant isolation     |
 | Sandbox + user data            | **Yes**      | Never write user data to sandbox  |
-| Testing                        | Maybe        | Tag test vs production containers |
 
 ---
 
@@ -156,58 +153,42 @@ When the backend implements extended traits (e.g., `FsLink`, `FsInode`, `FsHandl
 
 FileStorage is **not a policy layer**. If you need policy, compose middleware.
 
-It is also the **ergonomic path layer**: its methods accept `impl AsRef<Path>` and forward to the core object-safe traits that take `&Path`.
-
-For virtual backends, FileStorage performs symlink-aware path resolution before delegating so normalization is consistent across backends. Backends that wrap a real filesystem (e.g., `VRootFsBackend`) implement `SelfResolving` to skip this resolution and let the OS handle it (with strict containment on that backend).
-
 ---
 
 ## FileStorage Implementation
 
 ```rust
-use std::marker::PhantomData;
 use anyfs_backend::{Fs, PathResolver};
 use anyfs::resolvers::IterativeResolver;
 
-/// Zero-cost ergonomic wrapper.
-/// Generic over backend (B), resolver (R), and marker (M).
-pub struct FileStorage<B, R = IterativeResolver, M = ()> {
+/// Ergonomic wrapper with single generic parameter.
+pub struct FileStorage<B> {
     backend: B,
-    resolver: R,
-    _marker: PhantomData<M>,
+    resolver: Box<dyn PathResolver>,  // Boxed: resolution is cold path
 }
 
-impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
-    /// Create a new FileStorage with default resolver (IterativeResolver).
-    /// Marker type is specified via type annotation:
-    /// `let fs: FileStorage<_, _, MyMarker> = FileStorage::new(backend);`
+impl<B: Fs> FileStorage<B> {
+    /// Create with default resolver (IterativeResolver).
     pub fn new(backend: B) -> Self {
         FileStorage {
             backend,
-            resolver: IterativeResolver::new(),
-            _marker: PhantomData,
+            resolver: Box::new(IterativeResolver::new()),
         }
     }
-}
 
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
-    /// Create FileStorage with a custom path resolver.
-    /// See ADR-033 for PathResolver trait details.
-    pub fn with_resolver(backend: B, resolver: R) -> Self {
+    /// Create with custom resolver.
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self {
         FileStorage {
             backend,
-            resolver,
-            _marker: PhantomData,
+            resolver: Box::new(resolver),
         }
     }
 
     /// Type-erase the backend for simpler types (opt-in boxing).
-    /// Note: resolver type is preserved (no boxing).
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M> {
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>> {
         FileStorage {
             backend: Box::new(self.backend),
             resolver: self.resolver,
-            _marker: PhantomData,
         }
     }
 }
@@ -215,21 +196,7 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
 
 ### Path Resolution
 
-FileStorage handles path resolution for virtual backends via the `PathResolver` trait (see ADR-033). The default `IterativeResolver` provides symlink-aware canonicalization.
-
-```rust
-use anyfs::{FileStorage, MemoryBackend};
-use anyfs::resolvers::{IterativeResolver, CachingResolver};
-
-// Default: uses IterativeResolver (zero-cost, likely ZST)
-let fs = FileStorage::new(MemoryBackend::new());
-
-// Custom: with caching resolver for read-heavy workloads
-let fs = FileStorage::with_resolver(
-    MemoryBackend::new(),
-    CachingResolver::new(IterativeResolver::default())
-);
-```
+FileStorage handles path resolution for virtual backends via the boxed `PathResolver`. The default `IterativeResolver` provides symlink-aware canonicalization.
 
 Backends implementing `SelfResolving` (like `VRootFsBackend`) skip resolution since the OS handles it.
 
@@ -240,17 +207,14 @@ Backends implementing `SelfResolving` (like `VRootFsBackend`) skip resolution si
 When you need simpler types (e.g., storing in collections), use `.boxed()`:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs, IterativeResolver};
+use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs};
 
-// Type-erased for uniform storage (R and M use defaults)
-let filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![
+// Type-erased for uniform storage
+let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
     FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
     FileStorage::new(SqliteBackend::open("b.db")?).boxed(),
 ];
-
-// Or use type alias
-type DynFileStorage<R = IterativeResolver, M = ()> = FileStorage<Box<dyn Fs>, R, M>;
 ```
 
 **When to use `.boxed()`:**
@@ -282,4 +246,4 @@ let fs = FileStorage::new(backend);
 fs.write("/file.txt", b"data")?;
 ```
 
-`FileStorage<B, R, M>` is part of the `anyfs` crate, not a separate crate.
+`FileStorage<B>` is part of the `anyfs` crate, not a separate crate.

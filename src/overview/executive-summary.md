@@ -19,14 +19,14 @@ You get:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, R, M>                │  ← Ergonomics (std::fs API)
+│  FileStorage<B>                         │  ← Ergonomics (std::fs API)
 ├─────────────────────────────────────────┤
 │  Middleware (composable):               │
-│    Quota<B>                    │  ← Quotas
-│    Restrictions<B>               │  ← Security
-│    Tracing<B>                    │  ← Audit
+│    Quota<B>                             │  ← Quotas
+│    Restrictions<B>                      │  ← Security
+│    Tracing<B>                           │  ← Audit
 ├─────────────────────────────────────────┤
-│  Fs                             │  ← Storage
+│  Fs                                     │  ← Storage
 └─────────────────────────────────────────┘
 ```
 

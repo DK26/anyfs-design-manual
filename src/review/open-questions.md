@@ -196,26 +196,27 @@ See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 
 ## Type-System Protection for Cross-Container Operations
 
-**Status:** Resolved - Implemented via marker types
+**Status:** Resolved - User-defined wrapper types
 
 **Question:** Should we use the type system to prevent accidentally mixing data between containers?
 
-**Resolution:** Implemented via `FileStorage<B, R, M>` where `M` is a marker type:
+**Resolution:** Users who need type-safe domain separation can create wrapper types:
 
 ```rust
-struct Sandbox;
-struct UserData;
+// User-defined wrapper types provide compile-time safety
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
+let userdata = UserDataFs(FileStorage::new(SqliteBackend::open("data.db")?));
 
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { /* only accepts Sandbox */ }
+fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 
 process_sandbox(&sandbox);   // OK
-process_sandbox(&userdata);  // Compile error!
+process_sandbox(&userdata);  // Compile error - different type!
 ```
 
-See [FileStorage<B, R, M>](../traits/files-container.md) for details.
+This approach avoids generic parameter complexity while still enabling compile-time safety when needed. See [FileStorage<B>](../traits/files-container.md) for details.
 
 ---
 
@@ -279,7 +280,7 @@ Based on review feedback, the following naming concerns were raised:
 | Compression/encryption    | Backend responsibility                                                        |
 | Hooks/callbacks           | `Tracing` middleware                                                          |
 | FUSE mount                | Part of `anyfs` crate (`fuse`, `winfsp` feature flags)                        |
-| Type-system protection    | `FileStorage<B, R, M>` marker types                                           |
+| Type-system protection    | User-defined wrapper types (e.g., `struct SandboxFs(FileStorage<B>)`)         |
 | POSIX compatibility       | Not a goal                                                                    |
 | `truncate`                | Added to `FsWrite`                                                            |
 | `sync` / `fsync`          | Added to `FsSync`                                                             |

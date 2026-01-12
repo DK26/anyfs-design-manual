@@ -32,7 +32,7 @@ AnyFS separates **what** you store from **how** you store it and **what rules** 
 ┌─────────────────────────────────────────┐
 │  Your Application                       │
 ├─────────────────────────────────────────┤
-│  FileStorage<B, R, M> (std::fs-like)    │
+│  FileStorage<B> (std::fs-like)          │
 ├─────────────────────────────────────────┤
 │  Middleware Stack (composable):         │
 │    Quota, PathFilter, RateLimit,        │
@@ -124,19 +124,20 @@ FsRead + FsWrite + FsDir  ← Core traits
 
 ### Type-Safe Containers
 
-Marker types prevent mixing containers at compile time:
+Users who need type-safe domain separation can create wrapper types:
 
 ```rust
-struct Sandbox;
-struct UserData;
+// User-defined wrapper types
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
+let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
+let userdata = UserDataFs(FileStorage::new(SqliteBackend::open("data.db")?));
 
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { /* only accepts Sandbox */ }
+fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 
 process_sandbox(&sandbox);   // OK
-process_sandbox(&userdata);  // Compile error!
+process_sandbox(&userdata);  // Compile error - different type!
 ```
 
 ### Not Just Monitoring - Intervention
@@ -419,10 +420,10 @@ let content = fs.read_to_string("/docs/hello.txt")?;
 
 ## Crate Structure
 
-| Crate           | Purpose                                                                                             |
-| --------------- | --------------------------------------------------------------------------------------------------- |
-| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors                     |
-| `anyfs`         | Built-in backends, middleware, `FileStorage<B, R, M>` wrapper, mounting (`fuse`, `winfsp` features) |
+| Crate           | Purpose                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors               |
+| `anyfs`         | Built-in backends, middleware, `FileStorage<B>` wrapper, mounting (`fuse`, `winfsp` features) |
 
 ```toml
 [dependencies]

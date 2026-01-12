@@ -473,12 +473,12 @@ Return appropriate `FsError` variants:
 
 ## What Backends Do NOT Do
 
-| Concern           | Where It Lives                 |
-| ----------------- | ------------------------------ |
-| Quota enforcement | `Quota<B>` middleware          |
-| Feature gating    | `Restrictions<B>` middleware   |
-| Logging           | `Tracing<B>` middleware        |
-| Ergonomic API     | `FileStorage<B, R, M>` wrapper |
+| Concern           | Where It Lives               |
+| ----------------- | ---------------------------- |
+| Quota enforcement | `Quota<B>` middleware        |
+| Feature gating    | `Restrictions<B>` middleware |
+| Logging           | `Tracing<B>` middleware      |
+| Ergonomic API     | `FileStorage<B>` wrapper     |
 
 **Backends focus on storage.** Keep them simple.
 

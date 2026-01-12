@@ -20,7 +20,7 @@ Anyone can:
 - **Control how a drive acts, looks, and protects itself.**
 - Implement a custom backend for their specific storage needs (Cloud, DB, RAM).
 - Compose middleware to add limits, logging, and security.
-- Use the ergonomic `FileStorage<B, R, M>` wrapper for a standard `std::fs`-like API.
+- Use the ergonomic `FileStorage<B>` wrapper for a standard `std::fs`-like API.
 
 ---
 
@@ -28,7 +28,7 @@ Anyone can:
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
+│  FileStorage<B>                         │  ← Ergonomic std::fs-aligned API
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │                                         │
@@ -101,19 +101,23 @@ The traits are low-level interfaces that any backend can implement - memory, SQL
 ```rust
 use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, FileStorage};
 
-struct AiSandbox;  // Marker type
+// Create wrapper type for type-safe sandbox
+struct AiSandbox(FileStorage<MemoryBackend>);
 
-// Application composes secure defaults (marker in type annotation)
-let sandbox: FileStorage<_, _, AiSandbox> = FileStorage::new(
-    MemoryBackend::new()
-        .layer(QuotaLayer::builder()
-            .max_total_size(50 * 1024 * 1024)
-            .build())
-        .layer(PathFilterLayer::builder()
-            .allow("/workspace/**")
-            .deny("**/.env")
-            .build())
-);
+impl AiSandbox {
+    fn new() -> Self {
+        AiSandbox(FileStorage::new(
+            MemoryBackend::new()
+                .layer(QuotaLayer::builder()
+                    .max_total_size(50 * 1024 * 1024)
+                    .build())
+                .layer(PathFilterLayer::builder()
+                    .allow("/workspace/**")
+                    .deny("**/.env")
+                    .build())
+        ))
+    }
+}
 ```
 
 The backend is permissive. The application adds restrictions appropriate for its use case.
@@ -122,10 +126,10 @@ The backend is permissive. The application adds restrictions appropriate for its
 
 ## Crates
 
-| Crate           | Purpose                            | Contains                                                                                 |
-| --------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract                   | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt`      |
-| `anyfs`         | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<B, R, M>`, `BackendStack` builder |
+| Crate           | Purpose                            | Contains                                                                            |
+| --------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract                   | Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, `FsExt` |
+| `anyfs`         | Backends + middleware + ergonomics | Built-in backends, all middleware layers, `FileStorage<B>`, `BackendStack` builder  |
 
 ### Dependency Graph
 
@@ -182,12 +186,12 @@ The AnyFS design is **FFI-friendly** and can be exposed to other languages with 
 ```rust
 // anyfs-python/src/lib.rs
 use pyo3::prelude::*;
-use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs, IterativeResolver};
+use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs};
 
 #[pyclass]
 struct PyFileStorage {
-    // Type-erased for FFI (resolver and marker use defaults)
-    inner: FileStorage<Box<dyn Fs>, IterativeResolver, ()>,
+    // Type-erased for FFI
+    inner: FileStorage<Box<dyn Fs>>,
 }
 
 #[pymethods]
@@ -235,12 +239,12 @@ print(data)  # b"Hello from Python!"
 
 **Key considerations for FFI:**
 
-| Concern                           | Solution                                                        |
-| --------------------------------- | --------------------------------------------------------------- |
-| Generics (`FileStorage<B, R, M>`) | Use `FileStorage<Box<dyn Fs>, R, M>` (boxed form) for FFI layer |
-| Streaming (`Box<dyn Read>`)       | Wrap in language-native class with `read(n)` method             |
-| Middleware composition            | Pre-build common stacks, expose as factory functions            |
-| Error handling                    | Convert `FsError` to language-native exceptions                 |
+| Concern                     | Solution                                             |
+| --------------------------- | ---------------------------------------------------- |
+| Generics (`FileStorage<B>`) | Use `FileStorage<Box<dyn Fs>>` (boxed) for FFI layer |
+| Streaming (`Box<dyn Read>`) | Wrap in language-native class with `read(n)` method  |
+| Middleware composition      | Pre-build common stacks, expose as factory functions |
+| Error handling              | Convert `FsError` to language-native exceptions      |
 
 **Future crate:** `anyfs-python`
 
@@ -258,7 +262,7 @@ let fs: Tracing<Quota<MemoryBackend>> = MemoryBackend::new()
 For **runtime-configured** middleware (e.g., based on config files), use `Box<dyn Fs>`:
 
 ```rust
-fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>, IterativeResolver, ()> {
+fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>> {
     let mut backend: Box<dyn Fs> = Box::new(MemoryBackend::new());
 
     if config.enable_quota {
@@ -1052,14 +1056,13 @@ let backend = Overlay::new(base, upper);
 
 ---
 
-## FileStorage<B, R, M> (in `anyfs`)
+## FileStorage<B> (in `anyfs`)
 
-`FileStorage<B, R, M>` is a **zero-cost ergonomic wrapper** with:
-- **`B`** - Backend type (generic, no boxing)
-- **`R`** - PathResolver type (default: `IterativeResolver`)
-- **`M`** - Optional marker type for compile-time safety
+`FileStorage<B>` is an **ergonomic wrapper** with a single generic parameter:
+- **`B`** - Backend type (the only generic)
+- Resolver is boxed internally (cold path, per ADR-025)
 
-**Axum-style design:** Zero-cost by default, type erasure opt-in via `.boxed()`.
+**Axum-style design:** Simple by default, type erasure opt-in via `.boxed()`.
 
 ### Basic Usage
 
@@ -1074,43 +1077,30 @@ fs.write("/documents/hello.txt", b"Hello!")?;
 let content = fs.read("/documents/hello.txt")?;
 ```
 
-### Marker Types (Type-Safe Containers)
+### Type-Safe Wrappers (User-Defined)
 
-Use `_` to infer backend while specifying marker:
+If you need compile-time safety to prevent mixing filesystems, create wrapper types:
 
 ```rust
 use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
 
-// Define marker types for your domains
-struct Sandbox;
-struct UserData;
+// Define wrapper types for your domains
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-// Specify marker, infer backend and resolver with _
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
-
-// Type-safe function signatures prevent mixing containers
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) {
-    // Can only accept Sandbox-marked containers
+// Type-safe function signatures prevent mixing
+fn process_sandbox(fs: &SandboxFs) {
+    // Can only accept SandboxFs
 }
 
-fn save_user_file(fs: &FileStorage<impl Fs, IterativeResolver, UserData>, name: &str, data: &[u8]) {
-    // Can only accept UserData-marked containers
+fn save_user_file(fs: &UserDataFs, name: &str, data: &[u8]) {
+    // Can only accept UserDataFs
 }
 
 // Compile-time safety:
+let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
 process_sandbox(&sandbox);   // OK
-process_sandbox(&userdata);  // Compile error! Type mismatch
-```
-
-### Self-Documenting Types
-
-Both type parameters are meaningful:
-
-```rust
-FileStorage<SqliteBackend, IterativeResolver, TenantA>   // SQLite storage for TenantA
-FileStorage<MemoryBackend, IterativeResolver, Sandbox>   // In-memory sandbox
-FileStorage<StdFsBackend, IterativeResolver, Production> // Real filesystem, production
+// process_sandbox(&userdata);  // Compile error! Wrong type
 ```
 
 ### Type Aliases for Clean Code
@@ -1120,8 +1110,8 @@ FileStorage<StdFsBackend, IterativeResolver, Production> // Real filesystem, pro
 type SecureBackend = Tracing<Restrictions<Quota<SqliteBackend>>>;
 
 // Type aliases for common combinations
-type SandboxFs = FileStorage<MemoryBackend, IterativeResolver, Sandbox>;
-type UserDataFs = FileStorage<SecureBackend, IterativeResolver, UserData>;
+type SandboxFs = FileStorage<MemoryBackend>;
+type UserDataFs = FileStorage<SecureBackend>;
 
 // Clean function signatures
 fn run_agent(fs: &SandboxFs) { ... }
@@ -1130,32 +1120,23 @@ fn run_agent(fs: &SandboxFs) { ... }
 ### FileStorage Implementation
 
 ```rust
-use std::marker::PhantomData;
 use anyfs_backend::PathResolver;
-use anyfs::resolvers::IterativeResolver;
 
-/// Zero-cost ergonomic wrapper.
-/// Generic over backend (B), resolver (R), and marker (M).
-pub struct FileStorage<B, R = IterativeResolver, M = ()> {
+/// Ergonomic wrapper with single generic.
+pub struct FileStorage<B> {
     backend: B,
-    resolver: R,
-    _marker: PhantomData<M>,
+    resolver: Box<dyn PathResolver>,  // Boxed: cold path
 }
 
-impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
+impl<B: Fs> FileStorage<B> {
     /// Create with default resolver (IterativeResolver).
-    /// Marker type is specified via type annotation:
-    /// `let fs: FileStorage<_, _, MyMarker> = FileStorage::new(backend);`
     pub fn new(backend: B) -> Self { ... }
-}
 
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
-    /// Create with custom path resolver (see ADR-033).
-    pub fn with_resolver(backend: B, resolver: R) -> Self { ... }
+    /// Create with custom path resolver.
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self { ... }
 
     /// Type-erase the backend (opt-in boxing).
-    /// Note: resolver type is preserved.
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M> { ... }
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>> { ... }
 }
 ```
 
@@ -1164,8 +1145,8 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
 When you need uniform types (e.g., collections), use `.boxed()`:
 
 ```rust
-// Type-erased for uniform storage (resolver and marker preserved)
-let filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![
+// Type-erased for uniform storage
+let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
     FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
 ];
@@ -1325,15 +1306,12 @@ pub trait SelfResolving {}
 impl SelfResolving for VRootFsBackend {}
 ```
 
-`FileStorage` applies resolution via its `PathResolver` for backends that don't implement `SelfResolving`. The default `IterativeResolver` follows symlinks when `FsLink` is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).
+`FileStorage` applies resolution via its boxed `PathResolver` for backends that don't implement `SelfResolving`. The default `IterativeResolver` follows symlinks when `FsLink` is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).
 
 ```rust
-impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
+impl<B: Fs> FileStorage<B> {
     pub fn new(backend: B) -> Self { /* uses IterativeResolver */ }
-}
-
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
-    pub fn with_resolver(backend: B, resolver: R) -> Self { /* custom resolver */ }
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self { /* custom resolver */ }
 }
 ```
 
@@ -1350,13 +1328,13 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
 ### Core Methods
 
 ```rust
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
+impl<B: Fs> FileStorage<B> {
     /// Strict canonicalization - entire path must exist.
     ///
     /// Delegates to the PathResolver to resolve symlinks and normalize the path.
     /// Returns error if any component doesn't exist.
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
-        self.resolver.canonicalize(path.as_ref(), &self.backend)
+        self.resolver.canonicalize(path.as_ref(), &self.backend as &dyn Fs)
     }
 
     /// Soft canonicalization - resolves existing components,
@@ -1364,16 +1342,8 @@ impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
     ///
     /// Delegates to the PathResolver.
     pub fn soft_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
-        self.resolver.soft_canonicalize(path.as_ref(), &self.backend)
+        self.resolver.soft_canonicalize(path.as_ref(), &self.backend as &dyn Fs)
     }
-}
-    ///
-    /// Walks path component-by-component via the resolver:
-    /// 1. For existing components → resolve symlinks, follow them
-    /// 2. When hitting non-existent component → append remainder lexically
-    ///
-    /// Inspired by Python's `pathlib.Path.resolve(strict=False)`.
-    pub fn soft_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError>;
 
     /// Anchored soft canonicalization - like soft_canonicalize but
     /// clamps result within a boundary directory.

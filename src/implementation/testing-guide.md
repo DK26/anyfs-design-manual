@@ -504,17 +504,18 @@ fn test_filestorage_type_inference() {
 }
 
 #[test]
-fn test_filestorage_marker_types() {
-    struct Sandbox;
-    struct Production;
+fn test_filestorage_wrapper_types() {
+    // Users who need type-safe domain separation create wrapper types
+    struct SandboxFs(FileStorage<MemoryBackend>);
+    struct ProductionFs(FileStorage<MemoryBackend>);
 
-    let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-    let prod: FileStorage<_, _, Production> = FileStorage::new(MemoryBackend::new());
+    let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
+    let prod = ProductionFs(FileStorage::new(MemoryBackend::new()));
 
-    fn only_sandbox(_fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) {}
+    fn only_sandbox(_fs: &SandboxFs) {}
 
     only_sandbox(&sandbox);  // Compiles
-    // only_sandbox(&prod);  // Would not compile
+    // only_sandbox(&prod);  // Would not compile - different type
 }
 
 #[test]
@@ -522,8 +523,8 @@ fn test_filestorage_boxed() {
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
     let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
 
-    // Both can be stored in same collection (resolver and marker preserved)
-    let _filesystems: Vec<FileStorage<Box<dyn Fs>, IterativeResolver, ()>> = vec![fs1, fs2];
+    // Both can be stored in same collection
+    let _filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![fs1, fs2];
 }
 ```
 

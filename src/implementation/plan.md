@@ -3,7 +3,7 @@
 This plan describes a phased rollout of the AnyFS ecosystem:
 
 - `anyfs-backend`: Layered traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`) + `Layer` + types
-- `anyfs`: Built-in backends + middleware (feature-gated) + `FileStorage<B, R, M>` ergonomic wrapper
+- `anyfs`: Built-in backends + middleware (feature-gated) + `FileStorage<B>` ergonomic wrapper
 
 ---
 
@@ -277,13 +277,13 @@ Each backend implements the traits it supports:
 - `Cache<B>` + `CacheLayer` - LRU read cache
 - `Overlay<B1,B2>` + `OverlayLayer` - Union filesystem
 
-### FileStorage<B, R, M> (Ergonomic Wrapper)
+### FileStorage<B> (Ergonomic Wrapper)
 
-- `FileStorage<B, R, M>` - Zero-cost wrapper with `std::fs`-aligned API
+- `FileStorage<B>` - Thin wrapper with `std::fs`-aligned API
   - Generic backend `B` (no boxing, static dispatch)
-  - Generic resolver `R` (default: `IterativeResolver`)
-  - Optional marker type `M` for compile-time container differentiation
+  - Boxed `PathResolver` internally (cold path, boxing OK per ADR-025)
   - `.boxed()` method for opt-in type erasure when needed
+  - Users who need type-safe domains create wrapper types: `struct SandboxFs(FileStorage<B>)`
 - `BackendStack` builder for fluent middleware composition
 - Accepts `impl AsRef<Path>` in `FileStorage`/`FsExt` (core traits use `&Path`)
 - Delegates all operations to wrapped backend

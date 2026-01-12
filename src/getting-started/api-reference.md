@@ -582,11 +582,11 @@ Without the correct password, the `.db` file appears as random bytes.
 
 **Ergonomic Wrappers (in `anyfs`):**
 
-| Type                   | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
-| `FileStorage<B, R, M>` | Zero-cost ergonomic wrapper (generic backend, resolver, marker)  |
-| `BackendStack`         | Fluent builder for middleware stacks                             |
-| `.boxed()`             | Opt-in type erasure for `FileStorage`                            |
-| `IterativeResolver`    | Default path resolver (symlink-aware for backends with `FsLink`) |
-| `NoOpResolver`         | No-op resolver for `SelfResolving` backends                      |
-| `CachingResolver<R>`   | LRU cache wrapper around another resolver                        |
+| Type                 | Description                                                      |
+| -------------------- | ---------------------------------------------------------------- |
+| `FileStorage<B>`     | Thin ergonomic wrapper (generic backend, boxed resolver)         |
+| `BackendStack`       | Fluent builder for middleware stacks                             |
+| `.boxed()`           | Opt-in type erasure for `FileStorage`                            |
+| `IterativeResolver`  | Default path resolver (symlink-aware for backends with `FsLink`) |
+| `NoOpResolver`       | No-op resolver for `SelfResolving` backends                      |
+| `CachingResolver<R>` | LRU cache wrapper around another resolver                        |

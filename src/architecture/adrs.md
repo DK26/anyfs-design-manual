@@ -97,10 +97,10 @@ Primary docs are where each decision is explained in narrative form. ADRs remain
 
 **Decision:**
 
-| Crate           | Purpose                                                                     |
-| --------------- | --------------------------------------------------------------------------- |
-| `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types                 |
-| `anyfs`         | Backends + middleware + ergonomics (`FileStorage<B, R, M>`, `BackendStack`) |
+| Crate           | Purpose                                                               |
+| --------------- | --------------------------------------------------------------------- |
+| `anyfs-backend` | Minimal contract: `Fs` trait, `Layer` trait, `FsExt`, types           |
+| `anyfs`         | Backends + middleware + ergonomics (`FileStorage<B>`, `BackendStack`) |
 
 **Why:**
 - Backend authors only need `anyfs-backend` (no heavy dependencies).
@@ -224,25 +224,27 @@ let backend = RestrictionsLayer::builder()
 
 ## ADR-008: FileStorage as thin ergonomic wrapper
 
-**Decision:** `FileStorage<B, R, M>` is a thin wrapper that provides std::fs-aligned ergonomics and centralized path resolution for virtual backends. It contains NO policy logic.
+**Decision:** `FileStorage<B>` is a thin wrapper that provides std::fs-aligned ergonomics and path resolution for virtual backends. It contains NO policy logic.
 
 **What it does:**
 - Provides familiar method names
 - Accepts `impl AsRef<Path>` for convenience and forwards to the core `&Path` traits
-- Supports an optional marker type `M` for compile-time segregation of containers
+- Delegates path resolution to a boxed `PathResolver` (cold path, boxing OK per ADR-025)
 - Delegates all operations to the wrapped backend
 
 **What it does NOT do:**
 - Quota enforcement (use Quota)
 - Feature gating (use Restrictions)
 - Instrumentation (use Tracing)
+- Marker types (users create wrapper newtypes if needed)
 - Any other policy
 
 **Why:**
 - Single responsibility - ergonomics + path resolution (no policy).
-- Users who don't need ergonomics can use backends directly.
+- One generic parameter keeps the API simple.
+- Resolver is boxed because path resolution is a cold path.
+- Users who need type-safe markers can create their own wrapper types.
 - Policy is composable via middleware, not hardcoded.
-- Marker types prevent accidental mixing of different storage domains without runtime tags.
 
 ---
 
@@ -986,7 +988,7 @@ SETUP (once at startup - zero-cost):
 
 OPT-IN TYPE ERASURE (when explicitly needed):
 ┌─────────────────────────────────────────────────────────────┐
-│  FileStorage::boxed() -> FileStorage<Box<dyn Fs>, R, M>    │  ← Like Tower's BoxService
+│  FileStorage::boxed() -> FileStorage<Box<dyn Fs>>          │  ← Like Tower's BoxService
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1324,10 +1326,10 @@ impl FsPath for SqliteBackend {
 > traits, the backend can choose to delegate to its resolver or provide fully custom logic (e.g.,
 > SQLite CTE queries).
 
-FileStorage uses `PathResolver` for its resolution (see ADR-033):
+FileStorage uses a boxed `PathResolver` internally for resolution (see ADR-033):
 
 ```rust
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
+impl<B: Fs> FileStorage<B> {
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf, FsError> {
         self.resolver.canonicalize(path.as_ref(), &self.backend as &dyn Fs)
     }
@@ -1427,13 +1429,18 @@ pub struct CachingResolver<R: PathResolver> {
 **Integration with FileStorage:**
 
 ```rust
-impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
-    pub fn new(backend: B) -> Self { ... }
+pub struct FileStorage<B> {
+    backend: B,
+    resolver: Box<dyn PathResolver>,  // Boxed: resolution is cold path
 }
 
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
-    pub fn with_resolver(backend: B, resolver: R) -> Self {
-        Self { backend, resolver, _marker: PhantomData }
+impl<B: Fs> FileStorage<B> {
+    pub fn new(backend: B) -> Self {
+        Self { backend, resolver: Box::new(IterativeResolver::default()) }
+    }
+
+    pub fn with_resolver(backend: B, resolver: impl PathResolver + 'static) -> Self {
+        Self { backend, resolver: Box::new(resolver) }
     }
 }
 

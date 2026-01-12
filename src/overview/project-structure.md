@@ -59,7 +59,7 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       iterative.rs          # IterativeResolver (default)
       noop.rs               # NoOpResolver (for SelfResolving backends)
       caching.rs            # CachingResolver (LRU cache wrapper)
-    container.rs            # FileStorage<B, R, M>
+    container.rs            # FileStorage<B>
     stack.rs                # BackendStack builder
 ```
 
@@ -76,14 +76,14 @@ anyfs-backend (trait + types)
 
 **Key points:**
 - Custom backends depend only on `anyfs-backend`
-- `anyfs` provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic `FileStorage<B, R, M>` wrapper
+- `anyfs` provides built-in backends, middleware, mounting (behind feature flags), and the ergonomic `FileStorage<B>` wrapper
 
 ---
 
 ## Middleware Pattern
 
 ```
-FileStorage<B, R, M>
+FileStorage<B>
     wraps -> Tracing<B>
         wraps -> Restrictions<B>
             wraps -> Quota<B>

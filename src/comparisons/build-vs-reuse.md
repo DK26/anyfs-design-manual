@@ -77,10 +77,10 @@
 
 AnyFS fills the gap by separating concerns:
 
-| Crate           | Responsibility                                                     |
-| --------------- | ------------------------------------------------------------------ |
-| `anyfs-backend` | Trait (`Fs`, `Layer`) + types                                      |
-| `anyfs`         | Backends + middleware + ergonomic wrapper (`FileStorage<B, R, M>`) |
+| Crate           | Responsibility                                               |
+| --------------- | ------------------------------------------------------------ |
+| `anyfs-backend` | Trait (`Fs`, `Layer`) + types                                |
+| `anyfs`         | Backends + middleware + ergonomic wrapper (`FileStorage<B>`) |
 
 The middleware pattern (like Tower/Axum) enables composition:
 

@@ -17,7 +17,7 @@ Other files (README.md, docs/*.html, archived files) may be **OUTDATED**. If you
 - `anyfs-mount` as a separate crate → WRONG. Mounting is `anyfs` crate with `fuse`/`winfsp` features.
 - `anyfs_mount::MountHandle` → WRONG. Use `anyfs::MountHandle`.
 - "v1", "v2", "post-v1", "v1.1" → WRONG. We plan ONE version. Use "Future Considerations".
-- `Box<dyn PathResolver>` → WRONG. Use generic parameter `R: PathResolver`.
+- `FileStorage<B, R, M>` → WRONG. Use `FileStorage<B>`. Resolver is boxed internally.
 
 **Before making changes:** If you see a pattern in README.md or other docs that contradicts AGENTS.md, **fix the outdated doc**, do not follow it.
 
@@ -80,7 +80,7 @@ See [LLM Development Methodology](src/guides/llm-development-methodology.md) for
 
 ```
 ┌─────────────────────────────────────────┐
-│  FileStorage<B, R, M>                   │  ← Ergonomics + type-safe marker
+│  FileStorage<B>                         │  ← Ergonomic std::fs-aligned API
 ├─────────────────────────────────────────┤
 │  Middleware (optional, composable):     │
 │                                         │
@@ -102,19 +102,19 @@ See [LLM Development Methodology](src/guides/llm-development-methodology.md) for
 
 Each layer has **exactly one responsibility**:
 
-| Layer                | Responsibility                                   |
-| -------------------- | ------------------------------------------------ |
-| Backend (`Fs`+)      | Storage + filesystem semantics                   |
-| `Quota<B>`           | Resource limits (size, count, depth)             |
-| `Restrictions<B>`    | Block permission changes                         |
-| `PathFilter<B>`      | Path-based access control (sandbox)              |
-| `ReadOnly<B>`        | Prevent all write operations                     |
-| `RateLimit<B>`       | Fixed-window rate limiting                       |
-| `Tracing<B>`         | Instrumentation / audit trail                    |
-| `DryRun<B>`          | Log operations without executing                 |
-| `Cache<B>`           | LRU cache for reads                              |
-| `Overlay<B1,B2>`     | Union filesystem (base + upper)                  |
-| `FileStorage<B,R,M>` | Ergonomic std::fs-aligned API + type-safe marker |
+| Layer             | Responsibility                       |
+| ----------------- | ------------------------------------ |
+| Backend (`Fs`+)   | Storage + filesystem semantics       |
+| `Quota<B>`        | Resource limits (size, count, depth) |
+| `Restrictions<B>` | Block permission changes             |
+| `PathFilter<B>`   | Path-based access control (sandbox)  |
+| `ReadOnly<B>`     | Prevent all write operations         |
+| `RateLimit<B>`    | Fixed-window rate limiting           |
+| `Tracing<B>`      | Instrumentation / audit trail        |
+| `DryRun<B>`       | Log operations without executing     |
+| `Cache<B>`        | LRU cache for reads                  |
+| `Overlay<B1,B2>`  | Union filesystem (base + upper)      |
+| `FileStorage<B>`  | Ergonomic std::fs-aligned wrapper    |
 
 ---
 
@@ -168,7 +168,7 @@ anyfs/                      # Crate 2: backends + middleware + FileStorage
       iterative.rs          # IterativeResolver (default)
       noop.rs               # NoOpResolver (for SelfResolving backends)
       caching.rs            # CachingResolver (LRU cache wrapper)
-    container.rs            # FileStorage<B, R, M>
+    container.rs            # FileStorage<B>
     stack.rs                # BackendStack builder
 ```
 
@@ -270,35 +270,33 @@ impl<T: Fs + FsLink + FsPermissions + FsSync + FsStats> FsFull for T {}
 
 ---
 
-## FileStorage<B, R, M> (Zero-Cost Wrapper)
+## FileStorage<B> (Ergonomic Wrapper)
 
 ```rust
-pub struct FileStorage<B, R = IterativeResolver, M = ()> {
+pub struct FileStorage<B> {
     backend: B,
-    resolver: R,
-    _marker: PhantomData<M>,
+    resolver: Box<dyn PathResolver>,  // Boxed: resolution is cold path
 }
 
-impl<B: Fs, M> FileStorage<B, IterativeResolver, M> {
-    pub fn new(backend: B) -> Self;                     // Default IterativeResolver
-    pub fn with_resolver<R2: PathResolver>(backend: B, resolver: R2) -> FileStorage<B, R2, M>;
-}
-
-impl<B: Fs, R: PathResolver, M> FileStorage<B, R, M> {
-    pub fn boxed(self) -> FileStorage<Box<dyn Fs>, R, M>;  // Opt-in type erasure, preserves resolver
+impl<B: Fs> FileStorage<B> {
+    pub fn new(backend: B) -> Self;                                    // Default IterativeResolver
+    pub fn with_resolver(backend: B, resolver: impl PathResolver) -> Self;  // Custom resolver
+    pub fn boxed(self) -> FileStorage<Box<dyn Fs>>;                    // Opt-in type erasure
 }
 ```
 
-**Marker types for compile-time safety:**
+**Why only one generic?**
+- `B` (backend) is essential—it's the core abstraction
+- Resolver is boxed because path resolution is a **cold path** (ADR-025: boxing OK for cold paths)
+- Marker types removed—users who need type safety can create wrapper newtypes
 
+**If you need type-safe filesystem markers:**
 ```rust
-struct Sandbox;
-struct UserData;
+// Users create their own wrappers—we don't force generics on everyone
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
 
-let sandbox: FileStorage<_, _, Sandbox> = FileStorage::new(MemoryBackend::new());
-let userdata: FileStorage<_, _, UserData> = FileStorage::new(SqliteBackend::open("data.db")?);
-
-fn process_sandbox(fs: &FileStorage<impl Fs, IterativeResolver, Sandbox>) { /* only accepts Sandbox */ }
+fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 ```
 
 ---
@@ -467,7 +465,7 @@ let sandbox = MemoryBackend::new()
 | Where does path resolution go?    | `PathResolver` strategy (pluggable via FileStorage) |
 | What does FileStorage do?         | Thin std::fs-aligned wrapper + type-safe marker     |
 | How to snapshot MemoryBackend?    | `.clone()` or `.save_to()`                          |
-| Sync or async?                    | Sync for v1, async-ready for future                 |
+| Sync or async?                    | Sync for now, async-ready for future                |
 
 ---
 
