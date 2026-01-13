@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
+            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1628b8da.js"></script>
@@ -267,11 +267,16 @@ benchmark(|| resolver.canonicalize("/a/b/../c", &amp;mock_fs));
 <p>With separation, switching is one line:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Default
+</span>use anyfs::resolvers::{CachingResolver, IterativeResolver};
+
+// Default
 let fs = FileStorage::new(backend);
 
 // With caching (for performance)
-let fs = FileStorage::with_resolver(backend, CachingResolver::new());
+let fs = FileStorage::with_resolver(
+    backend, 
+    CachingResolver::new(IterativeResolver::default())
+);
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="the-analogy-gps-navigation"><a class="header" href="#the-analogy-gps-navigation">The Analogy: GPS Navigation</a></h2>

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-e0c0a468.js";
+            window.path_to_searchindex_js = "searchindex-f619f94e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1628b8da.js"></script>
@@ -3680,6 +3680,25 @@ fs.symlink("/target", "/link")?;  // ❌ Won't compile - no FsLink impl
 <hr>
 <h2 id="adr-008-filestorage-as-thin-ergonomic-wrapper"><a class="header" href="#adr-008-filestorage-as-thin-ergonomic-wrapper">ADR-008: FileStorage as thin ergonomic wrapper</a></h2>
 <p><strong>Decision:</strong> <code>FileStorage&lt;B&gt;</code> is a thin wrapper that provides std::fs-aligned ergonomics and path resolution for virtual backends. It contains NO policy logic.</p>
+<p><strong>Context:</strong> Earlier designs used <code>FileStorage&lt;B, R, M&gt;</code> with three type parameters:</p>
+<ul>
+<li><code>B</code> - Backend type</li>
+<li><code>R</code> - PathResolver type (default: <code>IterativeResolver</code>)</li>
+<li><code>M</code> - Marker type for compile-time container differentiation</li>
+</ul>
+<p>This was over-engineered. We simplified to a single generic.</p>
+<p><strong>Why only one generic parameter?</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Removed</th><th>Rationale</th></tr>
+</thead>
+<tbody>
+<tr><td><code>R</code> (Resolver)</td><td>Path resolution is a <strong>cold path</strong> (once per operation, I/O dominates). Boxing is acceptable per ADR-025. Runtime swapping via <code>with_resolver()</code> is sufficient.</td></tr>
+<tr><td><code>M</code> (Marker)</td><td>Speculative feature with unclear demand. Prior art (<code>vfs</code>, <code>cap-std</code>, <code>tempfile</code>) don’t have marker parameters. Users who need type safety can create wrapper newtypes: <code>struct SandboxFs(FileStorage&lt;MemoryBackend&gt;)</code>.</td></tr>
+</tbody>
+</table>
+</div>
 <p><strong>What it does:</strong></p>
 <ul>
 <li>Provides familiar method names</li>
@@ -3695,14 +3714,23 @@ fs.symlink("/target", "/link")?;  // ❌ Won't compile - no FsLink impl
 <li>Marker types (users create wrapper newtypes if needed)</li>
 <li>Any other policy</li>
 </ul>
-<p><strong>Why:</strong></p>
+<p><strong>Why this design:</strong></p>
 <ul>
 <li>Single responsibility - ergonomics + path resolution (no policy).</li>
-<li>One generic parameter keeps the API simple.</li>
+<li>One generic parameter keeps the API simple for 90% of users.</li>
 <li>Resolver is boxed because path resolution is a cold path.</li>
 <li>Users who need type-safe markers can create their own wrapper types.</li>
 <li>Policy is composable via middleware, not hardcoded.</li>
 </ul>
+<p><strong>User-defined type safety pattern:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Instead of FileStorage&lt;_, _, Sandbox&gt;, users create:
+struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
+struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
+
+fn process_sandbox(fs: &amp;SandboxFs) { /* only accepts SandboxFs */ }
+<span class="boring">}</span></code></pre>
 <hr>
 <h2 id="adr-009-built-in-backends-are-feature-gated"><a class="header" href="#adr-009-built-in-backends-are-feature-gated">ADR-009: Built-in backends are feature-gated</a></h2>
 <p><strong>Decision:</strong> <code>anyfs</code> uses Cargo features so users only pull the dependencies they need.</p>
@@ -4442,6 +4470,7 @@ SETUP (once at startup - zero-cost):
 OPT-IN TYPE ERASURE (when explicitly needed):
 ┌─────────────────────────────────────────────────────────────┐
 │  FileStorage::boxed() -&gt; FileStorage&lt;Box&lt;dyn Fs&gt;&gt;          │  ← Like Tower's BoxService
+│  (Resolver already boxed internally - this boxes backend)  │
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
 <h3 id="what-gets-boxed-and-why"><a class="header" href="#what-gets-boxed-and-why">What Gets Boxed and Why</a></h3>
@@ -6765,12 +6794,12 @@ let fs = FileStorage::new(
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, FileStorage};
-use anyfs::resolvers::CachingResolver;
+use anyfs::resolvers::{CachingResolver, IterativeResolver};
 
 // Custom resolver for read-heavy workloads
 let fs = FileStorage::with_resolver(
     MemoryBackend::new(),
-    CachingResolver::new()
+    CachingResolver::new(IterativeResolver::default())
 );
 <span class="boring">}</span></code></pre>
 <hr>
@@ -7741,11 +7770,16 @@ benchmark(|| resolver.canonicalize("/a/b/../c", &amp;mock_fs));
 <p>With separation, switching is one line:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Default
+</span>use anyfs::resolvers::{CachingResolver, IterativeResolver};
+
+// Default
 let fs = FileStorage::new(backend);
 
 // With caching (for performance)
-let fs = FileStorage::with_resolver(backend, CachingResolver::new());
+let fs = FileStorage::with_resolver(
+    backend, 
+    CachingResolver::new(IterativeResolver::default())
+);
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="the-analogy-gps-navigation"><a class="header" href="#the-analogy-gps-navigation">The Analogy: GPS Navigation</a></h2>
@@ -8005,7 +8039,7 @@ This is a planning/specification document, not actual API documentation.</p>
 <tr><td>Directory Operations</td><td>create, list, remove</td></tr>
 <tr><td>Sandboxed AI Agent</td><td>Full middleware stack example</td></tr>
 <tr><td>Persistent Database</td><td>SqliteBackend setup</td></tr>
-<tr><td>Type-Safe Containers</td><td>Marker types for compile-time safety</td></tr>
+<tr><td>Type-Safe Wrappers</td><td>User-defined newtypes for compile-time safety</td></tr>
 <tr><td>Streaming Large Files</td><td>open_read/open_write usage</td></tr>
 </tbody>
 </table>
@@ -8134,7 +8168,7 @@ FsRead + FsWrite + FsDir  ← Core traits
 ### Directory Operations
 ### Sandboxed AI Agent
 ### Persistent Database
-### Type-Safe Container Markers
+### Type-Safe Wrapper Types
 
 ## Trait Hierarchy (Pick Your Level)
 
@@ -11822,7 +11856,7 @@ fs.write("/test.txt", b"hello")?;
 <tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 <tr><td>Quota enforcement</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
 <tr><td>Rate limiting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
-<tr><td>Type-safe markers</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
+<tr><td>Type-safe wrappers</td><td style="text-align: center">✅*</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
 <tr><td>Path sandboxing</td><td style="text-align: center">✅</td><td style="text-align: center">Basic</td><td style="text-align: center">Basic (2 vectors)</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td></tr>
 <tr><td>Async API</td><td style="text-align: center">🔜</td><td style="text-align: center">Partial</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 <tr><td>std::fs-aligned API</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Custom</td></tr>
@@ -13698,7 +13732,7 @@ ufs.use(memfs);     // Memory overlay
 <tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
 <tr><td>SQLite backend</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 <tr><td>FUSE mounting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">🔜</td></tr>
-<tr><td>Type-safe markers</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Type-safe wrappers*</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 </tbody>
 </table>
 </div>
@@ -13974,7 +14008,7 @@ fn process_user(f: &amp;StrictPath&lt;UserFiles&gt;) { /* ... */ }
 <ol>
 <li><strong>Middleware composition</strong> - Only Afero has this, and we do it better (Tower-style)</li>
 <li><strong>Quota + rate limiting</strong> - No other library has built-in resource control</li>
-<li><strong>Type-safe markers</strong> - Compile-time container isolation is unique to us</li>
+<li><strong>Type-safe wrappers</strong> - Users can create wrapper newtypes for compile-time container isolation</li>
 <li><strong>SQLite backend</strong> - No other abstraction library offers this</li>
 </ol>
 <p><strong>What we should learn from others:</strong></p>

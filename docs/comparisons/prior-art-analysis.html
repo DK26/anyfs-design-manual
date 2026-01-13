@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e0c0a468.js";
+            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1628b8da.js"></script>
@@ -512,7 +512,7 @@ ufs.use(memfs);     // Memory overlay
 <tr><td>Memory backend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
 <tr><td>SQLite backend</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 <tr><td>FUSE mounting</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">🔜</td></tr>
-<tr><td>Type-safe markers</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Type-safe wrappers*</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
 </tbody>
 </table>
 </div>
@@ -788,7 +788,7 @@ fn process_user(f: &amp;StrictPath&lt;UserFiles&gt;) { /* ... */ }
 <ol>
 <li><strong>Middleware composition</strong> - Only Afero has this, and we do it better (Tower-style)</li>
 <li><strong>Quota + rate limiting</strong> - No other library has built-in resource control</li>
-<li><strong>Type-safe markers</strong> - Compile-time container isolation is unique to us</li>
+<li><strong>Type-safe wrappers</strong> - Users can create wrapper newtypes for compile-time container isolation</li>
 <li><strong>SQLite backend</strong> - No other abstraction library offers this</li>
 </ol>
 <p><strong>What we should learn from others:</strong></p>
