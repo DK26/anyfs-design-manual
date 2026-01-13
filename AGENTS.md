@@ -587,6 +587,13 @@ OPT-IN TYPE ERASURE:
 
 11. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
 
+12. **Document design reasoning in ADRs:**
+   - Significant API changes (e.g., simplifying generics, changing trait hierarchy) require an ADR
+   - ADRs capture: **What** was decided, **Why** (context + rationale), and **Alternatives** considered
+   - Update existing ADRs when the design evolves rather than creating new ones for minor refinements
+   - ADRs are in `src/architecture/adrs.md` - add new ones at the end with the next number
+   - If reasoning is already in an ADR, reference it rather than duplicating
+
 ---
 
 ## Responding to Reviews: Think Critically, Don't Comply Blindly

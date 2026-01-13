@@ -226,6 +226,20 @@ let backend = RestrictionsLayer::builder()
 
 **Decision:** `FileStorage<B>` is a thin wrapper that provides std::fs-aligned ergonomics and path resolution for virtual backends. It contains NO policy logic.
 
+**Context:** Earlier designs used `FileStorage<B, R, M>` with three type parameters:
+- `B` - Backend type
+- `R` - PathResolver type (default: `IterativeResolver`)
+- `M` - Marker type for compile-time container differentiation
+
+This was over-engineered. We simplified to a single generic.
+
+**Why only one generic parameter?**
+
+| Removed        | Rationale                                                                                                                                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `R` (Resolver) | Path resolution is a **cold path** (once per operation, I/O dominates). Boxing is acceptable per ADR-025. Runtime swapping via `with_resolver()` is sufficient.                                                         |
+| `M` (Marker)   | Speculative feature with unclear demand. Prior art (`vfs`, `cap-std`, `tempfile`) don't have marker parameters. Users who need type safety can create wrapper newtypes: `struct SandboxFs(FileStorage<MemoryBackend>)`. |
+
 **What it does:**
 - Provides familiar method names
 - Accepts `impl AsRef<Path>` for convenience and forwards to the core `&Path` traits
@@ -239,12 +253,21 @@ let backend = RestrictionsLayer::builder()
 - Marker types (users create wrapper newtypes if needed)
 - Any other policy
 
-**Why:**
+**Why this design:**
 - Single responsibility - ergonomics + path resolution (no policy).
-- One generic parameter keeps the API simple.
+- One generic parameter keeps the API simple for 90% of users.
 - Resolver is boxed because path resolution is a cold path.
 - Users who need type-safe markers can create their own wrapper types.
 - Policy is composable via middleware, not hardcoded.
+
+**User-defined type safety pattern:**
+```rust
+// Instead of FileStorage<_, _, Sandbox>, users create:
+struct SandboxFs(FileStorage<MemoryBackend>);
+struct UserDataFs(FileStorage<SqliteBackend>);
+
+fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
+```
 
 ---
 
