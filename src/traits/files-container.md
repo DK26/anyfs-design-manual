@@ -24,10 +24,10 @@ All policy (limits, feature gates, logging) is handled by middleware, not FileSt
 
 Previous designs used `FileStorage<B, R, M>` with three type parameters. We simplified to `FileStorage<B>`:
 
-| Old Param | Purpose | Why Removed |
-|-----------|---------|-------------|
+| Old Param      | Purpose                   | Why Removed                                          |
+| -------------- | ------------------------- | ---------------------------------------------------- |
 | `R` (Resolver) | Swappable path resolution | Boxed internally—resolution is a cold path (ADR-025) |
-| `M` (Marker) | Compile-time safety | Users can create wrapper newtypes if needed |
+| `M` (Marker)   | Compile-time safety       | Users can create wrapper newtypes if needed          |
 
 **Result:** Simpler API for 90% of users. Those who need type-safe markers wrap `FileStorage` themselves.
 
@@ -62,12 +62,12 @@ With custom resolver:
 
 ```rust
 use anyfs::{MemoryBackend, FileStorage};
-use anyfs::resolvers::CachingResolver;
+use anyfs::resolvers::{CachingResolver, IterativeResolver};
 
 // Custom resolver for read-heavy workloads
 let fs = FileStorage::with_resolver(
     MemoryBackend::new(),
-    CachingResolver::new()
+    CachingResolver::new(IterativeResolver::default())
 );
 ```
 
@@ -107,12 +107,12 @@ process_sandbox(&sandbox);     // OK
 
 ### When to Use Wrapper Types
 
-| Scenario                       | Use Wrapper? | Why                               |
-| ------------------------------ | ------------ | --------------------------------- |
-| Single container               | No           | `FileStorage<B>` is sufficient    |
-| Multiple containers, same type | **Yes**      | Prevent accidental mixing         |
-| Multi-tenant systems           | **Yes**      | Compile-time tenant isolation     |
-| Sandbox + user data            | **Yes**      | Never write user data to sandbox  |
+| Scenario                       | Use Wrapper? | Why                              |
+| ------------------------------ | ------------ | -------------------------------- |
+| Single container               | No           | `FileStorage<B>` is sufficient   |
+| Multiple containers, same type | **Yes**      | Prevent accidental mixing        |
+| Multi-tenant systems           | **Yes**      | Compile-time tenant isolation    |
+| Sandbox + user data            | **Yes**      | Never write user data to sandbox |
 
 ---
 

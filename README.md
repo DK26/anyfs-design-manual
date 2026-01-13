@@ -238,7 +238,7 @@ Virtual backends work identically everywhere - paths are just keys, symlinks are
 | **Path Sandboxing**        | Contain operations to allowed directories (virtual backends are inherently safe; `VRootFsBackend` uses strict-path for real FS) |
 | **Storage Quotas**         | Enforce per-file and total size limits with streaming byte counting                                                             |
 | **Access Control**         | Glob-based path filtering, operation restrictions, read-only modes                                                              |
-| **Tenant Isolation**       | Type-safe markers prevent cross-tenant data access at compile time                                                              |
+| **Tenant Isolation**       | User-defined wrapper types prevent cross-tenant data access at compile time                                                     |
 | **Encryption at Rest**     | SQLCipher backend for AES-256 encrypted storage                                                                                 |
 | **Audit & Tracing**        | Log all operations with structured tracing integration                                                                          |
 | **Rate Limiting**          | Throttle operations to prevent abuse                                                                                            |
@@ -261,26 +261,29 @@ Isolate customer data with per-tenant encryption, quotas, and compile-time safet
 ```rust
 use anyfs::{FileStorage, SqliteCipherBackend, QuotaLayer, TracingLayer, Fs};
 
-struct TenantMarker;
+// User-defined wrapper type for tenant isolation
+struct TenantStorage(FileStorage<Box<dyn Fs>>);
 
-pub fn create_tenant_storage(
-    tenant_id: &str, 
-    encryption_key: &[u8; 32]
-) -> Result<FileStorage<Box<dyn Fs>, IterativeResolver, TenantMarker>, FsError> {
-    let db_path = format!("/data/tenants/{}.db", tenant_id);
-    
-    let backend = SqliteCipherBackend::open(&db_path, encryption_key)?
-        .layer(QuotaLayer::builder()
-            .max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per tenant
-            .max_file_size(500 * 1024 * 1024)         // 500MB max file
-            .build())
-        .layer(TracingLayer::new());
+impl TenantStorage {
+    pub fn new(
+        tenant_id: &str, 
+        encryption_key: &[u8; 32]
+    ) -> Result<Self, FsError> {
+        let db_path = format!("/data/tenants/{}.db", tenant_id);
+        
+        let backend = SqliteCipherBackend::open(&db_path, encryption_key)?
+            .layer(QuotaLayer::builder()
+                .max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per tenant
+                .max_file_size(500 * 1024 * 1024)         // 500MB max file
+                .build())
+            .layer(TracingLayer::new());
 
-    Ok(FileStorage::new(backend).boxed())
+        Ok(TenantStorage(FileStorage::new(backend).boxed()))
+    }
 }
 
-// Type system prevents accidentally mixing FileStorages meant for different purposes
-fn process_tenant<R: PathResolver, M>(fs: &FileStorage<impl Fs, R, M>) { /* ... */ }
+// Type system prevents accidentally mixing tenants
+fn process_tenant(storage: &TenantStorage) { /* ... */ }
 ```
 
 **Benefits:** Per-tenant encryption, automatic quota enforcement, audit trail, compile-time isolation.
@@ -449,7 +452,7 @@ anyfs = { version = "0.1", features = ["sqlite", "winfsp"] } # Windows
 | Rate limiting            |   ✅   |      ❌      |    ❌    |     ❌     |
 | FUSE mounting            |   ✅   |      ❌      |    ✅    |    N/A    |
 | Cross-platform           |   ✅   |      ✅      |  Linux  |     ✅     |
-| Type-safe markers        |   ✅   |      ❌      |    ❌    |     ❌     |
+| Type-safe wrappers       |   ✅   |      ❌      |    ❌    |     ❌     |
 
 ---
 

@@ -105,11 +105,16 @@ Different situations need different approaches:
 With separation, switching is one line:
 
 ```rust
+use anyfs::resolvers::{CachingResolver, IterativeResolver};
+
 // Default
 let fs = FileStorage::new(backend);
 
 // With caching (for performance)
-let fs = FileStorage::with_resolver(backend, CachingResolver::new());
+let fs = FileStorage::with_resolver(
+    backend, 
+    CachingResolver::new(IterativeResolver::default())
+);
 ```
 
 ---

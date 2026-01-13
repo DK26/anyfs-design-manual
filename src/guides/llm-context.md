@@ -49,14 +49,14 @@ Is data persistence required?
 
 Provide copy-paste-ready code for these scenarios:
 
-| Pattern                | Description                          |
-| ---------------------- | ------------------------------------ |
-| Simple File Operations | read, write, delete, check existence |
-| Directory Operations   | create, list, remove                 |
-| Sandboxed AI Agent     | Full middleware stack example        |
-| Persistent Database    | SqliteBackend setup                  |
-| Type-Safe Containers   | Marker types for compile-time safety |
-| Streaming Large Files  | open_read/open_write usage           |
+| Pattern                | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| Simple File Operations | read, write, delete, check existence          |
+| Directory Operations   | create, list, remove                          |
+| Sandboxed AI Agent     | Full middleware stack example                 |
+| Persistent Database    | SqliteBackend setup                           |
+| Type-Safe Wrappers     | User-defined newtypes for compile-time safety |
+| Streaming Large Files  | open_read/open_write usage                    |
 
 **Requirements for each pattern:**
 
@@ -170,7 +170,7 @@ When creating the actual consumer documentation, follow this structure:
 ### Directory Operations
 ### Sandboxed AI Agent
 ### Persistent Database
-### Type-Safe Container Markers
+### Type-Safe Wrapper Types
 
 ## Trait Hierarchy (Pick Your Level)
 
