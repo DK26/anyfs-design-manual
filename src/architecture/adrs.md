@@ -1012,6 +1012,7 @@ SETUP (once at startup - zero-cost):
 OPT-IN TYPE ERASURE (when explicitly needed):
 ┌─────────────────────────────────────────────────────────────┐
 │  FileStorage::boxed() -> FileStorage<Box<dyn Fs>>          │  ← Like Tower's BoxService
+│  (Resolver already boxed internally - this boxes backend)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

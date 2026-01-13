@@ -317,7 +317,7 @@ For `VRootFsBackend` (wrapping real filesystem):
 | Memory backend        |       ✅       |    ✅    |         ✅         |    ❌    |    ✅    |
 | Quota enforcement     |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
 | Rate limiting         |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
-| Type-safe markers     |       ✅       |    ❌    |         ❌         |    ❌    |    ❌    |
+| Type-safe wrappers    |      ✅*       |    ❌    |         ❌         |    ❌    |    ❌    |
 | Path sandboxing       |       ✅       |  Basic  | Basic (2 vectors) |    ❌    |    ❌    |
 | Async API             |       🔜       | Partial |         ❌         |    ❌    |    ✅    |
 | std::fs-aligned API   |       ✅       | Custom  |         ✅         |    ✅    | Custom  |

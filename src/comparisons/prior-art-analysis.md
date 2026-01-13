@@ -299,7 +299,7 @@ fn resolve(path: &str) -> Result<PathBuf, FsError> {
 | Memory backend         |   ✅    |   ✅   |   ✅   |      ✅      |       ✅       |   ✅   |
 | SQLite backend         |   ❌    |   ❌   |   ❌   |      ❌      |       ❌       |   ✅   |
 | FUSE mounting          |   ✅    |   ❌   |   ✅   |      ❌      |       ❌       |   🔜   |
-| Type-safe markers      |   ❌    |   ❌   |   ❌   |      ❌      |       ❌       |   ✅   |
+| Type-safe wrappers*    |   ❌    |   ❌   |   ❌   |      ❌      |       ❌       |   ✅   |
 
 ---
 
@@ -552,7 +552,7 @@ Based on these libraries, we've added tests for:
 **What makes AnyFS unique:**
 1. **Middleware composition** - Only Afero has this, and we do it better (Tower-style)
 2. **Quota + rate limiting** - No other library has built-in resource control
-3. **Type-safe markers** - Compile-time container isolation is unique to us
+3. **Type-safe wrappers** - Users can create wrapper newtypes for compile-time container isolation
 4. **SQLite backend** - No other abstraction library offers this
 
 **What we should learn from others:**
