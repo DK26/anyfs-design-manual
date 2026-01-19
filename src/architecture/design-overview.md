@@ -186,7 +186,8 @@ The AnyFS design is **FFI-friendly** and can be exposed to other languages with 
 ```rust
 // anyfs-python/src/lib.rs
 use pyo3::prelude::*;
-use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs};
+use anyfs::{FileStorage, MemoryBackend, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 #[pyclass]
 struct PyFileStorage {
@@ -886,7 +887,7 @@ Each middleware implements the same traits as its inner backend. This enables co
 Enforces quota limits. Tracks usage and rejects operations that would exceed limits.
 
 ```rust
-use anyfs::{SqliteBackend, Quota};
+use anyfs::{MemoryBackend, QuotaLayer};
 
 let backend = QuotaLayer::builder()
     .max_total_size(100 * 1024 * 1024)   // 100 MB
@@ -895,7 +896,7 @@ let backend = QuotaLayer::builder()
     .max_dir_entries(1_000)              // 1K entries per dir
     .max_path_depth(64)
     .build()
-    .layer(SqliteBackend::open("data.db")?);
+    .layer(MemoryBackend::new());
 
 // Check usage
 let usage = backend.usage();
@@ -924,9 +925,9 @@ When blocked, operations return `FsError::FeatureNotEnabled`.
 Integrates with the [tracing](https://docs.rs/tracing) ecosystem for structured logging and instrumentation.
 
 ```rust
-use anyfs::{SqliteBackend, TracingLayer};
+use anyfs::{MemoryBackend, TracingLayer};
 
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(TracingLayer::new()
         .with_target("anyfs")
         .with_level(tracing::Level::DEBUG));
@@ -964,10 +965,10 @@ When a path is denied, operations return `FsError::AccessDenied`.
 Prevents all write operations. Useful for publishing immutable data.
 
 ```rust
-use anyfs::{SqliteBackend, ReadOnly, FileStorage};
+use anyfs::{VRootFsBackend, ReadOnly, FileStorage};
 
 // Wrap any backend to make it read-only
-let backend = ReadOnly::new(SqliteBackend::open("published.db")?);
+let backend = ReadOnly::new(VRootFsBackend::new("/var/published")?);
 let fs = FileStorage::new(backend);
 
 fs.read("/doc.txt")?;     // OK
@@ -1013,13 +1014,13 @@ let _ = fs.read("/test.txt");       // Error: file doesn't exist
 LRU cache for read operations. Essential for slow backends (S3, network).
 
 ```rust
-use anyfs::{SqliteBackend, Cache, FileStorage};
+use anyfs::{MemoryBackend, CacheLayer, FileStorage};
 
 let backend = CacheLayer::builder()
     .max_size(100 * 1024 * 1024)      // 100 MB cache
     .max_entries(10_000)              // Max 10K entries
     .build()
-    .layer(SqliteBackend::open("data.db")?);
+    .layer(MemoryBackend::new());
 let fs = FileStorage::new(backend);
 
 // First read: hits backend, caches result
@@ -1034,10 +1035,10 @@ let data = fs.read("/file.txt")?;
 Union filesystem with a read-only base and writable upper layer. Like Docker.
 
 ```rust
-use anyfs::{SqliteBackend, MemoryBackend, Overlay};
+use anyfs::{VRootFsBackend, MemoryBackend, Overlay};
 
 // Base: read-only template
-let base = SqliteBackend::open("template.db")?;
+let base = VRootFsBackend::new("/var/templates")?;
 
 // Upper: writable layer for changes
 let upper = MemoryBackend::new();
@@ -1082,7 +1083,8 @@ let content = fs.read("/documents/hello.txt")?;
 If you need compile-time safety to prevent mixing filesystems, create wrapper types:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
+use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Define wrapper types for your domains
 struct SandboxFs(FileStorage<MemoryBackend>);
@@ -1106,6 +1108,8 @@ process_sandbox(&sandbox);   // OK
 ### Type Aliases for Clean Code
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // Define your standard secure stack
 type SecureBackend = Tracing<Restrictions<Quota<SqliteBackend>>>;
 
@@ -1145,6 +1149,8 @@ impl<B: Fs> FileStorage<B> {
 When you need uniform types (e.g., collections), use `.boxed()`:
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // Type-erased for uniform storage
 let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
@@ -1193,9 +1199,9 @@ Middleware composes by wrapping. Order matters - innermost applies first.
 Use the `.layer()` extension method for Axum-style composition:
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -1212,7 +1218,7 @@ For complex stacks, use `BackendStack` for a fluent API:
 ```rust
 use anyfs::BackendStack;
 
-let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+let fs = BackendStack::new(MemoryBackend::new())
     .limited(|l| l
         .max_total_size(100 * 1024 * 1024)
         .max_file_size(10 * 1024 * 1024))
@@ -1224,18 +1230,24 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
 
 ---
 
-## Built-in Backends
+## Built-in Backends (anyfs crate)
 
-| Backend               | Feature            | Description                                                    |
-| --------------------- | ------------------ | -------------------------------------------------------------- |
-| `MemoryBackend`       | `memory` (default) | In-memory storage                                              |
-| `SqliteBackend`       | `sqlite`           | Single-file portable database                                  |
-| `SqliteCipherBackend` | `sqlite-cipher`    | Encrypted SQLite via SQLCipher (AES-256)                       |
-| `IndexedBackend`      | `indexed`          | Virtual paths + disk blobs (large file support with isolation) |
-| `StdFsBackend`        | `stdfs`            | Direct `std::fs` delegation (no containment)                   |
-| `VRootFsBackend`      | `vrootfs`          | Host filesystem with path containment (via strict-path)        |
+| Backend          | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| `MemoryBackend`  | In-memory storage, implements `Clone` for snapshots     |
+| `StdFsBackend`   | Direct `std::fs` delegation (no containment)            |
+| `VRootFsBackend` | Host filesystem with path containment (via strict-path) |
 
-**Note:** `sqlite` and `sqlite-cipher` features are mutually exclusive (both use rusqlite with different SQLite builds).
+### Ecosystem Backends (Separate Crates)
+
+Complex backends with internal runtime requirements live in their own crates:
+
+| Crate           | Backend          | Description                                                           |
+| --------------- | ---------------- | --------------------------------------------------------------------- |
+| `anyfs-sqlite`  | `SqliteBackend`  | Single-file database with pooling, WAL, sharding; optional encryption |
+| `anyfs-indexed` | `IndexedBackend` | Virtual paths + disk blobs (large file support)                       |
+
+**Why separate crates?** Complex backends need internal runtimes (connection pools, sharding, chunking). Keeps `anyfs` lightweight and focused on framework glue.
 
 ---
 
@@ -1796,7 +1808,7 @@ pub enum FsError {
         operation: &'static str,
     },
 
-    /// Invalid password or encryption key (from SqliteCipherBackend).
+    /// Invalid password or encryption key (from SqliteBackend with encryption).
     InvalidPassword,
 
     /// Conflict during sync (from offline mode).
@@ -1841,16 +1853,15 @@ AnyFS is designed for cross-platform use. Virtual backends work everywhere; real
 
 ### Backend Compatibility
 
-| Backend               | Windows | Linux | macOS | WASM  |
-| --------------------- | :-----: | :---: | :---: | :---: |
-| `MemoryBackend`       |    ✅    |   ✅   |   ✅   |   ✅   |
-| `SqliteBackend`       |    ✅    |   ✅   |   ✅   |  ✅*   |
-| `SqliteCipherBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
-| `IndexedBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
-| `StdFsBackend`        |    ✅    |   ✅   |   ✅   |   ❌   |
-| `VRootFsBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
+| Backend          | Windows | Linux | macOS | WASM  |
+| ---------------- | :-----: | :---: | :---: | :---: |
+| `MemoryBackend`  |    ✅    |   ✅   |   ✅   |   ✅   |
+| `SqliteBackend`  |    ✅    |   ✅   |   ✅   |  ✅*   |
+| `IndexedBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
+| `StdFsBackend`   |    ✅    |   ✅   |   ✅   |   ❌   |
+| `VRootFsBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
 
-*SQLite on WASM requires `wasm32` build of rusqlite with bundled SQLite.
+*SQLiteBackend on WASM requires `wasm32` build of rusqlite with bundled SQLite. Encryption feature not available on WASM.
 
 ### Feature Compatibility
 

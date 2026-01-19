@@ -561,6 +561,9 @@ impl AuditLogger {
 Use `PathFilterLayer` middleware for path-based restrictions:
 
 ```rust
+use anyfs::{PathFilterLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 let backend = SqliteBackend::open("data.db")?
     .layer(PathFilterLayer::builder()
         // Allow specific directories

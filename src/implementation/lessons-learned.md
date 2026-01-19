@@ -232,6 +232,9 @@ pub enum FsError {
 **Already solved:** `ReadOnly<B>` middleware blocks all writes.
 
 ```rust
+use anyfs::{ReadOnly, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );

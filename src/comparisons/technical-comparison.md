@@ -69,10 +69,10 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 Tower-style middleware + pluggable backends:
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Compose middleware stack
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())

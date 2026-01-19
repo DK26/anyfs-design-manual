@@ -45,10 +45,10 @@ let fs = FileStorage::new(MemoryBackend::new());
 With middleware (layer-based):
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -78,7 +78,8 @@ let fs = FileStorage::with_resolver(
 If you need compile-time safety to prevent mixing filesystems, create wrapper newtypes:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
+use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Define your own wrapper types
 struct SandboxFs(FileStorage<MemoryBackend>);
@@ -207,7 +208,8 @@ Backends implementing `SelfResolving` (like `VRootFsBackend`) skip resolution si
 When you need simpler types (e.g., storing in collections), use `.boxed()`:
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs};
+use anyfs::{MemoryBackend, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Type-erased for uniform storage
 let filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![

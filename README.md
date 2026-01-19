@@ -57,7 +57,7 @@ Instead of burdening your application code with policy logic (*"encrypt this, th
 │  "Write invoice to /mnt/invoices/..."   │  ← App is simple
 ├─────────────────────────────────────────┤
 │  Infrastructure Enforces Policy:        │
-│    1. Encryption (SqliteCipher)         │  ← Safety is intrinsic
+│    1. Encryption (SqliteBackend)        │  ← Safety is intrinsic
 │    2. Quota Check (Middleware)          │  ← Limits are enforced
 │    3. Audit Log (Tracing)               │  ← Compliance is automatic
 │    4. Search Indexing (Sidecar)         │  ← Data is discoverable
@@ -214,16 +214,15 @@ Because AnyFS sits *between* the OS and the storage:
 
 ### Fully Cross-Platform
 
-| Backend               | Windows | Linux | macOS | WASM  |
-| --------------------- | :-----: | :---: | :---: | :---: |
-| `MemoryBackend`       |    ✅    |   ✅   |   ✅   |   ✅   |
-| `SqliteBackend`       |    ✅    |   ✅   |   ✅   |   ✅   |
-| `SqliteCipherBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
-| `IndexedBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
-| `StdFsBackend`        |    ✅    |   ✅   |   ✅   |   ❌   |
-| `VRootFsBackend`      |    ✅    |   ✅   |   ✅   |   ❌   |
+| Backend          | Windows | Linux | macOS | WASM  |
+| ---------------- | :-----: | :---: | :---: | :---: |
+| `MemoryBackend`  |    ✅    |   ✅   |   ✅   |   ✅   |
+| `SqliteBackend`  |    ✅    |   ✅   |   ✅   |  ✅*   |
+| `IndexedBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
+| `StdFsBackend`   |    ✅    |   ✅   |   ✅   |   ❌   |
+| `VRootFsBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
 
-Virtual backends work identically everywhere - paths are just keys, symlinks are stored data.
+*SQLiteBackend on WASM requires bundled SQLite. Encryption feature not available on WASM.
 
 ---
 
@@ -259,7 +258,8 @@ Virtual backends work identically everywhere - paths are just keys, symlinks are
 Isolate customer data with per-tenant encryption, quotas, and compile-time safety.
 
 ```rust
-use anyfs::{FileStorage, SqliteCipherBackend, QuotaLayer, TracingLayer, Fs};
+use anyfs::{FileStorage, QuotaLayer, TracingLayer, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
 
 // User-defined wrapper type for tenant isolation
 struct TenantStorage(FileStorage<Box<dyn Fs>>);
@@ -271,7 +271,7 @@ impl TenantStorage {
     ) -> Result<Self, FsError> {
         let db_path = format!("/data/tenants/{}.db", tenant_id);
         
-        let backend = SqliteCipherBackend::open(&db_path, encryption_key)?
+        let backend = SqliteBackend::open_with_key(&db_path, encryption_key)?
             .layer(QuotaLayer::builder()
                 .max_total_size(10 * 1024 * 1024 * 1024)  // 10GB per tenant
                 .max_file_size(500 * 1024 * 1024)         // 500MB max file
@@ -344,7 +344,8 @@ impl<B: Fs> IndexedStorage<B> {
 Secure USB storage with encrypted backup and cross-device migration.
 
 ```rust
-use anyfs::{FileStorage, MemoryBackend, SqliteCipherBackend, VRootFsBackend, Fs};
+use anyfs::{FileStorage, MemoryBackend, VRootFsBackend, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
 
 pub struct SecureUSB {
     memory: FileStorage<MemoryBackend>,  // Fast working copy
@@ -354,7 +355,7 @@ impl SecureUSB {
     /// Load encrypted USB into memory for fast access
     pub fn open(usb_path: &str, password: &str) -> Result<Self, FsError> {
         let key = derive_key(password);
-        let usb = SqliteCipherBackend::open(&format!("{}/vault.db", usb_path), &key)?;
+        let usb = SqliteBackend::open_with_key(&format!("{}/vault.db", usb_path), &key)?;
         
         let memory = MemoryBackend::new();
         copy_all(&FileStorage::new(usb), &FileStorage::new(memory.clone()))?;
@@ -365,7 +366,7 @@ impl SecureUSB {
     /// Save encrypted back to USB
     pub fn save_to_usb(&self, usb_path: &str, password: &str) -> Result<(), FsError> {
         let key = derive_key(password);
-        let usb = SqliteCipherBackend::open(&format!("{}/vault.db", usb_path), &key)?;
+        let usb = SqliteBackend::open_with_key(&format!("{}/vault.db", usb_path), &key)?;
         copy_all(&self.memory, &FileStorage::new(usb))
     }
 

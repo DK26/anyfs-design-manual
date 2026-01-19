@@ -67,10 +67,10 @@ You get:
 ## Quick example
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Layer-based composition
-let backend = SqliteBackend::open("tenant.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())

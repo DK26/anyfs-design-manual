@@ -173,7 +173,7 @@ If you want quotas in `vfs`, you'd have to build it INTO each backend. Then buil
 ### 1. Middleware Composition (Nobody Else Has This)
 
 ```rust
-let fs = SqliteBackend::open("data.db")?
+let fs = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100_MB)
         .max_file_count(1000)
@@ -193,6 +193,8 @@ Add, remove, or reorder middleware without touching backends. Write middleware o
 ### 2. Type-Safe Domain Separation (User-Defined Wrappers)
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // Users who need type-safe domain separation can create wrapper types
 struct SandboxFs(FileStorage<MemoryBackend>);
 struct UserDataFs(FileStorage<SqliteBackend>);

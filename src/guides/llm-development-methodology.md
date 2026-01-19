@@ -323,8 +323,8 @@ impl FsRead for MyBackend {
 ```rust
 // Bad: Requires database, filesystem, network
 #[test]
-fn test_sqlite_backend() {
-    let db = SqliteBackend::open("test.db").unwrap(); // Creates real file!
+fn test_vrootfs_backend() {
+    let db = VRootFsBackend::new("/tmp/test").unwrap(); // Creates real files!
     // ...
 }
 ```

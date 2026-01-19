@@ -262,7 +262,8 @@ let fs = FileStorage::new(sandbox);
 ### Multi-Tenant Isolation
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FileStorage};
+use anyfs::{QuotaLayer, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<impl Fs> {
     let db_path = format!("tenants/{}.db", tenant_id);
@@ -280,10 +281,10 @@ fn create_tenant_storage(tenant_id: &str, quota_bytes: u64) -> FileStorage<impl 
 ### Read-Only Browsing
 
 ```rust
-use anyfs::{SqliteBackend, ReadOnly, FileStorage};
+use anyfs::{VRootFsBackend, ReadOnly, FileStorage};
 
 let readonly_fs = FileStorage::new(
-    ReadOnly::new(SqliteBackend::open("archive.db")?)
+    ReadOnly::new(VRootFsBackend::new("/var/archive")?)
 );
 
 // All write operations return FsError::ReadOnly
@@ -349,31 +350,21 @@ AnyFS's design enables encryption at multiple levels. Understanding the differen
 
 #### Option 1: SQLCipher Backend
 
-[SQLCipher](https://www.zetetic.net/sqlcipher/) provides transparent AES-256 encryption for SQLite:
+[SQLCipher](https://www.zetetic.net/sqlcipher/) provides transparent AES-256 encryption for SQLite. In AnyFS, encryption is a feature of `SqliteBackend` (from the `anyfs-sqlite` ecosystem crate), not a separate type:
 
 ```rust
-/// SQLite backend with full database encryption via SQLCipher.
-pub struct SqliteCipherBackend {
-    conn: rusqlite::Connection,  // Built with sqlcipher feature
-}
+/// SqliteBackend with encryption enabled (requires `encryption` feature).
+/// Uses SQLCipher for transparent AES-256 encryption.
+use anyfs_sqlite::SqliteBackend;
 
-impl SqliteCipherBackend {
-    pub fn open(path: &str, password: &str) -> Result<Self, FsError> {
-        let conn = Connection::open(path)?;
-        // SQLCipher: derive key from password, encrypt everything
-        conn.pragma_update(None, "key", password)?;
-        Ok(Self { conn })
-    }
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-    pub fn open_with_key(path: &str, key: &[u8; 32]) -> Result<Self, FsError> {
-        let conn = Connection::open(path)?;
-        // Use raw key instead of password
-        conn.pragma_update(None, "key", &format!("x'{}'", hex::encode(key)))?;
-        Ok(Self { conn })
-    }
-}
+// Or open with raw 256-bit key
+let backend = SqliteBackend::open_with_key("secure.db", &key)?;
 
-impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
+// Change password on open database
+backend.change_password("new_password")?;
 ```
 
 **What's protected:**
@@ -385,7 +376,7 @@ impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
 
 **Usage:**
 ```rust
-let backend = SqliteCipherBackend::open("secure.db", "correct-horse-battery-staple")?;
+let backend = SqliteBackend::open_encrypted("secure.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // If someone gets secure.db without the password, they see random bytes
@@ -627,7 +618,7 @@ For true defense against memory scanning, combine:
 
 | Approach                                | Protects Contents | Protects Structure | RAM Security                   | Persistence          |
 | --------------------------------------- | ----------------- | ------------------ | ------------------------------ | -------------------- |
-| `SqliteCipherBackend`                   | Yes               | Yes                | No (SQLite uses plaintext RAM) | Encrypted `.db` file |
+| `SqliteBackend` with encryption         | Yes               | Yes                | No (SQLite uses plaintext RAM) | Encrypted `.db` file |
 | `FileEncryption<B>` middleware          | Yes               | No                 | Depends on B                   | Depends on B         |
 | `EncryptedMemoryBackend` (illustrative) | Yes               | Yes                | Yes (encrypted in RAM)         | Via `save_to_file()` |
 | `IntegrityVerified<B>` middleware       | No                | No (files only)    | No                             | Depends on B         |
@@ -637,7 +628,7 @@ For true defense against memory scanning, combine:
 #### Sensitive Data Storage
 ```rust
 // Full protection: encrypted container + secure memory practices
-let backend = SqliteCipherBackend::open("secure.db", password)?;
+let backend = SqliteBackend::open_encrypted("secure.db", password)?;
 let fs = FileStorage::new(backend);
 ```
 
@@ -652,6 +643,8 @@ backend.save_to_file("snapshot.enc")?;  // Persists encrypted
 
 #### Selective File Encryption
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // Some files encrypted, structure visible
 let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
     .with_key(key);
@@ -725,117 +718,40 @@ Virtual backends eliminate this entirely:
 
 | Security Level              | Implementation                             | Why                                             |
 | --------------------------- | ------------------------------------------ | ----------------------------------------------- |
-| **Locked (container)**      | `SqliteCipherBackend`                      | Must encrypt entire `.db` file at storage level |
+| **Locked (container)**      | `SqliteBackend` with `encryption` feature  | Must encrypt entire `.db` file at storage level |
 | **Privacy (file contents)** | `FileEncryption<SqliteBackend>` middleware | Content encryption is policy                    |
 | **Normal**                  | `SqliteBackend`                            | User applies encryption as needed               |
 
-**Why Locked mode requires a separate backend:**
-- SQLCipher encrypts the entire database file transparently
+**Why encryption is a feature, not a separate type:**
+- SQLCipher is a drop-in replacement for SQLite with identical API
+- The only difference is how the connection is opened (with password/key)
 - Connection must be opened with password before ANY query
 - Cannot be added as middleware - it's a property of the connection itself
 - Everything is encrypted: file contents, filenames, directory structure, timestamps, inodes
 
-### SqliteCipherBackend (Built-in, feature: `sqlite-cipher`)
+### SqliteBackend Encryption (Ecosystem Crate, feature: `encryption`)
 
-Full container encryption using [SQLCipher](https://www.zetetic.net/sqlcipher/):
+Full container encryption using [SQLCipher](https://www.zetetic.net/sqlcipher/). Encryption is a feature of `SqliteBackend`, not a separate type:
 
 ```rust
-/// SQLite backend with full AES-256 encryption via SQLCipher.
-/// Requires `sqlite-cipher` feature (uses rusqlite with bundled-sqlcipher).
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+/// Encryption methods are only available with the `encryption` feature.
+/// Uses SQLCipher for transparent AES-256 encryption.
 ///
 /// Without the password, the .db file is indistinguishable from random bytes.
-pub struct SqliteCipherBackend {
-    conn: Connection,
-}
 
-impl SqliteCipherBackend {
-    /// Open with password (derives key via PBKDF2).
-    pub fn open(path: impl AsRef<Path>, password: &str) -> Result<Self, FsError> {
-        let conn = Connection::open(path.as_ref())?;
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-        // SQLCipher: Set encryption key derived from password
-        conn.pragma_update(None, "key", password)?;
+// Open with raw 256-bit key (no key derivation)
+let backend = SqliteBackend::open_with_key("secure.db", &key)?;
 
-        // Verify we can read (wrong password = SQLITE_NOTADB)
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
+// Create new encrypted database
+let backend = SqliteBackend::create_encrypted("new.db", "password")?;
 
-        Self::init_schema(&conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Open with raw 256-bit key (no key derivation).
-    pub fn open_with_key(path: impl AsRef<Path>, key: &[u8; 32]) -> Result<Self, FsError> {
-        let conn = Connection::open(path.as_ref())?;
-
-        // SQLCipher: Set raw key (hex-encoded with x'' prefix)
-        let hex_key = format!("x'{}'", hex::encode(key));
-        conn.pragma_update(None, "key", &hex_key)?;
-
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
-
-        Self::init_schema(&conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Create new encrypted database with password.
-    pub fn create(path: impl AsRef<Path>, password: &str) -> Result<Self, FsError> {
-        if path.as_ref().exists() {
-            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf(), operation: "create" });
-        }
-        Self::open(path, password)
-    }
-
-    /// Change the password on an open database.
-    pub fn change_password(&self, new_password: &str) -> Result<(), FsError> {
-        self.conn.pragma_update(None, "rekey", new_password)?;
-        Ok(())
-    }
-
-    fn init_schema(conn: &Connection) -> Result<(), FsError> {
-        conn.execute_batch(r#"
-            -- Node table: directories, files, symlinks
-            CREATE TABLE IF NOT EXISTS nodes (
-                inode INTEGER PRIMARY KEY,
-                parent_inode INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                node_type INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
-                size INTEGER NOT NULL DEFAULT 0,
-                mode INTEGER NOT NULL DEFAULT 0o644,
-                nlink INTEGER NOT NULL DEFAULT 1,
-                uid INTEGER NOT NULL DEFAULT 0,
-                gid INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER,
-                modified_at INTEGER,
-                accessed_at INTEGER,
-                symlink_target TEXT,
-                UNIQUE(parent_inode, name),
-                FOREIGN KEY (parent_inode) REFERENCES nodes(inode)
-            );
-
-            -- Content table: file data (separate for efficient large files)
-            CREATE TABLE IF NOT EXISTS content (
-                inode INTEGER PRIMARY KEY,
-                data BLOB NOT NULL,
-                FOREIGN KEY (inode) REFERENCES nodes(inode) ON DELETE CASCADE
-            );
-
-            -- Index for directory listing performance
-            CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent_inode);
-
-            -- Root directory (inode 1, parent is self)
-            INSERT OR IGNORE INTO nodes (inode, parent_inode, name, node_type, mode)
-            VALUES (1, 1, '', 1, 0o755);
-        "#)?;
-        Ok(())
-    }
-}
-
-// Implements same traits as SqliteBackend - only difference is encrypted storage
-impl Fs for SqliteCipherBackend { /* ... */ }
-impl FsFull for SqliteCipherBackend { /* ... */ }
-impl FsFuse for SqliteCipherBackend { /* ... */ }
+// Change password on open database
+backend.change_password("new_password")?;
 ```
 
 #### What SQLCipher Encrypts
@@ -856,22 +772,12 @@ impl FsFuse for SqliteCipherBackend { /* ... */ }
 
 ```toml
 [dependencies]
-# Regular SQLite (no encryption)
-rusqlite = { version = "0.31", features = ["bundled"] }
-
-# SQLCipher (full encryption) - mutually exclusive with above
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+# anyfs-sqlite ecosystem crate with optional encryption
+anyfs-sqlite = { version = "0.1" }                     # No encryption
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
 ```
 
-**Feature flags in anyfs:**
-```toml
-[features]
-default = ["memory"]
-sqlite = ["rusqlite/bundled"]
-sqlite-cipher = ["rusqlite/bundled-sqlcipher"]  # Replaces sqlite
-```
-
-**Note:** `sqlite` and `sqlite-cipher` are mutually exclusive. SQLCipher is a drop-in replacement with the same schema and API.
+**Note:** The `encryption` feature enables SQLCipher. When enabled, `open_encrypted()` and `open_with_key()` methods become available.
 
 ### Achieving Security Modes with Composition
 
@@ -880,8 +786,10 @@ Users compose backends and middleware to achieve their desired security level:
 #### Locked Mode (Full Container Encryption)
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
 // Everything encrypted - password required to access anything
-let backend = SqliteCipherBackend::open("tenant.db", "correct-horse-battery-staple")?;
+let backend = SqliteBackend::open_encrypted("tenant.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // Without password: .db file is random bytes
@@ -891,6 +799,8 @@ let fs = FileStorage::new(backend);
 #### Privacy Mode (Contents Encrypted, Metadata Visible)
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // File contents encrypted, metadata (names, sizes, structure) visible
 let backend = FileEncryption::new(
     SqliteBackend::open("tenant.db")?
@@ -906,6 +816,8 @@ let fs = FileStorage::new(backend);
 #### Normal Mode (No Encryption)
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // No encryption - user encrypts sensitive files themselves
 let backend = SqliteBackend::open("tenant.db")?;
 let fs = FileStorage::new(backend);
@@ -915,17 +827,17 @@ let fs = FileStorage::new(backend);
 
 #### Mode Comparison
 
-| Aspect              | Locked                     | Privacy                         | Normal          |
-| ------------------- | -------------------------- | ------------------------------- | --------------- |
-| Implementation      | `SqliteCipherBackend`      | `FileEncryption<SqliteBackend>` | `SqliteBackend` |
-| File contents       | Encrypted (SQLCipher)      | Encrypted (AES-GCM)             | Plaintext       |
-| Filenames           | Encrypted                  | Visible                         | Visible         |
-| Directory structure | Encrypted                  | Visible                         | Visible         |
-| File sizes          | Encrypted                  | Visible                         | Visible         |
-| Timestamps          | Encrypted                  | Visible                         | Visible         |
-| Host can analyze    | Nothing                    | Metadata only                   | Everything      |
-| Performance         | Slowest (~10-15% overhead) | Medium                          | Fastest         |
-| Feature flag        | `sqlite-cipher`            | `sqlite` + middleware           | `sqlite`        |
+| Aspect              | Locked                            | Privacy                         | Normal          |
+| ------------------- | --------------------------------- | ------------------------------- | --------------- |
+| Implementation      | `SqliteBackend` with `encryption` | `FileEncryption<SqliteBackend>` | `SqliteBackend` |
+| File contents       | Encrypted (SQLCipher)             | Encrypted (AES-GCM)             | Plaintext       |
+| Filenames           | Encrypted                         | Visible                         | Visible         |
+| Directory structure | Encrypted                         | Visible                         | Visible         |
+| File sizes          | Encrypted                         | Visible                         | Visible         |
+| Timestamps          | Encrypted                         | Visible                         | Visible         |
+| Host can analyze    | Nothing                           | Metadata only                   | Everything      |
+| Performance         | Slowest (~10-15% overhead)        | Medium                          | Fastest         |
+| Feature flag        | `encryption`                      | middleware                      | (none)          |
 
 #### Why This Is TOCTOU-Proof
 
@@ -962,13 +874,15 @@ impl SecureSqliteBackend {
 #### Multi-Tenant Isolation
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
 /// Each tenant gets their own .db file - complete physical isolation
 fn create_tenant_storage(tenant_id: &str, encrypted: bool) -> impl Fs {
     let path = format!("tenants/{}.db", tenant_id);
 
     if encrypted {
         let password = get_tenant_password(tenant_id);
-        SqliteCipherBackend::open(&path, &password).unwrap()
+        SqliteBackend::open_encrypted(&path, &password).unwrap()
     } else {
         SqliteBackend::open(&path).unwrap()
     }
@@ -1039,9 +953,9 @@ fn handle_tenant_request(tenant_id: &str, requested_path: &str) -> Result<Vec<u8
 }
 ```
 
-**After (SqliteCipherBackend):**
+**After (SqliteBackend with encryption - ecosystem crate):**
 ```rust
-use anyfs::SqliteCipherBackend;
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
 
 fn handle_tenant_request(tenant_id: &str, requested_path: &str) -> Result<Vec<u8>> {
     // Separate encrypted database per tenant - no path containment needed
@@ -1050,15 +964,15 @@ fn handle_tenant_request(tenant_id: &str, requested_path: &str) -> Result<Vec<u8
 }
 ```
 
-| Aspect                | strict-path                    | Virtual Backend                                |
-| --------------------- | ------------------------------ | ---------------------------------------------- |
-| Isolation model       | Logical (path filtering)       | Physical (separate files)                      |
-| TOCTOU                | Mitigated                      | **Eliminated**                                 |
-| External interference | Possible                       | **Impossible**                                 |
-| Symlink attacks       | Resolved at check time         | **We control all symlinks**                    |
-| Cross-tenant leakage  | Bug in filtering could leak    | **No shared data exists**                      |
-| Performance           | Real FS I/O + canonicalization | SQLite (often faster for small files)          |
-| Encryption            | Separate concern               | Built-in (`SqliteCipherBackend`) or middleware |
+| Aspect                | strict-path                    | Virtual Backend                               |
+| --------------------- | ------------------------------ | --------------------------------------------- |
+| Isolation model       | Logical (path filtering)       | Physical (separate files)                     |
+| TOCTOU                | Mitigated                      | **Eliminated**                                |
+| External interference | Possible                       | **Impossible**                                |
+| Symlink attacks       | Resolved at check time         | **We control all symlinks**                   |
+| Cross-tenant leakage  | Bug in filtering could leak    | **No shared data exists**                     |
+| Performance           | Real FS I/O + canonicalization | SQLite (often faster for small files)         |
+| Encryption            | Separate concern               | Built-in (`encryption` feature) or middleware |
 
 ---
 

@@ -36,12 +36,11 @@ fn memory_backend_conformance() {
 }
 
 #[test]
-fn sqlite_backend_conformance() {
+fn vrootfs_backend_conformance() {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
     run_conformance_suite(
-        SqliteBackend::open(&db_path).unwrap(),
-        ConformanceLevel::FsFuse,
+        VRootFsBackend::new(temp.path()).unwrap(),
+        ConformanceLevel::FsFull,
     );
 }
 ```
@@ -521,7 +520,8 @@ fn test_filestorage_wrapper_types() {
 #[test]
 fn test_filestorage_boxed() {
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
-    let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
+    let temp = tempfile::tempdir().unwrap();
+    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![fs1, fs2];
@@ -1217,10 +1217,9 @@ cargo test --target wasm32-unknown-unknown
 // In anyfs-test crate
 
 /// Create a temporary backend for testing
-pub fn temp_sqlite_backend() -> (SqliteBackend, tempfile::TempDir) {
+pub fn temp_vrootfs_backend() -> (VRootFsBackend, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
-    let backend = SqliteBackend::open(&db_path).unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
     (backend, temp)
 }
 
@@ -1233,8 +1232,8 @@ where
     let backend = MemoryBackend::new();
     test(&mut backend);
 
-    // SQLite
-    let (mut backend, _temp) = temp_sqlite_backend();
+    // VRootFs (real filesystem with containment)
+    let (mut backend, _temp) = temp_vrootfs_backend();
     test(&mut backend);
 }
 ```

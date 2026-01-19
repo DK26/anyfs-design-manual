@@ -22,14 +22,14 @@ anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
 ## Creating a Backend Stack
 
 ```rust
-use anyfs::{MemoryBackend, SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Simple
 let fs = FileStorage::new(MemoryBackend::new());
 
 // With limits
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .max_file_size(10 * 1024 * 1024)
@@ -37,7 +37,7 @@ let fs = FileStorage::new(
 );
 
 // Full stack (fluent composition)
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -51,7 +51,7 @@ let fs = FileStorage::new(backend);
 // BackendStack builder (fluent API)
 use anyfs::BackendStack;
 
-let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+let fs = BackendStack::new(MemoryBackend::new())
     .limited(|l| l.max_total_size(100 * 1024 * 1024))
     .restricted(|g| g.deny_permissions())
     .traced()
@@ -201,10 +201,10 @@ IndexLayer::builder()
 ## Overlay Methods
 
 ```rust
-use anyfs::{SqliteBackend, MemoryBackend, Overlay};
+use anyfs::{VRootFsBackend, MemoryBackend, Overlay};
 
-let base = SqliteBackend::open("base.db")?;  // Read-only base
-let upper = MemoryBackend::new();             // Writable upper
+let base = VRootFsBackend::new("/var/templates")?;  // Read-only base
+let upper = MemoryBackend::new();                    // Writable upper
 
 let overlay = Overlay::new(base, upper);
 
@@ -374,11 +374,11 @@ assert_eq!(ino1, ino2);  // Same inode!
 
 **Inode sources by backend:**
 
-| Backend          | Inode Source                             |
-| ---------------- | ---------------------------------------- |
-| `MemoryBackend`  | Internal node IDs (incrementing counter) |
-| `SqliteBackend`  | SQLite row IDs (`INTEGER PRIMARY KEY`)   |
-| `VRootFsBackend` | OS inode numbers (`Metadata::ino()`)     |
+| Backend                       | Inode Source                             |
+| ----------------------------- | ---------------------------------------- |
+| `MemoryBackend`               | Internal node IDs (incrementing counter) |
+| `anyfs-sqlite: SqliteBackend` | SQLite row IDs (`INTEGER PRIMARY KEY`)   |
+| `VRootFsBackend`              | OS inode numbers (`Metadata::ino()`)     |
 
 ---
 
@@ -426,40 +426,46 @@ match result {
 
 ---
 
-## Built-in Backends
+## Built-in Backends (anyfs crate)
 
-| Type                  | Feature            | Description                                     |
-| --------------------- | ------------------ | ----------------------------------------------- |
-| `MemoryBackend`       | `memory` (default) | In-memory                                       |
-| `SqliteBackend`       | `sqlite`           | Persistent single-file database                 |
-| `SqliteCipherBackend` | `sqlite-cipher`    | Encrypted SQLite (AES-256 via SQLCipher)        |
-| `IndexedBackend`      | `indexed`          | Virtual paths + disk blobs (large file support) |
-| `StdFsBackend`        | `stdfs`            | Direct `std::fs` (no containment)               |
-| `VRootFsBackend`      | `vrootfs`          | Host filesystem (with containment)              |
+| Type             | Description                             |
+| ---------------- | --------------------------------------- |
+| `MemoryBackend`  | In-memory storage (default)             |
+| `StdFsBackend`   | Direct `std::fs` (no containment)       |
+| `VRootFsBackend` | Host filesystem (with path containment) |
 
-**Note:** `sqlite` and `sqlite-cipher` are mutually exclusive features.
+### Ecosystem Backends (Separate Crates)
+
+| Crate           | Type             | Description                                                         |
+| --------------- | ---------------- | ------------------------------------------------------------------- |
+| `anyfs-sqlite`  | `SqliteBackend`  | Persistent single-file database (optional encryption via SQLCipher) |
+| `anyfs-indexed` | `IndexedBackend` | Virtual paths + disk blobs (large files)                            |
 
 ---
 
-## SqliteCipherBackend Methods
+## SqliteBackend Encryption (Ecosystem Crate)
+
+> **Crate:** `anyfs-sqlite` with `encryption` feature
 
 ```rust
-use anyfs::SqliteCipherBackend;
+use anyfs_sqlite::SqliteBackend;
 
-// Open with password (key derived via PBKDF2)
-let backend = SqliteCipherBackend::open("encrypted.db", "password")?;
+// Standard (no encryption)
+let backend = SqliteBackend::open("data.db")?;
 
-// Open with raw 256-bit key
-let backend = SqliteCipherBackend::open_with_key("encrypted.db", &key)?;
+// With encryption (requires `encryption` feature)
+let backend = SqliteBackend::open_encrypted("encrypted.db", "password")?;
 
-// Create new encrypted database
-let backend = SqliteCipherBackend::create("new.db", "password")?;
+// With raw 256-bit key
+let backend = SqliteBackend::open_with_key("encrypted.db", &key)?;
 
-// Change password on open database
+// Change password on open encrypted database
 backend.change_password("new-password")?;
 ```
 
 Without the correct password, the `.db` file appears as random bytes.
+
+> **Feature:** `anyfs-sqlite = { version = "0.1", features = ["encryption"] }`
 
 ---
 
@@ -558,7 +564,6 @@ Without the correct password, the `.db` file appears as random bytes.
 | Type                | Description                               |
 | ------------------- | ----------------------------------------- |
 | `MemoryBackend`     | In-memory backend                         |
-| `SqliteBackend`     | SQLite backend                            |
 | `StdFsBackend`      | Direct `std::fs` backend (no containment) |
 | `VRootFsBackend`    | Host FS backend (with containment)        |
 | `Quota<B>`          | Quota middleware                          |
@@ -579,6 +584,13 @@ Without the correct password, the `.db` file appears as random bytes.
 | `DryRunLayer`       | Layer for DryRun                          |
 | `CacheLayer`        | Layer for Cache                           |
 | `OverlayLayer`      | Layer for Overlay                         |
+
+### From Ecosystem Crates
+
+| Crate           | Type             | Description                                       |
+| --------------- | ---------------- | ------------------------------------------------- |
+| `anyfs-sqlite`  | `SqliteBackend`  | SQLite backend (optional encryption with feature) |
+| `anyfs-indexed` | `IndexedBackend` | Virtual paths + disk blobs                        |
 
 **Ergonomic Wrappers (in `anyfs`):**
 

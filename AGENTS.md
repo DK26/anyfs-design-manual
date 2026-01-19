@@ -118,10 +118,14 @@ Each layer has **exactly one responsibility**:
 
 ---
 
-## Crate Structure (2 Crates)
+## Crate Ecosystem
+
+AnyFS follows the Tower/Axum pattern: **the framework is minimal, complex implementations live in their own crates.**
+
+### Core Crates (This Project)
 
 ```
-anyfs-backend/              # Crate 1: traits + types (minimal deps: thiserror; optional: serde)
+anyfs-backend/              # Traits + types (minimal deps: thiserror; optional: serde)
   src/
     lib.rs
     traits/
@@ -144,16 +148,13 @@ anyfs-backend/              # Crate 1: traits + types (minimal deps: thiserror; 
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
-anyfs/                      # Crate 2: backends + middleware + FileStorage
+anyfs/                      # Framework glue: simple backends + middleware + ergonomics
   src/
     lib.rs
     backends/
-      memory.rs             # MemoryBackend
-      sqlite.rs             # SqliteBackend
-      sqlite_cipher.rs      # SqliteCipherBackend (feature: sqlite-cipher)
-      indexed.rs            # IndexedBackend (feature: indexed)
-      stdfs.rs              # StdFsBackend (no containment)
-      vrootfs.rs            # VRootFsBackend (with containment)
+      memory.rs             # MemoryBackend (in-memory, simple)
+      stdfs.rs              # StdFsBackend (thin std::fs wrapper)
+      vrootfs.rs            # VRootFsBackend (std::fs + path containment)
     middleware/
       quota.rs              # Quota<B>
       restrictions.rs       # Restrictions<B>
@@ -171,6 +172,23 @@ anyfs/                      # Crate 2: backends + middleware + FileStorage
     container.rs            # FileStorage<B>
     stack.rs                # BackendStack builder
 ```
+
+### Ecosystem Crates (Separate Repositories)
+
+Complex backends with runtime requirements live in their own crates:
+
+```
+anyfs-sqlite/               # SQLite backend (connection pooling, WAL, sharding)
+anyfs-indexed/              # Hybrid backend (SQLite index + disk blobs)
+anyfs-s3/                   # Third-party: S3 backend
+anyfs-redis/                # Third-party: Redis backend
+```
+
+**Why separate crates?**
+- Complex backends need internal runtimes (connection pools, sharding, chunking)
+- Keeps `anyfs` lightweight and focused on framework glue
+- Allows independent versioning and maintenance
+- Third-party backends follow the same pattern
 
 ---
 
@@ -301,20 +319,26 @@ fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 
 ---
 
-## Built-in Backends
+## Built-in Backends (anyfs crate)
 
-| Backend               | Description                                                    |
-| --------------------- | -------------------------------------------------------------- |
-| `MemoryBackend`       | In-memory storage, implements `Clone` for snapshots            |
-| `SqliteBackend`       | Single-file portable database                                  |
-| `SqliteCipherBackend` | Encrypted SQLite via SQLCipher (AES-256)                       |
-| `IndexedBackend`      | Virtual paths + disk blobs (large file support with isolation) |
-| `StdFsBackend`        | Direct `std::fs` delegation (no containment)                   |
-| `VRootFsBackend`      | Host filesystem with path containment (via strict-path)        |
+| Backend          | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| `MemoryBackend`  | In-memory storage, implements `Clone` for snapshots     |
+| `StdFsBackend`   | Direct `std::fs` delegation (no containment)            |
+| `VRootFsBackend` | Host filesystem with path containment (via strict-path) |
+
+### Ecosystem Backends (Separate Crates)
+
+| Crate           | Backend          | Description                                                           |
+| --------------- | ---------------- | --------------------------------------------------------------------- |
+| `anyfs-sqlite`  | `SqliteBackend`  | Single-file database with pooling, WAL, sharding; optional encryption |
+| `anyfs-indexed` | `IndexedBackend` | Virtual paths + disk blobs (large file support)                       |
+
+> **Encryption:** `SqliteBackend` supports optional AES-256 encryption via SQLCipher when the `encryption` feature is enabled. Use `open_encrypted()` or `open_with_key()` methods.
+
+> **Why separate crates?** Complex backends require internal runtime complexity (connection pooling, sharding, chunking, concurrent write coordination) that would pollute the `anyfs` framework crate.
 
 > **Backend vs Middleware:** A backend is WHERE data lives. Middleware WRAPS a backend to add behavior.
-> `IndexedBackend` is a backend (stores virtual paths in SQLite index + file content as disk blobs).
-> `Indexing<B>` middleware (different thing) adds queryable audit trail to ANY backend.
 
 ### MemoryBackend Snapshots
 
@@ -348,7 +372,7 @@ let backend = Restrictions::new(backend)
 
 **Symlink support:** Determined by trait bounds, not middleware.
 - `MemoryBackend: FsLink` → supports symlinks
-- `SqliteBackend: FsLink` → supports symlinks  
+- `anyfs_sqlite::SqliteBackend: FsLink` → supports symlinks  
 - Custom backend without `FsLink` → no symlinks (compile-time enforced)
 
 ### Other Middleware
@@ -371,8 +395,14 @@ let backend = Restrictions::new(backend)
 | Backend          | Windows | Linux | macOS | WASM  |
 | ---------------- | :-----: | :---: | :---: | :---: |
 | `MemoryBackend`  |    ✅    |   ✅   |   ✅   |   ✅   |
-| `SqliteBackend`  |    ✅    |   ✅   |   ✅   |  ✅*   |
 | `VRootFsBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
+
+**Ecosystem backends (anyfs-sqlite, anyfs-indexed):**
+
+| Backend          | Windows | Linux | macOS | WASM  |
+| ---------------- | :-----: | :---: | :---: | :---: |
+| `SqliteBackend`  |    ✅    |   ✅   |   ✅   |  ✅*   |
+| `IndexedBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
 
 **Virtual backends (Memory, SQLite) are fully cross-platform** - all features work identically because paths are just keys, symlinks are stored data, permissions are metadata.
 
@@ -511,7 +541,7 @@ OPT-IN TYPE ERASURE:
 **Non-negotiable:**
 
 1. **No Panic Policy** - Always return `Result`, never `.unwrap()`
-2. **Thread Safety** - `MemoryBackend` uses `Arc<RwLock<...>>`, `SqliteBackend` uses WAL mode
+2. **Thread Safety** - `MemoryBackend` uses `Arc<RwLock<...>>`, ecosystem backends handle their own concurrency
 3. **Error Context** - Include path and operation in all errors
 4. **Path Edge Cases** - Handle `/../`, `//`, empty paths, unicode, long paths
 

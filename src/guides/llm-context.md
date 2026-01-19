@@ -41,7 +41,7 @@ Decision trees help LLMs quickly navigate to the right component. Include:
 Is data persistence required?
 ├─ NO → MemoryBackend
 └─ YES → Is encryption needed?
-         ├─ YES → SqliteCipherBackend
+         ├─ YES → SqliteBackend with `encryption` feature
          └─ NO → [continue decision tree...]
 ```
 

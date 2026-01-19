@@ -245,15 +245,11 @@ Each backend implements the traits it supports:
   - Implements: `FsFuse` (all traits through Layer 3)
   - FileStorage handles path resolution (symlink-aware)
   - Inode source: SQLite row IDs (`INTEGER PRIMARY KEY`)
-- `sqlite-cipher` (optional): `SqliteCipherBackend`
-  - Implements: `FsFuse` (same as SqliteBackend)
-  - Full AES-256 encryption via [SQLCipher](https://www.zetetic.net/sqlcipher/)
-  - Password-protected: `.db` file is random bytes without password
-  - Uses `rusqlite` with `bundled-sqlcipher` feature
-  - `open(path, password)` - derive key from password (PBKDF2)
-  - `open_with_key(path, key)` - use raw 256-bit key
-  - `change_password(new_password)` - re-key database
-  - **Mutually exclusive with `sqlite` feature** (different SQLite builds)
+  - Optional encryption via SQLCipher with `encryption` feature:
+    - `open_encrypted(path, password)` - derive key from password (PBKDF2)
+    - `open_with_key(path, key)` - use raw 256-bit key
+    - `change_password(new_password)` - re-key database
+    - Uses `rusqlite` with `bundled-sqlcipher` feature when encryption enabled
 - `stdfs` (optional): `StdFsBackend` - direct `std::fs` delegation
   - Implements: `FsPosix` (all traits including Layer 4) + `SelfResolving`
   - Implements `SelfResolving` (OS handles resolution)
@@ -716,7 +712,8 @@ The layered trait design enables building cloud storage services - each adapter 
 Expose any `Fs` backend as an S3-compatible API. Users access your storage with standard AWS SDKs.
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Your storage backend with quotas and audit logging
@@ -809,7 +806,8 @@ let fs = FileStorage::new(backend);
 #### Multi-Tenant Cloud Storage Example
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer};
+use anyfs::{QuotaLayer, PathFilterLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
@@ -868,7 +866,8 @@ Expose a `FsFull` backend as an SFTP server. Users connect with standard SSH/SFT
 **Server implementation:**
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
@@ -919,7 +918,8 @@ Give users a real SSH shell where their home directory is backed by `FsFuse`.
 **Server implementation:**
 
 ```rust
-use anyfs::{SqliteBackend, Quota, MountHandle};
+use anyfs::{QuotaLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_ssh_shell::SshShellServer;
 
 // On user login, mount their isolated storage as $HOME

@@ -50,7 +50,7 @@ Good question! Here's why we separated it:
 
 Think of backends like different types of filing cabinets:
 - **MemoryBackend** = Files in your brain (RAM)
-- **SqliteBackend** = Files in a database
+- **anyfs-sqlite: SqliteBackend** = Files in a database (ecosystem crate)
 - **VRootFsBackend** = Files on your hard drive
 
 The path simplification logic is **the same** for all of them:

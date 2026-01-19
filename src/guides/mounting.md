@@ -443,10 +443,10 @@ pub enum MountError {
 All middleware works transparently when mounted:
 
 ```rust
-use anyfs::{SqliteBackend, Quota, PathFilter, Tracing, RateLimit, MountHandle};
+use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, TracingLayer, RateLimitLayer, MountHandle};
 
 // Build secure, audited, rate-limited mount
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(1024 * 1024 * 1024)  // 1 GB
         .build())
@@ -502,6 +502,8 @@ std::process::Command::new("cargo")
 ### Portable Database as Drive
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // User's files stored in SQLite
 let db = SqliteBackend::open("user_files.db")?;
 let mount = MountHandle::mount(db, "U:")?;

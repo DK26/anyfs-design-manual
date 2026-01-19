@@ -34,17 +34,14 @@ anyfs-backend/              # Crate 1: traits + types (minimal dependencies)
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
-anyfs/                      # Crate 2: backends + middleware + ergonomics
+anyfs/                      # Crate 2: framework glue (simple backends + middleware + ergonomics)
   Cargo.toml
   src/
     lib.rs
     backends/
-      memory.rs             # MemoryBackend [feature: memory, default]
-      sqlite.rs             # SqliteBackend [feature: sqlite]
-      sqlite_cipher.rs      # SqliteCipherBackend [feature: sqlite-cipher]
-      indexed.rs            # IndexedBackend [feature: indexed]
-      stdfs.rs              # StdFsBackend [feature: stdfs]
-      vrootfs.rs            # VRootFsBackend [feature: vrootfs]
+      memory.rs             # MemoryBackend (in-memory, simple)
+      stdfs.rs              # StdFsBackend (thin std::fs wrapper)
+      vrootfs.rs            # VRootFsBackend (std::fs + path containment)
     middleware/
       quota.rs              # Quota<B>
       restrictions.rs       # Restrictions<B>
@@ -61,6 +58,17 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       caching.rs            # CachingResolver (LRU cache wrapper)
     container.rs            # FileStorage<B>
     stack.rs                # BackendStack builder
+```
+
+### Ecosystem Crates (Separate Repositories)
+
+Complex backends with internal runtime requirements:
+
+```
+anyfs-sqlite/               # SQLite backend (connection pooling, WAL, sharding)
+anyfs-indexed/              # Hybrid backend (SQLite index + disk blobs)
+anyfs-s3/                   # Third-party: S3 backend
+anyfs-redis/                # Third-party: Redis backend
 ```
 
 ---
@@ -87,7 +95,7 @@ FileStorage<B>
     wraps -> Tracing<B>
         wraps -> Restrictions<B>
             wraps -> Quota<B>
-                wraps -> SqliteBackend (or any Fs)
+                wraps -> MemoryBackend (or any Fs)
 ```
 
 Each layer implements `Fs`, enabling composition.
@@ -96,13 +104,15 @@ Each layer implements `Fs`, enabling composition.
 
 ## Cargo Features
 
-### Backends
+### Backends (anyfs crate)
 - `memory` — In-memory storage (default)
-- `sqlite` — SQLite-backed persistent storage
-- `sqlite-cipher` — Encrypted SQLite via SQLCipher (mutually exclusive with `sqlite`)
-- `indexed` — SQLite index + disk blobs for large file performance
 - `stdfs` — Direct `std::fs` delegation (no containment)
 - `vrootfs` — Host filesystem backend with path containment (uses `strict-path`)
+
+### Ecosystem Backends (Separate Crates)
+Complex backends live in their own crates:
+- `anyfs-sqlite` — SQLite-backed persistent storage (pooling, WAL, sharding, encryption)
+- `anyfs-indexed` — SQLite index + disk blobs for large file performance
 
 ### Middleware (MVP Scope)
 Following the **Tower/Axum** pattern, feature flags keep the core lightweight:

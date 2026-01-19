@@ -30,10 +30,10 @@ fs.write("/data/file.txt", b"hello")?;
 ### With middleware (quotas, sandboxing, tracing)
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, TracingLayer};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, TracingLayer};
 use anyfs::FileStorage;
 
-let stack = SqliteBackend::open("tenant.db")?
+let stack = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())

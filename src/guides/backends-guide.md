@@ -8,18 +8,20 @@ This guide explains each built-in backend in AnyFS, how it works internally, whe
 
 > **TL;DR** — Pick the first match from top to bottom:
 
-| Your Situation                                 | Best Choice              | Why                                |
-| ---------------------------------------------- | ------------------------ | ---------------------------------- |
-| Writing tests                                  | **MemoryBackend**        | Fast, isolated, no cleanup         |
-| Running in WASM/browser                        | **MemoryBackend**        | Simplest; SqliteBackend also works |
-| Need encrypted single-file storage             | **SqliteCipherBackend**  | AES-256, portable                  |
-| Need portable single-file database             | **SqliteBackend**        | Cross-platform, ACID               |
-| Large files (>100MB) with path isolation       | **IndexedBackend**       | Virtual paths + native disk I/O    |
-| Containing untrusted code to a directory       | **VRootFsBackend**       | Prevents path traversal attacks    |
-| Working with real files in trusted environment | **StdFsBackend**         | Direct OS operations               |
-| Need layered filesystem (container-like)       | **Overlay** (middleware) | Base + writable upper layer        |
+| Your Situation                                 | Best Choice                       | Why                                                |
+| ---------------------------------------------- | --------------------------------- | -------------------------------------------------- |
+| Writing tests                                  | **MemoryBackend**                 | Fast, isolated, no cleanup                         |
+| Running in WASM/browser                        | **MemoryBackend**                 | Simplest option                                    |
+| Need encrypted single-file storage             | **anyfs-sqlite: SqliteBackend**   | AES-256 via `encryption` feature (ecosystem crate) |
+| Need portable single-file database             | **anyfs-sqlite: SqliteBackend**   | Cross-platform, ACID (ecosystem crate)             |
+| Large files (>100MB) with path isolation       | **anyfs-indexed: IndexedBackend** | Virtual paths + native disk I/O (ecosystem crate)  |
+| Containing untrusted code to a directory       | **VRootFsBackend**                | Prevents path traversal attacks                    |
+| Working with real files in trusted environment | **StdFsBackend**                  | Direct OS operations                               |
+| Need layered filesystem (container-like)       | **Overlay** (middleware)          | Base + writable upper layer                        |
 
 ⚠️ **Security Warning:** `StdFsBackend` provides **NO isolation**. Never use with untrusted input.
+
+> **Ecosystem Crates:** Complex backends like `SqliteBackend` and `IndexedBackend` live in separate crates (`anyfs-sqlite`, `anyfs-indexed`) because they require internal runtime complexity (connection pooling, sharding, chunking).
 
 ---
 
@@ -101,15 +103,15 @@ fs.write("/data.txt", b"Hello, World!")?;
 
 #### When to Use
 
-| Use Case             | Recommendation                                           |
-| -------------------- | -------------------------------------------------------- |
-| Unit tests           | ✅ **Ideal** - fast, isolated, deterministic              |
-| Integration tests    | ✅ **Ideal** - no filesystem pollution                    |
-| Temporary workspaces | ✅ **Good** - fast scratch space                          |
-| Build caches         | ✅ **Good** - if fits in memory                           |
-| WASM/Browser         | ✅ **Ideal** - simplest option (SqliteBackend also works) |
-| Large file storage   | ❌ **Avoid** - use SqliteBackend or disk                  |
-| Persistent data      | ❌ **Avoid** - unless you handle serialization            |
+| Use Case             | Recommendation                                |
+| -------------------- | --------------------------------------------- |
+| Unit tests           | ✅ **Ideal** - fast, isolated, deterministic   |
+| Integration tests    | ✅ **Ideal** - no filesystem pollution         |
+| Temporary workspaces | ✅ **Good** - fast scratch space               |
+| Build caches         | ✅ **Good** - if fits in memory                |
+| WASM/Browser         | ✅ **Ideal** - simplest option                 |
+| Large file storage   | ❌ **Avoid** - use anyfs-sqlite or disk        |
+| Persistent data      | ❌ **Avoid** - unless you handle serialization |
 
 **✅ USE MemoryBackend when:**
 - Writing unit tests (fast, isolated, deterministic)
@@ -121,17 +123,22 @@ fs.write("/data.txt", b"Hello, World!")?;
 
 **❌ DON'T USE MemoryBackend when:**
 - Storing files larger than available RAM
-- Data must survive process restart (use SqliteBackend)
+- Data must survive process restart (use anyfs-sqlite)
 - Working with existing files on disk (use VRootFsBackend)
 
 ---
 
-### SqliteBackend
+### SqliteBackend (Ecosystem Crate)
+
+> **Crate:** `anyfs-sqlite`
+>
+> Complex backends live in separate crates. See AGENTS.md "Crate Ecosystem" section.
 
 Stores the entire filesystem in a single SQLite database file.
 
 ```rust
-use anyfs::{SqliteBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;
+use anyfs::FileStorage;
 
 let fs = FileStorage::new(SqliteBackend::open("myfs.db")?);
 fs.write("/documents/report.txt", b"Annual Report")?;
@@ -162,7 +169,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 - **Cross-platform** - works on all platforms including WASM
 - **Complete isolation** - no interaction with host filesystem
 - **Queryable** - can inspect with SQLite tools
-- **Encryption available** - via `SqliteCipherBackend`
+- **Optional encryption** - AES-256 via SQLCipher with `encryption` feature
 
 #### Disadvantages
 
@@ -177,7 +184,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 | Portable storage       | ✅ **Ideal** - single file, works everywhere         |
 | Embedded databases     | ✅ **Ideal** - self-contained                        |
 | Sandboxed environments | ✅ **Good** - complete isolation                     |
-| Encrypted storage      | ✅ **Good** - use SqliteCipherBackend                |
+| Encrypted storage      | ✅ **Good** - use `open_encrypted()` with feature    |
 | Archive/backup         | ✅ **Good** - atomic, portable                       |
 | Large media files      | ✅ **Works** - higher memory pressure during I/O     |
 | High-throughput I/O    | ⚠️ **Tradeoff** - database overhead vs MemoryBackend |
@@ -187,26 +194,29 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 - Need portable, single-file storage (easy to copy, backup, share)
 - Building embedded/self-contained applications
 - Complete isolation from host filesystem is required
-- Want encryption (use SqliteCipherBackend)
+- Want encryption (use `open_encrypted()` with `encryption` feature)
 - Need ACID transactions and crash recovery
 - Cross-platform consistency is critical
 
 **❌ DON'T USE SqliteBackend when:**
 - Files must be accessible to external tools (use VRootFsBackend)
-- Minimizing memory pressure for very large files is critical (use IndexedBackend)
+- Minimizing memory pressure for very large files is critical (use anyfs-indexed)
 
 ---
 
-### IndexedBackend
+### IndexedBackend (Ecosystem Crate)
+
+> **Crate:** `anyfs-indexed`
+>
+> Complex backends live in separate crates. See AGENTS.md "Crate Ecosystem" section.
 
 A hybrid backend: **virtual paths** with **disk-based content storage**. Paths, directories, symlinks, and metadata are stored in an index database. File content is stored on the real filesystem as opaque blobs.
 
-> **Feature:** `indexed`
->
-> **Key insight:** Same isolation model as SqliteBackend, but file content stored externally for native I/O performance with large files.
+**Key insight:** Same isolation model as SqliteBackend, but file content stored externally for native I/O performance with large files.
 
 ```rust
-use anyfs::{IndexedBackend, FileStorage};
+use anyfs_indexed::IndexedBackend;
+use anyfs::FileStorage;
 
 // Files stored in ./storage/, index in ./storage/index.db
 let fs = FileStorage::new(IndexedBackend::open("./storage")?);
@@ -271,7 +281,7 @@ index.db contains:
 | Media libraries         | ✅ **Ideal** - stream large videos/images              |
 | Document management     | ✅ **Good** - virtual paths + fast I/O                 |
 | Sandboxed + large files | ✅ **Ideal** - virtual paths, real I/O                 |
-| Single-file portability | ❌ **Avoid** - use SqliteBackend                       |
+| Single-file portability | ❌ **Avoid** - use anyfs-sqlite: SqliteBackend         |
 | Content confidentiality | ⚠️ **Wrap** - use Encryption middleware for protection |
 | WASM/Browser            | ❌ **Avoid** - requires real filesystem                |
 
@@ -283,9 +293,9 @@ index.db contains:
 - Files are large but path structure should be sandboxed
 
 **❌ DON'T USE IndexedBackend when:**
-- Need single-file portability (use SqliteBackend)
-- Content must be hidden from host filesystem (use SqliteBackend or SqliteCipherBackend)
-- Need WASM/browser support (use MemoryBackend or SqliteBackend)
+- Need single-file portability (use anyfs-sqlite: SqliteBackend)
+- Content must be hidden from host filesystem (use anyfs-sqlite: SqliteBackend with encryption)
+- Need WASM/browser support (use MemoryBackend)
 
 > 🔒 **Encryption Tip:** If you need large file performance but content confidentiality matters, wrap IndexedBackend with `Encryption<B>` middleware to encrypt blob contents at rest. This protects data while preserving native I/O streaming.
 
@@ -458,10 +468,10 @@ Union filesystem middleware combining a read-only base with a writable upper lay
 > **Note:** Overlay is middleware (in `anyfs/middleware/overlay.rs`), not a standalone backend. It composes two backends into a layered view.
 
 ```rust
-use anyfs::{SqliteBackend, MemoryBackend, Overlay, FileStorage};
+use anyfs::{VRootFsBackend, MemoryBackend, Overlay, FileStorage};
 
 // Base: read-only template
-let base = SqliteBackend::open("template.db")?;
+let base = VRootFsBackend::new("/var/templates")?;
 
 // Upper: writable scratch layer  
 let upper = MemoryBackend::new();
@@ -597,19 +607,19 @@ Do you need persistence?
 
 ### By Use Case
 
-| Use Case                     | Recommended                           |
-| ---------------------------- | ------------------------------------- |
-| Unit testing                 | MemoryBackend                         |
-| Integration testing          | MemoryBackend or SqliteBackend        |
-| Portable application data    | SqliteBackend                         |
-| Encrypted storage            | SqliteCipherBackend                   |
-| Large file + isolation       | IndexedBackend                        |
-| Media libraries              | IndexedBackend                        |
-| Plugin/agent sandboxing      | VRootFsBackend                        |
-| Adding middleware to real FS | StdFsBackend                          |
-| Container-like isolation     | Overlay<SqliteBackend, MemoryBackend> |
-| Template with modifications  | Overlay<Base, Upper>                  |
-| WASM/Browser                 | MemoryBackend or SqliteBackend        |
+| Use Case                     | Recommended                               |
+| ---------------------------- | ----------------------------------------- |
+| Unit testing                 | MemoryBackend                             |
+| Integration testing          | MemoryBackend or SqliteBackend            |
+| Portable application data    | SqliteBackend                             |
+| Encrypted storage            | SqliteBackend (with `encryption` feature) |
+| Large file + isolation       | IndexedBackend                            |
+| Media libraries              | IndexedBackend                            |
+| Plugin/agent sandboxing      | VRootFsBackend                            |
+| Adding middleware to real FS | StdFsBackend                              |
+| Container-like isolation     | Overlay<SqliteBackend, MemoryBackend>     |
+| Template with modifications  | Overlay<Base, Upper>                      |
+| WASM/Browser                 | MemoryBackend or SqliteBackend            |
 
 ---
 

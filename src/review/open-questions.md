@@ -203,6 +203,8 @@ See [Cross-Platform Mounting](../guides/mounting.md) for full details.
 **Resolution:** Users who need type-safe domain separation can create wrapper types:
 
 ```rust
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // User-defined wrapper types provide compile-time safety
 struct SandboxFs(FileStorage<MemoryBackend>);
 struct UserDataFs(FileStorage<SqliteBackend>);

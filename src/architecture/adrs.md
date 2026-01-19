@@ -349,6 +349,7 @@ pub trait Layer<B: Fs> {
 
 **Example:**
 ```rust
+// SqliteBackend from anyfs-sqlite crate
 let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::builder()
         .max_total_size(100_000)
@@ -623,6 +624,7 @@ CacheLayer::builder()
 
 **Usage:**
 ```rust
+// SqliteBackend from anyfs-sqlite crate
 let base = SqliteBackend::open("base.db")?;  // Read-only base
 let upper = MemoryBackend::new();             // Writable upper layer
 

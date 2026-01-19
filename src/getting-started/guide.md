@@ -51,14 +51,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### With Quotas
 
 ```rust
-use anyfs::{SqliteBackend, Quota, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)  // 100 MB
         .max_file_size(10 * 1024 * 1024)    // 10 MB per file
         .build()
-        .layer(SqliteBackend::open_or_create("data.db")?);
+        .layer(MemoryBackend::new());
 
     let fs = FileStorage::new(backend);
 
@@ -93,10 +93,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Full Stack (Layer-based)
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
+use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let backend = SqliteBackend::open_or_create("data.db")?
+    let backend = MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .max_file_size(10 * 1024 * 1024)
@@ -291,12 +291,12 @@ fn test_quota_exceeded() {
 
 ### 1. Use Appropriate Backend
 
-| Use Case                           | Backend          |
-| ---------------------------------- | ---------------- |
-| Testing                            | `MemoryBackend`  |
-| Production (portable)              | `SqliteBackend`  |
-| Host filesystem (with containment) | `VRootFsBackend` |
-| Host filesystem (direct access)    | `StdFsBackend`   |
+| Use Case                           | Backend          | Crate          |
+| ---------------------------------- | ---------------- | -------------- |
+| Testing                            | `MemoryBackend`  | `anyfs`        |
+| Production (portable)              | `SqliteBackend`  | `anyfs-sqlite` |
+| Host filesystem (with containment) | `VRootFsBackend` | `anyfs`        |
+| Host filesystem (direct access)    | `StdFsBackend`   | `anyfs`        |
 
 ### 2. Compose Middleware for Your Needs
 
@@ -313,8 +313,9 @@ let fs = FileStorage::new(
 );
 
 // Sandboxed (layer-based)
+let temp_dir = tempfile::tempdir()?;
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    VRootFsBackend::new(temp_dir.path())?
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -361,10 +362,11 @@ Mount a database-backed filesystem and query it directly for real-time analytics
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**SQLite Example (API sketch, planned):**
+**SQLite Example (using ecosystem crate - API sketch, planned):**
 
 ```rust
-use anyfs::{SqliteBackend, QuotaLayer, TracingLayer, MountHandle};
+use anyfs::{QuotaLayer, TracingLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Mount the drive
 let backend = SqliteBackend::open("tenant.db")?
