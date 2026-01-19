@@ -481,6 +481,7 @@ let sandbox = MemoryBackend::new()
 - Middleware order matters: innermost applies first
 - Use `FsExt` for convenience methods, don't add them to core traits
 - Do NOT run `mdbook build` - the user or CI will build, you only edit `src/` files
+- Do NOT run git commands (commit, push, etc.) unless explicitly told to - the user will commit when ready
 
 ---
 
