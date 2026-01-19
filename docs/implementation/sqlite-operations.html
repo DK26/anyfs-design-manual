@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
+            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -193,6 +193,22 @@
 <li>Proven at scale (handles terabytes)</li>
 </ul>
 <p>But it has specific requirements for concurrent access that you must understand.</p>
+<h3 id="real-world-performance-reference"><a class="header" href="#real-world-performance-reference">Real-World Performance Reference</a></h3>
+<p>A single SQLite database on modern hardware can scale remarkably well (<a href="https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d">source</a>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Metric</th><th>Typical (8 vCPU, NVMe, 32GB RAM)</th></tr>
+</thead>
+<tbody>
+<tr><td>Read P95</td><td>8-12 ms</td></tr>
+<tr><td>Write P95 (batched)</td><td>25-40 ms</td></tr>
+<tr><td>Peak throughput</td><td>~25k requests/min</td></tr>
+<tr><td>Database size</td><td>18 GB</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Key insight:</strong> “Our breakthrough was not faster hardware. It was deciding that writes were expensive.”</p>
 <hr>
 <h2 id="the-golden-rule-single-writer"><a class="header" href="#the-golden-rule-single-writer">The Golden Rule: Single Writer</a></h2>
 <p><strong>SQLite supports many readers but only ONE writer at a time.</strong></p>
@@ -240,24 +256,125 @@ async fn writer_loop(conn: Connection, mut rx: mpsc::UnboundedReceiver&lt;WriteC
 <li>Natural batching opportunity (combine multiple ops per transaction)</li>
 <li>Clean audit logging (all writes go through one place)</li>
 </ul>
+<blockquote>
+<p><strong>“One Door” Principle:</strong> Once there is one door to the database, nobody can sneak in a surprise write on the request path. This architectural discipline—not just code—is what makes SQLite reliable at scale.</p>
+</blockquote>
+<h3 id="write-batching-the-key-to-performance"><a class="header" href="#write-batching-the-key-to-performance">Write Batching: The Key to Performance</a></h3>
+<blockquote>
+<p>“One transaction per event is a tax. One transaction per batch is a different economy.”</p>
+</blockquote>
+<p><strong>Treat writes like a budget.</strong> The breakthrough is not faster hardware—it’s deciding that writes are expensive and batching them accordingly.</p>
+<p>Batch writes into single transactions for dramatic performance improvement:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl SqliteBackend {
+    fn flush_writes(&amp;self) -&gt; Result&lt;(), FsError&gt; {
+        let ops = self.write_queue.drain();
+        if ops.is_empty() { return Ok(()); }
+        
+        let tx = self.conn.transaction()?;
+        for op in ops {
+            op.execute(&amp;tx)?;
+        }
+        tx.commit()?;  // One commit for many operations
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Flush triggers:</strong></p>
+<ul>
+<li>Batch size reached (e.g., 100 operations)</li>
+<li>Timeout elapsed (e.g., 50ms since first queued write)</li>
+<li>Explicit <code>sync()</code> call</li>
+<li>Read-after-write on same path (for consistency)</li>
+</ul>
 <hr>
 <h2 id="wal-mode-required"><a class="header" href="#wal-mode-required">WAL Mode (Required)</a></h2>
 <p><strong>Always enable WAL (Write-Ahead Logging) mode for concurrent access.</strong></p>
+<h3 id="recommended-pragma-defaults"><a class="header" href="#recommended-pragma-defaults">Recommended Pragma Defaults</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pragma</th><th>Default</th><th>Purpose</th><th>Tradeoff</th></tr>
+</thead>
+<tbody>
+<tr><td><code>journal_mode</code></td><td><code>WAL</code></td><td>Concurrent reads during writes</td><td>Creates .wal/.shm files</td></tr>
+<tr><td><code>synchronous</code></td><td><code>FULL</code></td><td>Data integrity on power loss</td><td>Slower writes, safest default</td></tr>
+<tr><td><code>temp_store</code></td><td><code>MEMORY</code></td><td>Faster temp operations</td><td>Uses RAM for temp tables</td></tr>
+<tr><td><code>cache_size</code></td><td><code>-32000</code></td><td>32MB page cache</td><td>Tune based on dataset size</td></tr>
+<tr><td><code>busy_timeout</code></td><td><code>5000</code></td><td>Wait 5s on lock contention</td><td>Prevents SQLITE_BUSY errors</td></tr>
+<tr><td><code>foreign_keys</code></td><td><code>ON</code></td><td>Enforce referential integrity</td><td>Slight overhead on writes</td></tr>
+</tbody>
+</table>
+</div>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>fn open_connection(path: &amp;Path) -&gt; Result&lt;Connection, rusqlite::Error&gt; {
     let conn = Connection::open(path)?;
 
-    // Enable WAL mode (persistent - only need to set once per database)
     conn.execute_batch("
         PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        PRAGMA cache_size = -64000;  -- 64MB cache
+        PRAGMA synchronous = FULL;
         PRAGMA temp_store = MEMORY;
+        PRAGMA cache_size = -32000;
+        PRAGMA busy_timeout = 5000;
+        PRAGMA foreign_keys = ON;
     ")?;
 
     Ok(conn)
 }
+<span class="boring">}</span></code></pre>
+<h3 id="synchronous-mode-safety-vs-performance"><a class="header" href="#synchronous-mode-safety-vs-performance">Synchronous Mode: Safety vs Performance</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Behavior</th><th>Use When</th></tr>
+</thead>
+<tbody>
+<tr><td><code>FULL</code></td><td>Sync WAL before each commit</td><td><strong>Default</strong> - data integrity is critical</td></tr>
+<tr><td><code>NORMAL</code></td><td>Sync WAL before checkpoint only</td><td>High-throughput, battery-backed storage, or acceptable data loss</td></tr>
+<tr><td><code>OFF</code></td><td>No syncs</td><td>Testing only, high corruption risk</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Why FULL is the default:</strong></p>
+<ul>
+<li><code>SqliteBackend</code> stores file content—losing data on power failure is unacceptable</li>
+<li>Consumer SSDs often lack power-loss protection</li>
+<li>Filesystem users expect durability guarantees</li>
+</ul>
+<p><strong>When to use NORMAL:</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Opt-in for performance when you have:
+// - Enterprise storage with battery-backed write cache
+// - UPS-protected systems
+// - Acceptable risk of losing last few transactions
+let backend = SqliteBackend::builder()
+    .synchronous(Synchronous::Normal)
+    .build()?;
+<span class="boring">}</span></code></pre>
+<h3 id="cache-size-tuning"><a class="header" href="#cache-size-tuning">Cache Size Tuning</a></h3>
+<p>The default 32MB cache is conservative. Tune based on your dataset:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Dataset Size</th><th>Recommended Cache</th><th>Rationale</th></tr>
+</thead>
+<tbody>
+<tr><td>&lt; 100MB</td><td>8-16MB</td><td>Small datasets fit in cache easily</td></tr>
+<tr><td>100MB - 1GB</td><td>32-64MB</td><td>Default is appropriate</td></tr>
+<tr><td>1GB - 10GB</td><td>64-128MB</td><td>Larger cache reduces disk I/O</td></tr>
+<tr><td>&gt; 10GB</td><td>128-256MB</td><td>Diminishing returns above this</td></tr>
+</tbody>
+</table>
+</div>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Configure via builder
+let backend = SqliteBackend::builder()
+    .cache_size_mb(64)
+    .build()?;
 <span class="boring">}</span></code></pre>
 <h3 id="wal-vs-rollback-journal"><a class="header" href="#wal-vs-rollback-journal">WAL vs Rollback Journal</a></h3>
 <div class="table-wrapper">
@@ -563,12 +680,16 @@ impl SqliteBackend {
 <hr>
 <h2 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h2>
 <h3 id="essential-pragmas"><a class="header" href="#essential-pragmas">Essential PRAGMAs</a></h3>
-<pre><code class="language-sql">-- Performance-critical settings
+<pre><code class="language-sql">-- Safe defaults
 PRAGMA journal_mode = WAL;           -- Required for concurrent access
-PRAGMA synchronous = NORMAL;         -- Good balance of safety/speed
-PRAGMA cache_size = -64000;          -- 64MB cache (negative = KB)
+PRAGMA synchronous = FULL;           -- Data integrity on power loss (default)
+PRAGMA cache_size = -32000;          -- 32MB cache (tune based on dataset)
 PRAGMA temp_store = MEMORY;          -- Temp tables in memory
-PRAGMA mmap_size = 268435456;        -- 256MB memory-mapped I/O
+
+-- Performance opt-in (when you have battery-backed storage)
+-- PRAGMA synchronous = NORMAL;      -- Faster, risk of data loss on power failure
+-- PRAGMA cache_size = -128000;      -- Larger cache for big datasets
+-- PRAGMA mmap_size = 268435456;     -- 256MB memory-mapped I/O
 
 -- For read-heavy workloads
 PRAGMA read_uncommitted = ON;        -- Allow dirty reads (faster, use carefully)
@@ -803,7 +924,7 @@ fn open_encrypted(path: &amp;Path, key: &amp;str) -&gt; Result&lt;Connection, ru
     // Now configure as normal
     conn.execute_batch("
         PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
+        PRAGMA synchronous = FULL;
     ")?;
 
     Ok(conn)
@@ -818,22 +939,232 @@ fn open_encrypted(path: &amp;Path, key: &amp;str) -&gt; Result&lt;Connection, ru
 </ul>
 <p>See <a href="./security-model.html">Security Model</a> for key rotation patterns.</p>
 <hr>
-<h2 id="summary-checklist"><a class="header" href="#summary-checklist">Summary Checklist</a></h2>
-<p>Before deploying SQLite backend to production:</p>
+<h2 id="path-resolution-performance"><a class="header" href="#path-resolution-performance">Path Resolution Performance</a></h2>
+<p><strong>The N-query problem is the dominant cost for SQLite filesystems.</strong></p>
+<p>With a parent/name schema, resolving <code>/documents/2024/q1/report.pdf</code> requires:</p>
+<pre><code>Query 1: SELECT inode FROM nodes WHERE parent=1 AND name='documents' → 2
+Query 2: SELECT inode FROM nodes WHERE parent=2 AND name='2024' → 3
+Query 3: SELECT inode FROM nodes WHERE parent=3 AND name='q1' → 4
+Query 4: SELECT inode FROM nodes WHERE parent=4 AND name='report.pdf' → 5
+</code></pre>
+<p>Four round-trips for one file! Deep directory structures multiply this cost.</p>
+<h3 id="solution-1-path-caching-recommended"><a class="header" href="#solution-1-path-caching-recommended">Solution 1: Path Caching (Recommended)</a></h3>
+<p>Cache resolved paths at the <code>FileStorage</code> layer using <code>CachingResolver</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let backend = SqliteBackend::open("data.db")?;
+let fs = FileStorage::with_resolver(
+    backend,
+    CachingResolver::new(IterativeResolver, 10_000)  // 10K entry cache
+);
+<span class="boring">}</span></code></pre>
+<p><strong>Cache invalidation:</strong> Clear cache entries on rename/remove operations that affect path prefixes.</p>
+<h3 id="solution-2-recursive-cte-single-query"><a class="header" href="#solution-2-recursive-cte-single-query">Solution 2: Recursive CTE (Single Query)</a></h3>
+<p>Resolve entire path in one query using SQLite’s recursive CTE:</p>
+<pre><code class="language-sql">WITH RECURSIVE path_walk(depth, inode, name, remaining) AS (
+    -- Start at root
+    SELECT 0, 1, '', '/documents/2024/q1/report.pdf'
+    
+    UNION ALL
+    
+    -- Walk each component
+    SELECT 
+        pw.depth + 1,
+        n.inode,
+        n.name,
+        substr(pw.remaining, instr(pw.remaining, '/') + 1)
+    FROM path_walk pw
+    JOIN nodes n ON n.parent = pw.inode 
+                AND n.name = substr(
+                    pw.remaining, 
+                    1, 
+                    CASE WHEN instr(pw.remaining, '/') &gt; 0 
+                         THEN instr(pw.remaining, '/') - 1 
+                         ELSE length(pw.remaining) 
+                    END
+                )
+    WHERE pw.remaining != ''
+)
+SELECT inode FROM path_walk ORDER BY depth DESC LIMIT 1;
+</code></pre>
+<p><strong>Tradeoff:</strong> More complex query, but single round-trip. Best for deep paths without caching.</p>
+<h3 id="solution-3-full-path-index-alternative-schema"><a class="header" href="#solution-3-full-path-index-alternative-schema">Solution 3: Full-Path Index (Alternative Schema)</a></h3>
+<p>Store full paths as keys for O(1) lookups:</p>
+<pre><code class="language-sql">CREATE TABLE nodes (
+    path TEXT PRIMARY KEY,  -- '/documents/2024/q1/report.pdf'
+    parent_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    -- ... other columns
+);
+
+CREATE INDEX idx_nodes_parent_path ON nodes(parent_path);
+</code></pre>
+<p><strong>Tradeoff:</strong> Instant lookups, but <code>rename()</code> must update all descendants’ paths.</p>
+<h3 id="recommendation"><a class="header" href="#recommendation">Recommendation</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Workload</th><th>Best Approach</th></tr>
+</thead>
+<tbody>
+<tr><td>Read-heavy, shallow paths</td><td>Parent/name + basic index</td></tr>
+<tr><td>Read-heavy, deep paths</td><td>Parent/name + CachingResolver</td></tr>
+<tr><td>Write-heavy with renames</td><td>Parent/name (rename is O(1))</td></tr>
+<tr><td>Read-dominated, few renames</td><td>Full-path index</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="sqlitebackend-schema"><a class="header" href="#sqlitebackend-schema">SqliteBackend Schema</a></h2>
+<p>The <code>anyfs-sqlite</code> crate stores everything in SQLite, including file content:</p>
+<pre><code class="language-sql">CREATE TABLE nodes (
+    inode       INTEGER PRIMARY KEY,
+    parent      INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    node_type   INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
+    content     BLOB,              -- File content (inline)
+    target      TEXT,              -- Symlink target
+    size        INTEGER NOT NULL DEFAULT 0,
+    permissions INTEGER NOT NULL DEFAULT 420,  -- 0o644
+    nlink       INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    modified_at INTEGER NOT NULL,
+    accessed_at INTEGER NOT NULL,
+    
+    UNIQUE(parent, name)
+);
+
+-- Root directory
+INSERT INTO nodes (inode, parent, name, node_type, created_at, modified_at, accessed_at)
+VALUES (1, 1, '', 1, unixepoch(), unixepoch(), unixepoch());
+
+-- Indexes
+CREATE INDEX idx_nodes_parent ON nodes(parent);
+CREATE INDEX idx_nodes_parent_name ON nodes(parent, name);
+</code></pre>
+<p><strong>Key design choices:</strong></p>
 <ul>
-<li><input disabled="" type="checkbox"> WAL mode enabled (<code>PRAGMA journal_mode = WAL</code>)</li>
-<li><input disabled="" type="checkbox"> Busy timeout configured (30+ seconds)</li>
-<li><input disabled="" type="checkbox"> Single-writer queue implemented</li>
-<li><input disabled="" type="checkbox"> Connection pool for readers</li>
-<li><input disabled="" type="checkbox"> Auto-vacuum configured</li>
-<li><input disabled="" type="checkbox"> Backup strategy in place</li>
-<li><input disabled="" type="checkbox"> Monitoring for WAL size, queue depth</li>
-<li><input disabled="" type="checkbox"> Integrity checks scheduled</li>
-<li><input disabled="" type="checkbox"> Migration path for schema changes</li>
-<li><input disabled="" type="checkbox"> Indexes for common queries</li>
+<li><strong>Inline BLOBs:</strong> Simple, portable, single-file backup</li>
+<li><strong>Integer node_type:</strong> Faster comparison than TEXT</li>
+<li><strong>Parent/name unique:</strong> Enforces filesystem semantics at database level</li>
 </ul>
 <hr>
-<p><em>“SQLite is not a toy database. It’s a serious database that looks like a toy.”</em></p>
+<h2 id="blob-storage-strategies"><a class="header" href="#blob-storage-strategies">BLOB Storage Strategies</a></h2>
+<h3 id="inline-sqlitebackend"><a class="header" href="#inline-sqlitebackend">Inline (SqliteBackend)</a></h3>
+<p>All content stored in <code>nodes.content</code> column:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Single-file portability</td><td>Memory pressure for large files</td></tr>
+<tr><td>Atomic operations</td><td>SQLite page overhead for small files</td></tr>
+<tr><td>Simple backup/restore</td><td>WAL growth during large writes</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Best for:</strong> Files &lt;10MB, portability-focused use cases.</p>
+<h3 id="external-indexedbackend"><a class="header" href="#external-indexedbackend">External (IndexedBackend)</a></h3>
+<p>Content stored as files, SQLite holds only metadata:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Native streaming I/O</td><td>Two-component backup</td></tr>
+<tr><td>No memory pressure</td><td>Blob/index consistency risk</td></tr>
+<tr><td>Efficient for large files</td><td>More complex implementation</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Best for:</strong> Large files, media libraries, streaming workloads.</p>
+<h3 id="hybrid-approach-future-consideration"><a class="header" href="#hybrid-approach-future-consideration">Hybrid Approach (Future Consideration)</a></h3>
+<p>Inline small files, external for large:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>const INLINE_THRESHOLD: usize = 64 * 1024;  // 64KB
+
+fn store_content(&amp;self, data: &amp;[u8]) -&gt; Result&lt;ContentRef, FsError&gt; {
+    if data.len() &lt;= INLINE_THRESHOLD {
+        Ok(ContentRef::Inline(data.to_vec()))
+    } else {
+        let blob_id = self.blob_store.put(data)?;
+        Ok(ContentRef::External(blob_id))
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Tradeoff:</strong> Best of both worlds, but adds schema complexity.</p>
+<hr>
+<h2 id="when-to-outgrow-sqlite"><a class="header" href="#when-to-outgrow-sqlite">When to Outgrow SQLite</a></h2>
+<p>From real-world experience:</p>
+<blockquote>
+<p>“We eventually migrated, not because SQLite failed, but because our product changed. We added features that created heavier concurrent writes. That is when a single file stops being an advantage and starts being a ceiling.”</p>
+</blockquote>
+<h3 id="sqlite-works-well-for"><a class="header" href="#sqlite-works-well-for">SQLite Works Well For</a></h3>
+<ul>
+<li>Read-heavy workloads (feeds, search, file serving)</li>
+<li>Single-process applications</li>
+<li>Embedded/desktop applications</li>
+<li>Development and testing</li>
+<li>Workloads up to ~25k requests/minute (read-dominated)</li>
+</ul>
+<h3 id="consider-migration-when"><a class="header" href="#consider-migration-when">Consider Migration When</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Signal</th><th>What It Means</th></tr>
+</thead>
+<tbody>
+<tr><td>Write contention dominates</td><td>Queue depth grows, latency spikes</td></tr>
+<tr><td>Multi-process writes needed</td><td>SQLite’s single-writer limit</td></tr>
+<tr><td>Horizontal scaling required</td><td>SQLite can’t distribute</td></tr>
+<tr><td>Real-time sync across nodes</td><td>No built-in replication</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="migration-path"><a class="header" href="#migration-path">Migration Path</a></h3>
+<ol>
+<li><strong>Abstract early:</strong> Use AnyFS traits so backends are swappable</li>
+<li><strong>Measure first:</strong> Profile before assuming SQLite is the bottleneck</li>
+<li><strong>Consider IndexedBackend:</strong> External blobs reduce SQLite pressure</li>
+<li><strong>Postgres/MySQL:</strong> When you truly need concurrent writes</li>
+</ol>
+<p><strong>Key insight:</strong> The architecture patterns (write batching, connection pooling, caching) transfer to any database. SQLite teaches discipline that scales.</p>
+<hr>
+<h2 id="summary-checklist"><a class="header" href="#summary-checklist">Summary Checklist</a></h2>
+<p>Before deploying SQLite backend to production:</p>
+<p><strong>Architecture:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Single-writer queue implemented (“one door” principle)</li>
+<li><input disabled="" type="checkbox"> Connection pool for readers (4-8 connections)</li>
+<li><input disabled="" type="checkbox"> Write batching enabled (batch size + timeout flush)</li>
+<li><input disabled="" type="checkbox"> Path resolution strategy chosen (caching, CTE, or full-path)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> WAL mode enabled (<code>PRAGMA journal_mode = WAL</code>)</li>
+<li><input disabled="" type="checkbox"> <code>synchronous = FULL</code> (safe default, opt-in to NORMAL)</li>
+<li><input disabled="" type="checkbox"> Cache size tuned for dataset (default 32MB)</li>
+<li><input disabled="" type="checkbox"> Busy timeout configured (5+ seconds)</li>
+<li><input disabled="" type="checkbox"> Auto-vacuum configured (INCREMENTAL)</li>
+</ul>
+<p><strong>Indexes:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Parent/name composite index for path lookups</li>
+<li><input disabled="" type="checkbox"> Indexes match actual query patterns (measure first!)</li>
+<li><input disabled="" type="checkbox"> Partial indexes for GC queries</li>
+</ul>
+<p><strong>Operations:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Backup strategy in place (online backup API)</li>
+<li><input disabled="" type="checkbox"> Monitoring for WAL size, queue depth, cache hit ratio</li>
+<li><input disabled="" type="checkbox"> Integrity checks scheduled (weekly/monthly)</li>
+<li><input disabled="" type="checkbox"> Migration path for schema changes</li>
+</ul>
+<hr>
+<p><em>“SQLite did not scale our app. Measurement, batching, and restraint did.”</em></p>
 
                     </main>
 

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
+            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -184,7 +184,7 @@
 <p><strong>SQLite Metadata + Content-Addressed Blob Storage</strong></p>
 <p>This document describes the IndexedBackend architecture pattern: separating filesystem metadata (stored in SQLite) from file content (stored as blobs). This enables efficient queries, large file support, and flexible storage backends.</p>
 <blockquote>
-<p><strong>Ecosystem Implementation:</strong> The <code>anyfs-indexed</code> crate provides <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="../guides/backends-guide.html#indexedbackend">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
+<p><strong>Ecosystem Implementation:</strong> The <code>anyfs-indexed</code> crate provides <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="../guides/backends-guide.html#indexedbackend-ecosystem-crate">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
 </blockquote>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
@@ -636,6 +636,31 @@ UPDATE blobs SET refcount = refcount - 1 WHERE blob_id = ?;
 -- On copy (no blob copy needed!)
 UPDATE blobs SET refcount = refcount + 1 WHERE blob_id = ?;
 </code></pre>
+<hr>
+<h2 id="sqlite-performance"><a class="header" href="#sqlite-performance">SQLite Performance</a></h2>
+<p>The SQLite metadata database benefits from the same tuning as <a href="../implementation/sqlite-operations.html">SqliteBackend</a>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Purpose</th><th>Tradeoff</th></tr>
+</thead>
+<tbody>
+<tr><td><code>journal_mode</code></td><td>WAL</td><td>Concurrent reads during writes</td><td>Creates .wal/.shm files</td></tr>
+<tr><td><code>synchronous</code></td><td>FULL</td><td>Index integrity on power loss</td><td>Safe default, opt-in to NORMAL</td></tr>
+<tr><td><code>cache_size</code></td><td>16MB</td><td>Smaller cache for metadata-only</td><td>Tune based on index size</td></tr>
+<tr><td><code>busy_timeout</code></td><td>5000</td><td>Gracefully handle lock contention</td><td>Prevents SQLITE_BUSY errors</td></tr>
+<tr><td><code>auto_vacuum</code></td><td>INCREMENTAL</td><td>Reclaim space from deletions</td><td>Gradual space recovery</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Why FULL synchronous:</strong> Index corruption means paths no longer resolve to blobs—blobs become orphaned and unreachable. Use FULL as the safe default; opt-in to NORMAL only with battery-backed storage or when index can be rebuilt.</p>
+<p><strong>SQL Indexes (critical):</strong></p>
+<pre><code class="language-sql">CREATE INDEX idx_nodes_parent ON nodes(parent);
+CREATE INDEX idx_nodes_blob ON nodes(blob_id) WHERE blob_id IS NOT NULL;
+CREATE INDEX idx_blobs_refcount ON blobs(refcount) WHERE refcount = 0;
+</code></pre>
+<p>Without proper indexes, path lookups become full table scans—catastrophic for large filesystems.</p>
+<p><strong>Connection pooling:</strong> 4-8 reader connections for concurrent metadata queries; single writer for updates. See <a href="../implementation/sqlite-operations.html">SQLite Operations Guide</a> for detailed patterns.</p>
 <hr>
 <h2 id="garbage-collection"><a class="header" href="#garbage-collection">Garbage Collection</a></h2>
 <p>Blobs with <code>refcount = 0</code> are orphans and can be deleted:</p>

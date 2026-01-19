@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
+            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -340,8 +340,11 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <li>Symlinks stored as rows with target path in content</li>
 <li>Hard links share the same <code>inode</code> (row ID)</li>
 <li>Uses WAL mode for concurrent read access</li>
+<li>Connection pooling: multiple readers, single writer with batching</li>
+<li>Write batching: groups operations into transactions for efficiency</li>
 <li>Transactions ensure atomic operations</li>
 </ul>
+<p><strong>Key insight:</strong> “Writes are expensive.” SqliteBackend batches writes internally because one transaction per batch is far more efficient than one transaction per operation.</p>
 <h4 id="performance-1"><a class="header" href="#performance-1">Performance</a></h4>
 <div class="table-wrapper">
 <table>
@@ -352,10 +355,12 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <tr><td>Read/Write</td><td>🐢 <strong>Slower</strong></td><td>SQLite query overhead</td></tr>
 <tr><td>Path Resolution</td><td>🐢 <strong>Slower</strong></td><td>Database lookups per component</td></tr>
 <tr><td>Transactions</td><td>✅ <strong>Atomic</strong></td><td>ACID guarantees</td></tr>
-<tr><td>Large Files</td><td>✅ <strong>Good</strong></td><td>Streams to disk, not RAM</td></tr>
+<tr><td>Large Files</td><td>🟡 <strong>Varies</strong></td><td>See note below</td></tr>
 </tbody>
 </table>
 </div>
+<p><strong>Large file behavior:</strong> SQLite streams BLOB content incrementally via <code>sqlite3_blob_read</code>/<code>write</code>, so files don’t need to fit entirely in RAM. However, very large BLOBs (&gt;100MB) can cause higher memory pressure during I/O operations due to SQLite’s internal buffering and page management. For frequent large file operations, consider <code>IndexedBackend</code> which uses native file I/O.</p>
+<p><strong>Performance note:</strong> SQLite performance varies significantly based on hardware, configuration, and workload. With proper tuning (WAL mode, connection pooling, write batching), a single SQLite database on modern hardware can achieve high throughput. See <a href="../implementation/sqlite-operations.html">sqlite-operations.md</a> for tuning guidance.</p>
 <h4 id="advantages-1"><a class="header" href="#advantages-1">Advantages</a></h4>
 <ul>
 <li><strong>Single-file portability</strong> - entire filesystem in one <code>.db</code> file</li>
@@ -369,7 +374,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <ul>
 <li><strong>Slower than memory</strong> - database overhead on every operation</li>
 <li><strong>Single-writer</strong> - SQLite’s write lock limits concurrency</li>
-<li><strong>Large file tradeoffs</strong> - files &gt;100MB stored as BLOBs have higher memory pressure during operations</li>
+<li><strong>Large file overhead</strong> - very large BLOBs (&gt;100MB) have higher memory pressure due to SQLite buffering</li>
 </ul>
 <h4 id="when-to-use-1"><a class="header" href="#when-to-use-1">When to Use</a></h4>
 <div class="table-wrapper">
@@ -401,8 +406,11 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <p><strong>❌ DON’T USE SqliteBackend when:</strong></p>
 <ul>
 <li>Files must be accessible to external tools (use VRootFsBackend)</li>
-<li>Minimizing memory pressure for very large files is critical (use anyfs-indexed)</li>
+<li>Minimizing memory pressure for very large files is critical (use anyfs-indexed: IndexedBackend)</li>
 </ul>
+<blockquote>
+<p>💡 <strong>SqliteBackend vs IndexedBackend:</strong> Both provide complete path isolation. Choose SqliteBackend for single-file portability and portable storage. Choose IndexedBackend (anyfs-indexed) for very large files (&gt;100MB) that need native disk streaming performance.</p>
+</blockquote>
 <hr>
 <h3 id="indexedbackend-ecosystem-crate"><a class="header" href="#indexedbackend-ecosystem-crate">IndexedBackend (Ecosystem Crate)</a></h3>
 <blockquote>
@@ -458,10 +466,28 @@ index.db contains:
 </tbody>
 </table>
 </div>
+<h5 id="index-optimization"><a class="header" href="#index-optimization">Index Optimization</a></h5>
+<p>The SQLite index benefits from the same performance tuning as <code>SqliteBackend</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>journal_mode</code></td><td>WAL</td><td>Concurrent reads during metadata updates</td></tr>
+<tr><td><code>synchronous</code></td><td>FULL</td><td>Index integrity on power loss (safe default)</td></tr>
+<tr><td><code>cache_size</code></td><td>16MB</td><td>Smaller cache for metadata-only index</td></tr>
+<tr><td><code>busy_timeout</code></td><td>5000ms</td><td>Gracefully handle lock contention</td></tr>
+<tr><td><code>auto_vacuum</code></td><td>INCREMENTAL</td><td>Reclaim space from deleted entries</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Connection pooling:</strong> 4-8 reader connections for concurrent index queries; single writer for metadata updates. Blob I/O bypasses SQLite entirely, so the bottleneck is typically blob disk throughput, not index performance.</p>
+<p>See <a href="https://github.com/DK26/anyfs-indexed/issues/9">anyfs-indexed#9</a> for detailed performance guidance.</p>
 <h4 id="advantages-2"><a class="header" href="#advantages-2">Advantages</a></h4>
 <ul>
 <li><strong>Native file I/O</strong> - content stored as raw files, fast streaming</li>
-<li><strong>Large file support</strong> - no memory constraints, unlike SqliteBackend BLOBs</li>
+<li><strong>Large file support</strong> - uses OS file I/O, avoids SQLite BLOB buffering overhead</li>
 <li><strong>Complete path isolation</strong> - virtual paths, same as SqliteBackend</li>
 <li><strong>Inspectable</strong> - can see blob files on disk (though with opaque names)</li>
 <li><strong>Cross-platform</strong> - works identically on all platforms</li>
