@@ -81,9 +81,13 @@ async fn writer_loop(conn: Connection, mut rx: mpsc::UnboundedReceiver<WriteCmd>
 - Natural batching opportunity (combine multiple ops per transaction)
 - Clean audit logging (all writes go through one place)
 
+> **"One Door" Principle:** Once there is one door to the database, nobody can sneak in a surprise write on the request path. This architectural discipline—not just code—is what makes SQLite reliable at scale.
+
 ### Write Batching: The Key to Performance
 
 > "One transaction per event is a tax. One transaction per batch is a different economy."
+
+**Treat writes like a budget.** The breakthrough is not faster hardware—it's deciding that writes are expensive and batching them accordingly.
 
 Batch writes into single transactions for dramatic performance improvement:
 
@@ -794,21 +798,244 @@ See [Security Model](./security-model.md) for key rotation patterns.
 
 ---
 
+## Path Resolution Performance
+
+**The N-query problem is the dominant cost for SQLite filesystems.**
+
+With a parent/name schema, resolving `/documents/2024/q1/report.pdf` requires:
+
+```
+Query 1: SELECT inode FROM nodes WHERE parent=1 AND name='documents' → 2
+Query 2: SELECT inode FROM nodes WHERE parent=2 AND name='2024' → 3
+Query 3: SELECT inode FROM nodes WHERE parent=3 AND name='q1' → 4
+Query 4: SELECT inode FROM nodes WHERE parent=4 AND name='report.pdf' → 5
+```
+
+Four round-trips for one file! Deep directory structures multiply this cost.
+
+### Solution 1: Path Caching (Recommended)
+
+Cache resolved paths at the `FileStorage` layer using `CachingResolver`:
+
+```rust
+let backend = SqliteBackend::open("data.db")?;
+let fs = FileStorage::with_resolver(
+    backend,
+    CachingResolver::new(IterativeResolver, 10_000)  // 10K entry cache
+);
+```
+
+**Cache invalidation:** Clear cache entries on rename/remove operations that affect path prefixes.
+
+### Solution 2: Recursive CTE (Single Query)
+
+Resolve entire path in one query using SQLite's recursive CTE:
+
+```sql
+WITH RECURSIVE path_walk(depth, inode, name, remaining) AS (
+    -- Start at root
+    SELECT 0, 1, '', '/documents/2024/q1/report.pdf'
+    
+    UNION ALL
+    
+    -- Walk each component
+    SELECT 
+        pw.depth + 1,
+        n.inode,
+        n.name,
+        substr(pw.remaining, instr(pw.remaining, '/') + 1)
+    FROM path_walk pw
+    JOIN nodes n ON n.parent = pw.inode 
+                AND n.name = substr(
+                    pw.remaining, 
+                    1, 
+                    CASE WHEN instr(pw.remaining, '/') > 0 
+                         THEN instr(pw.remaining, '/') - 1 
+                         ELSE length(pw.remaining) 
+                    END
+                )
+    WHERE pw.remaining != ''
+)
+SELECT inode FROM path_walk ORDER BY depth DESC LIMIT 1;
+```
+
+**Tradeoff:** More complex query, but single round-trip. Best for deep paths without caching.
+
+### Solution 3: Full-Path Index (Alternative Schema)
+
+Store full paths as keys for O(1) lookups:
+
+```sql
+CREATE TABLE nodes (
+    path TEXT PRIMARY KEY,  -- '/documents/2024/q1/report.pdf'
+    parent_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    -- ... other columns
+);
+
+CREATE INDEX idx_nodes_parent_path ON nodes(parent_path);
+```
+
+**Tradeoff:** Instant lookups, but `rename()` must update all descendants' paths.
+
+### Recommendation
+
+| Workload | Best Approach |
+|----------|---------------|
+| Read-heavy, shallow paths | Parent/name + basic index |
+| Read-heavy, deep paths | Parent/name + CachingResolver |
+| Write-heavy with renames | Parent/name (rename is O(1)) |
+| Read-dominated, few renames | Full-path index |
+
+---
+
+## SqliteBackend Schema
+
+The `anyfs-sqlite` crate stores everything in SQLite, including file content:
+
+```sql
+CREATE TABLE nodes (
+    inode       INTEGER PRIMARY KEY,
+    parent      INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    node_type   INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
+    content     BLOB,              -- File content (inline)
+    target      TEXT,              -- Symlink target
+    size        INTEGER NOT NULL DEFAULT 0,
+    permissions INTEGER NOT NULL DEFAULT 420,  -- 0o644
+    nlink       INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    modified_at INTEGER NOT NULL,
+    accessed_at INTEGER NOT NULL,
+    
+    UNIQUE(parent, name)
+);
+
+-- Root directory
+INSERT INTO nodes (inode, parent, name, node_type, created_at, modified_at, accessed_at)
+VALUES (1, 1, '', 1, unixepoch(), unixepoch(), unixepoch());
+
+-- Indexes
+CREATE INDEX idx_nodes_parent ON nodes(parent);
+CREATE INDEX idx_nodes_parent_name ON nodes(parent, name);
+```
+
+**Key design choices:**
+- **Inline BLOBs:** Simple, portable, single-file backup
+- **Integer node_type:** Faster comparison than TEXT
+- **Parent/name unique:** Enforces filesystem semantics at database level
+
+---
+
+## BLOB Storage Strategies
+
+### Inline (SqliteBackend)
+
+All content stored in `nodes.content` column:
+
+| Pros | Cons |
+|------|------|
+| Single-file portability | Memory pressure for large files |
+| Atomic operations | SQLite page overhead for small files |
+| Simple backup/restore | WAL growth during large writes |
+
+**Best for:** Files <10MB, portability-focused use cases.
+
+### External (IndexedBackend)
+
+Content stored as files, SQLite holds only metadata:
+
+| Pros | Cons |
+|------|------|
+| Native streaming I/O | Two-component backup |
+| No memory pressure | Blob/index consistency risk |
+| Efficient for large files | More complex implementation |
+
+**Best for:** Large files, media libraries, streaming workloads.
+
+### Hybrid Approach (Future Consideration)
+
+Inline small files, external for large:
+
+```rust
+const INLINE_THRESHOLD: usize = 64 * 1024;  // 64KB
+
+fn store_content(&self, data: &[u8]) -> Result<ContentRef, FsError> {
+    if data.len() <= INLINE_THRESHOLD {
+        Ok(ContentRef::Inline(data.to_vec()))
+    } else {
+        let blob_id = self.blob_store.put(data)?;
+        Ok(ContentRef::External(blob_id))
+    }
+}
+```
+
+**Tradeoff:** Best of both worlds, but adds schema complexity.
+
+---
+
+## When to Outgrow SQLite
+
+From real-world experience:
+
+> "We eventually migrated, not because SQLite failed, but because our product changed. We added features that created heavier concurrent writes. That is when a single file stops being an advantage and starts being a ceiling."
+
+### SQLite Works Well For
+
+- Read-heavy workloads (feeds, search, file serving)
+- Single-process applications
+- Embedded/desktop applications
+- Development and testing
+- Workloads up to ~25k requests/minute (read-dominated)
+
+### Consider Migration When
+
+| Signal | What It Means |
+|--------|---------------|
+| Write contention dominates | Queue depth grows, latency spikes |
+| Multi-process writes needed | SQLite's single-writer limit |
+| Horizontal scaling required | SQLite can't distribute |
+| Real-time sync across nodes | No built-in replication |
+
+### Migration Path
+
+1. **Abstract early:** Use AnyFS traits so backends are swappable
+2. **Measure first:** Profile before assuming SQLite is the bottleneck
+3. **Consider IndexedBackend:** External blobs reduce SQLite pressure
+4. **Postgres/MySQL:** When you truly need concurrent writes
+
+**Key insight:** The architecture patterns (write batching, connection pooling, caching) transfer to any database. SQLite teaches discipline that scales.
+
+---
+
 ## Summary Checklist
 
 Before deploying SQLite backend to production:
 
+**Architecture:**
+- [ ] Single-writer queue implemented ("one door" principle)
+- [ ] Connection pool for readers (4-8 connections)
+- [ ] Write batching enabled (batch size + timeout flush)
+- [ ] Path resolution strategy chosen (caching, CTE, or full-path)
+
+**Configuration:**
 - [ ] WAL mode enabled (`PRAGMA journal_mode = WAL`)
-- [ ] Busy timeout configured (30+ seconds)
-- [ ] Single-writer queue implemented
-- [ ] Connection pool for readers
-- [ ] Auto-vacuum configured
-- [ ] Backup strategy in place
-- [ ] Monitoring for WAL size, queue depth
-- [ ] Integrity checks scheduled
+- [ ] `synchronous = FULL` (safe default, opt-in to NORMAL)
+- [ ] Cache size tuned for dataset (default 32MB)
+- [ ] Busy timeout configured (5+ seconds)
+- [ ] Auto-vacuum configured (INCREMENTAL)
+
+**Indexes:**
+- [ ] Parent/name composite index for path lookups
+- [ ] Indexes match actual query patterns (measure first!)
+- [ ] Partial indexes for GC queries
+
+**Operations:**
+- [ ] Backup strategy in place (online backup API)
+- [ ] Monitoring for WAL size, queue depth, cache hit ratio
+- [ ] Integrity checks scheduled (weekly/monthly)
 - [ ] Migration path for schema changes
-- [ ] Indexes for common queries
 
 ---
 
-*"SQLite is not a toy database. It's a serious database that looks like a toy."*
+*"SQLite did not scale our app. Measurement, batching, and restraint did."*
