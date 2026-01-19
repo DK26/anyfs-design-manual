@@ -478,13 +478,15 @@ UPDATE blobs SET refcount = refcount + 1 WHERE blob_id = ?;
 
 The SQLite metadata database benefits from the same tuning as [SqliteBackend](../implementation/sqlite-operations.md):
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `journal_mode` | WAL | Concurrent reads during metadata updates |
-| `synchronous` | NORMAL | Balance safety and speed on modern disks |
-| `cache_size` | -64000 | 64MB page cache (metadata-only, smaller than SqliteBackend) |
-| `busy_timeout` | 5000 | Gracefully handle lock contention |
-| `auto_vacuum` | INCREMENTAL | Reclaim space from deleted entries |
+| Setting        | Default     | Purpose                           | Tradeoff                       |
+| -------------- | ----------- | --------------------------------- | ------------------------------ |
+| `journal_mode` | WAL         | Concurrent reads during writes    | Creates .wal/.shm files        |
+| `synchronous`  | FULL        | Index integrity on power loss     | Safe default, opt-in to NORMAL |
+| `cache_size`   | 16MB        | Smaller cache for metadata-only   | Tune based on index size       |
+| `busy_timeout` | 5000        | Gracefully handle lock contention | Prevents SQLITE_BUSY errors    |
+| `auto_vacuum`  | INCREMENTAL | Reclaim space from deletions      | Gradual space recovery         |
+
+**Why FULL synchronous:** Index corruption means paths no longer resolve to blobs—blobs become orphaned and unreachable. Use FULL as the safe default; opt-in to NORMAL only with battery-backed storage or when index can be rebuilt.
 
 **SQL Indexes (critical):**
 

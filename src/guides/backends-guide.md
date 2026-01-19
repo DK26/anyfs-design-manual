@@ -272,12 +272,13 @@ index.db contains:
 
 The SQLite index benefits from the same performance tuning as `SqliteBackend`:
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| WAL mode | ON | Concurrent reads during metadata updates |
-| `synchronous` | NORMAL | Balance safety and speed on modern disks |
-| `cache_size` | -64MB | 64MB page cache for index metadata |
-| `busy_timeout` | 5000ms | Gracefully handle lock contention |
+| Setting        | Default     | Purpose                                      |
+| -------------- | ----------- | -------------------------------------------- |
+| `journal_mode` | WAL         | Concurrent reads during metadata updates     |
+| `synchronous`  | FULL        | Index integrity on power loss (safe default) |
+| `cache_size`   | 16MB        | Smaller cache for metadata-only index        |
+| `busy_timeout` | 5000ms      | Gracefully handle lock contention            |
+| `auto_vacuum`  | INCREMENTAL | Reclaim space from deleted entries           |
 
 **Connection pooling:** 4-8 reader connections for concurrent index queries; single writer for metadata updates. Blob I/O bypasses SQLite entirely, so the bottleneck is typically blob disk throughput, not index performance.
 

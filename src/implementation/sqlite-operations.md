@@ -20,12 +20,12 @@ But it has specific requirements for concurrent access that you must understand.
 
 A single SQLite database on modern hardware can scale remarkably well ([source](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d)):
 
-| Metric | Typical (8 vCPU, NVMe, 32GB RAM) |
-|--------|----------------------------------|
-| Read P95 | 8-12 ms |
-| Write P95 (batched) | 25-40 ms |
-| Peak throughput | ~25k requests/min |
-| Database size | 18 GB |
+| Metric              | Typical (8 vCPU, NVMe, 32GB RAM) |
+| ------------------- | -------------------------------- |
+| Read P95            | 8-12 ms                          |
+| Write P95 (batched) | 25-40 ms                         |
+| Peak throughput     | ~25k requests/min                |
+| Database size       | 18 GB                            |
 
 **Key insight:** "Our breakthrough was not faster hardware. It was deciding that writes were expensive."
 
@@ -117,27 +117,24 @@ impl SqliteBackend {
 
 ### Recommended Pragma Defaults
 
-Based on [real-world SQLite scaling patterns](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d):
-
-| Pragma | Value | Purpose |
-|--------|-------|---------|
-| `journal_mode` | `WAL` | Concurrent reads during writes |
-| `synchronous` | `NORMAL` | Safe on modern disks, good performance |
-| `temp_store` | `MEMORY` | Faster temp operations |
-| `cache_size` | `-200000` | 200MB page cache (negative = KB) |
-| `busy_timeout` | `5000` | Wait 5s on lock contention |
-| `foreign_keys` | `ON` | Enforce referential integrity |
+| Pragma         | Default  | Purpose                        | Tradeoff                      |
+| -------------- | -------- | ------------------------------ | ----------------------------- |
+| `journal_mode` | `WAL`    | Concurrent reads during writes | Creates .wal/.shm files       |
+| `synchronous`  | `FULL`   | Data integrity on power loss   | Slower writes, safest default |
+| `temp_store`   | `MEMORY` | Faster temp operations         | Uses RAM for temp tables      |
+| `cache_size`   | `-32000` | 32MB page cache                | Tune based on dataset size    |
+| `busy_timeout` | `5000`   | Wait 5s on lock contention     | Prevents SQLITE_BUSY errors   |
+| `foreign_keys` | `ON`     | Enforce referential integrity  | Slight overhead on writes     |
 
 ```rust
 fn open_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(path)?;
 
-    // Enable WAL mode (persistent - only need to set once per database)
     conn.execute_batch("
         PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
+        PRAGMA synchronous = FULL;
         PRAGMA temp_store = MEMORY;
-        PRAGMA cache_size = -200000;
+        PRAGMA cache_size = -32000;
         PRAGMA busy_timeout = 5000;
         PRAGMA foreign_keys = ON;
     ")?;
@@ -146,15 +143,57 @@ fn open_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
 }
 ```
 
+### Synchronous Mode: Safety vs Performance
+
+| Mode     | Behavior                        | Use When                                                         |
+| -------- | ------------------------------- | ---------------------------------------------------------------- |
+| `FULL`   | Sync WAL before each commit     | **Default** - data integrity is critical                         |
+| `NORMAL` | Sync WAL before checkpoint only | High-throughput, battery-backed storage, or acceptable data loss |
+| `OFF`    | No syncs                        | Testing only, high corruption risk                               |
+
+**Why FULL is the default:**
+- `SqliteBackend` stores file content—losing data on power failure is unacceptable
+- Consumer SSDs often lack power-loss protection
+- Filesystem users expect durability guarantees
+
+**When to use NORMAL:**
+```rust
+// Opt-in for performance when you have:
+// - Enterprise storage with battery-backed write cache
+// - UPS-protected systems
+// - Acceptable risk of losing last few transactions
+let backend = SqliteBackend::builder()
+    .synchronous(Synchronous::Normal)
+    .build()?;
+```
+
+### Cache Size Tuning
+
+The default 32MB cache is conservative. Tune based on your dataset:
+
+| Dataset Size | Recommended Cache | Rationale                          |
+| ------------ | ----------------- | ---------------------------------- |
+| < 100MB      | 8-16MB            | Small datasets fit in cache easily |
+| 100MB - 1GB  | 32-64MB           | Default is appropriate             |
+| 1GB - 10GB   | 64-128MB          | Larger cache reduces disk I/O      |
+| > 10GB       | 128-256MB         | Diminishing returns above this     |
+
+```rust
+// Configure via builder
+let backend = SqliteBackend::builder()
+    .cache_size_mb(64)
+    .build()?;
+```
+
 ### WAL vs Rollback Journal
 
-| Aspect | WAL Mode | Rollback Journal |
-|--------|----------|------------------|
-| Concurrent reads during write | ✅ Yes | ❌ No (blocked) |
-| Read performance | Faster | Slower |
-| Write performance | Similar | Similar |
-| File count | 3 files (.db, .wal, .shm) | 1-2 files |
-| Crash recovery | Automatic | Automatic |
+| Aspect                        | WAL Mode                  | Rollback Journal |
+| ----------------------------- | ------------------------- | ---------------- |
+| Concurrent reads during write | ✅ Yes                     | ❌ No (blocked)   |
+| Read performance              | Faster                    | Slower           |
+| Write performance             | Similar                   | Similar          |
+| File count                    | 3 files (.db, .wal, .shm) | 1-2 files        |
+| Crash recovery                | Automatic                 | Automatic        |
 
 **Always use WAL for filesystem backends.**
 
@@ -457,12 +496,12 @@ impl SqliteBackend {
 
 ### Backup Schedule
 
-| Scenario | Strategy |
-|----------|----------|
-| Development | Manual or none |
-| Small production (<1GB) | Hourly online backup |
-| Large production (>1GB) | Daily full + WAL archiving |
-| Critical data | Continuous WAL shipping to replica |
+| Scenario                | Strategy                           |
+| ----------------------- | ---------------------------------- |
+| Development             | Manual or none                     |
+| Small production (<1GB) | Hourly online backup               |
+| Large production (>1GB) | Daily full + WAL archiving         |
+| Critical data           | Continuous WAL shipping to replica |
 
 ---
 
