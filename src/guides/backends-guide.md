@@ -206,7 +206,9 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 
 **❌ DON'T USE SqliteBackend when:**
 - Files must be accessible to external tools (use VRootFsBackend)
-- Minimizing memory pressure for very large files is critical (use anyfs-indexed)
+- Minimizing memory pressure for very large files is critical (use anyfs-indexed: IndexedBackend)
+
+> 💡 **SqliteBackend vs IndexedBackend:** Both provide complete path isolation. Choose SqliteBackend for single-file portability and portable storage. Choose IndexedBackend (anyfs-indexed) for very large files (>100MB) that need native disk streaming performance.
 
 ---
 
@@ -263,6 +265,21 @@ index.db contains:
 | Path Resolution | 🟡 **Moderate**  | Index lookup + disk access  |
 | Large Files     | ✅ **Excellent** | Streamed directly from disk |
 | Metadata Ops    | 🟢 **Fast**      | Index-only, no disk I/O     |
+
+##### Index Optimization
+
+The SQLite index benefits from the same performance tuning as `SqliteBackend`:
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| WAL mode | ON | Concurrent reads during metadata updates |
+| `synchronous` | NORMAL | Balance safety and speed on modern disks |
+| `cache_size` | -64MB | 64MB page cache for index metadata |
+| `busy_timeout` | 5000ms | Gracefully handle lock contention |
+
+**Connection pooling:** 4-8 reader connections for concurrent index queries; single writer for metadata updates. Blob I/O bypasses SQLite entirely, so the bottleneck is typically blob disk throughput, not index performance.
+
+See [anyfs-indexed#9](https://github.com/DK26/anyfs-indexed/issues/9) for detailed performance guidance.
 
 #### Advantages
 
