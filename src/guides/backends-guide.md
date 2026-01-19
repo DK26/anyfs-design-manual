@@ -164,9 +164,11 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 | Read/Write      | 🐢 **Slower** | SQLite query overhead          |
 | Path Resolution | 🐢 **Slower** | Database lookups per component |
 | Transactions    | ✅ **Atomic** | ACID guarantees                |
-| Large Files     | ✅ **Good**   | Streams to disk, not RAM       |
+| Large Files     | 🟡 **Varies** | See note below                 |
 
-**Real-world reference:** A single SQLite database on NVMe can handle ~25k requests/min with P95 read latency of 8-12ms and batched write latency of 25-40ms ([source](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d)).
+**Large file behavior:** SQLite streams BLOB content incrementally via `sqlite3_blob_read`/`write`, so files don't need to fit entirely in RAM. However, very large BLOBs (>100MB) can cause higher memory pressure during I/O operations due to SQLite's internal buffering and page management. For frequent large file operations, consider `IndexedBackend` which uses native file I/O.
+
+**Performance note:** SQLite performance varies significantly based on hardware, configuration, and workload. With proper tuning (WAL mode, connection pooling, write batching), a single SQLite database on modern hardware can achieve high throughput. See [sqlite-operations.md](../implementation/sqlite-operations.md) for tuning guidance.
 
 #### Advantages
 
@@ -181,7 +183,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 
 - **Slower than memory** - database overhead on every operation
 - **Single-writer** - SQLite's write lock limits concurrency
-- **Large file tradeoffs** - files >100MB stored as BLOBs have higher memory pressure during operations
+- **Large file overhead** - very large BLOBs (>100MB) have higher memory pressure due to SQLite buffering
 
 #### When to Use
 
@@ -284,7 +286,7 @@ See [anyfs-indexed#9](https://github.com/DK26/anyfs-indexed/issues/9) for detail
 #### Advantages
 
 - **Native file I/O** - content stored as raw files, fast streaming
-- **Large file support** - no memory constraints, unlike SqliteBackend BLOBs
+- **Large file support** - uses OS file I/O, avoids SQLite BLOB buffering overhead
 - **Complete path isolation** - virtual paths, same as SqliteBackend
 - **Inspectable** - can see blob files on disk (though with opaque names)
 - **Cross-platform** - works identically on all platforms
