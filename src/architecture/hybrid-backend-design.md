@@ -474,6 +474,32 @@ UPDATE blobs SET refcount = refcount + 1 WHERE blob_id = ?;
 
 ---
 
+## SQLite Performance
+
+The SQLite metadata database benefits from the same tuning as [SqliteBackend](../implementation/sqlite-operations.md):
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `journal_mode` | WAL | Concurrent reads during metadata updates |
+| `synchronous` | NORMAL | Balance safety and speed on modern disks |
+| `cache_size` | -64000 | 64MB page cache (metadata-only, smaller than SqliteBackend) |
+| `busy_timeout` | 5000 | Gracefully handle lock contention |
+| `auto_vacuum` | INCREMENTAL | Reclaim space from deleted entries |
+
+**SQL Indexes (critical):**
+
+```sql
+CREATE INDEX idx_nodes_parent ON nodes(parent);
+CREATE INDEX idx_nodes_blob ON nodes(blob_id) WHERE blob_id IS NOT NULL;
+CREATE INDEX idx_blobs_refcount ON blobs(refcount) WHERE refcount = 0;
+```
+
+Without proper indexes, path lookups become full table scans—catastrophic for large filesystems.
+
+**Connection pooling:** 4-8 reader connections for concurrent metadata queries; single writer for updates. See [SQLite Operations Guide](../implementation/sqlite-operations.md) for detailed patterns.
+
+---
+
 ## Garbage Collection
 
 Blobs with `refcount = 0` are orphans and can be deleted:

@@ -198,6 +198,8 @@ The default implementation uses SQLite at `index_file`. If/when alternate engine
 - Hashing is optional and should be off by default.
 - Keep op logs bounded (optional retention policy).
 
+For detailed SQLite tuning (pragmas, connection pooling, checkpointing), see the [SQLite Operations Guide](../implementation/sqlite-operations.md).
+
 ---
 
 ## Security and Containment
