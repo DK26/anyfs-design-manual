@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,17 +210,14 @@
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
-anyfs/                      # Crate 2: backends + middleware + ergonomics
+anyfs/                      # Crate 2: framework glue (simple backends + middleware + ergonomics)
   Cargo.toml
   src/
     lib.rs
     backends/
-      memory.rs             # MemoryBackend [feature: memory, default]
-      sqlite.rs             # SqliteBackend [feature: sqlite]
-      sqlite_cipher.rs      # SqliteCipherBackend [feature: sqlite-cipher]
-      indexed.rs            # IndexedBackend [feature: indexed]
-      stdfs.rs              # StdFsBackend [feature: stdfs]
-      vrootfs.rs            # VRootFsBackend [feature: vrootfs]
+      memory.rs             # MemoryBackend (in-memory, simple)
+      stdfs.rs              # StdFsBackend (thin std::fs wrapper)
+      vrootfs.rs            # VRootFsBackend (std::fs + path containment)
     middleware/
       quota.rs              # Quota&lt;B&gt;
       restrictions.rs       # Restrictions&lt;B&gt;
@@ -237,6 +234,13 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       caching.rs            # CachingResolver (LRU cache wrapper)
     container.rs            # FileStorage&lt;B&gt;
     stack.rs                # BackendStack builder
+</code></pre>
+<h3 id="ecosystem-crates-separate-repositories"><a class="header" href="#ecosystem-crates-separate-repositories">Ecosystem Crates (Separate Repositories)</a></h3>
+<p>Complex backends with internal runtime requirements:</p>
+<pre><code>anyfs-sqlite/               # SQLite backend (connection pooling, WAL, sharding)
+anyfs-indexed/              # Hybrid backend (SQLite index + disk blobs)
+anyfs-s3/                   # Third-party: S3 backend
+anyfs-redis/                # Third-party: Redis backend
 </code></pre>
 <hr>
 <h2 id="dependency-model"><a class="header" href="#dependency-model">Dependency Model</a></h2>
@@ -256,19 +260,22 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
     wraps -&gt; Tracing&lt;B&gt;
         wraps -&gt; Restrictions&lt;B&gt;
             wraps -&gt; Quota&lt;B&gt;
-                wraps -&gt; SqliteBackend (or any Fs)
+                wraps -&gt; MemoryBackend (or any Fs)
 </code></pre>
 <p>Each layer implements <code>Fs</code>, enabling composition.</p>
 <hr>
 <h2 id="cargo-features"><a class="header" href="#cargo-features">Cargo Features</a></h2>
-<h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
+<h3 id="backends-anyfs-crate"><a class="header" href="#backends-anyfs-crate">Backends (anyfs crate)</a></h3>
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
-<li><code>sqlite</code> — SQLite-backed persistent storage</li>
-<li><code>sqlite-cipher</code> — Encrypted SQLite via SQLCipher (mutually exclusive with <code>sqlite</code>)</li>
-<li><code>indexed</code> — SQLite index + disk blobs for large file performance</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment (uses <code>strict-path</code>)</li>
+</ul>
+<h3 id="ecosystem-backends-separate-crates"><a class="header" href="#ecosystem-backends-separate-crates">Ecosystem Backends (Separate Crates)</a></h3>
+<p>Complex backends live in their own crates:</p>
+<ul>
+<li><code>anyfs-sqlite</code> — SQLite-backed persistent storage (pooling, WAL, sharding, encryption)</li>
+<li><code>anyfs-indexed</code> — SQLite index + disk blobs for large file performance</li>
 </ul>
 <h3 id="middleware-mvp-scope"><a class="header" href="#middleware-mvp-scope">Middleware (MVP Scope)</a></h3>
 <p>Following the <strong>Tower/Axum</strong> pattern, feature flags keep the core lightweight:</p>

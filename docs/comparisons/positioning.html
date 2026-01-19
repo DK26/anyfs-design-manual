@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -346,7 +346,7 @@ backend
 <h3 id="1-middleware-composition-nobody-else-has-this"><a class="header" href="#1-middleware-composition-nobody-else-has-this">1. Middleware Composition (Nobody Else Has This)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let fs = SqliteBackend::open("data.db")?
+</span>let fs = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100_MB)
         .max_file_count(1000)
@@ -364,7 +364,9 @@ backend
 <h3 id="2-type-safe-domain-separation-user-defined-wrappers"><a class="header" href="#2-type-safe-domain-separation-user-defined-wrappers">2. Type-Safe Domain Separation (User-Defined Wrappers)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Users who need type-safe domain separation can create wrapper types
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Users who need type-safe domain separation can create wrapper types
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
 struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 

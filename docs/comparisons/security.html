@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -432,7 +432,8 @@ let fs = FileStorage::new(sandbox);
 <h3 id="multi-tenant-isolation"><a class="header" href="#multi-tenant-isolation">Multi-Tenant Isolation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, FileStorage};
+</span>use anyfs::{QuotaLayer, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorage&lt;impl Fs&gt; {
     let db_path = format!("tenants/{}.db", tenant_id);
@@ -449,10 +450,10 @@ fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorag
 <h3 id="read-only-browsing"><a class="header" href="#read-only-browsing">Read-Only Browsing</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, ReadOnly, FileStorage};
+</span>use anyfs::{VRootFsBackend, ReadOnly, FileStorage};
 
 let readonly_fs = FileStorage::new(
-    ReadOnly::new(SqliteBackend::open("archive.db")?)
+    ReadOnly::new(VRootFsBackend::new("/var/archive")?)
 );
 
 // All write operations return FsError::ReadOnly
@@ -518,31 +519,21 @@ let readonly_fs = FileStorage::new(
 <p><strong>Recommendation:</strong> For sensitive data, prefer container-level encryption. Use file-level encryption when you need selective access (some files encrypted, others not).</p>
 <h3 id="container-level-encryption"><a class="header" href="#container-level-encryption">Container-Level Encryption</a></h3>
 <h4 id="option-1-sqlcipher-backend"><a class="header" href="#option-1-sqlcipher-backend">Option 1: SQLCipher Backend</a></h4>
-<p><a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a> provides transparent AES-256 encryption for SQLite:</p>
+<p><a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a> provides transparent AES-256 encryption for SQLite. In AnyFS, encryption is a feature of <code>SqliteBackend</code> (from the <code>anyfs-sqlite</code> ecosystem crate), not a separate type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// SQLite backend with full database encryption via SQLCipher.
-pub struct SqliteCipherBackend {
-    conn: rusqlite::Connection,  // Built with sqlcipher feature
-}
+</span>/// SqliteBackend with encryption enabled (requires `encryption` feature).
+/// Uses SQLCipher for transparent AES-256 encryption.
+use anyfs_sqlite::SqliteBackend;
 
-impl SqliteCipherBackend {
-    pub fn open(path: &amp;str, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path)?;
-        // SQLCipher: derive key from password, encrypt everything
-        conn.pragma_update(None, "key", password)?;
-        Ok(Self { conn })
-    }
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-    pub fn open_with_key(path: &amp;str, key: &amp;[u8; 32]) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path)?;
-        // Use raw key instead of password
-        conn.pragma_update(None, "key", &amp;format!("x'{}'", hex::encode(key)))?;
-        Ok(Self { conn })
-    }
-}
+// Or open with raw 256-bit key
+let backend = SqliteBackend::open_with_key("secure.db", &amp;key)?;
 
-impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
+// Change password on open database
+backend.change_password("new_password")?;
 <span class="boring">}</span></code></pre>
 <p><strong>What’s protected:</strong></p>
 <ul>
@@ -555,7 +546,7 @@ impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = SqliteCipherBackend::open("secure.db", "correct-horse-battery-staple")?;
+</span>let backend = SqliteBackend::open_encrypted("secure.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // If someone gets secure.db without the password, they see random bytes
@@ -792,7 +783,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <tr><th>Approach</th><th>Protects Contents</th><th>Protects Structure</th><th>RAM Security</th><th>Persistence</th></tr>
 </thead>
 <tbody>
-<tr><td><code>SqliteCipherBackend</code></td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
+<tr><td><code>SqliteBackend</code> with encryption</td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
 <tr><td><code>FileEncryption&lt;B&gt;</code> middleware</td><td>Yes</td><td>No</td><td>Depends on B</td><td>Depends on B</td></tr>
 <tr><td><code>EncryptedMemoryBackend</code> (illustrative)</td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
 <tr><td><code>IntegrityVerified&lt;B&gt;</code> middleware</td><td>No</td><td>No (files only)</td><td>No</td><td>Depends on B</td></tr>
@@ -804,7 +795,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Full protection: encrypted container + secure memory practices
-let backend = SqliteCipherBackend::open("secure.db", password)?;
+let backend = SqliteBackend::open_encrypted("secure.db", password)?;
 let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <h4 id="high-security-ram-processing-illustrative"><a class="header" href="#high-security-ram-processing-illustrative">High-Security RAM Processing (Illustrative)</a></h4>
@@ -819,7 +810,9 @@ backend.save_to_file("snapshot.enc")?;  // Persists encrypted
 <h4 id="selective-file-encryption"><a class="header" href="#selective-file-encryption">Selective File Encryption</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Some files encrypted, structure visible
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Some files encrypted, structure visible
 let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
     .with_key(key);
 <span class="boring">}</span></code></pre>
@@ -889,119 +882,42 @@ let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
 <tr><th>Security Level</th><th>Implementation</th><th>Why</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Locked (container)</strong></td><td><code>SqliteCipherBackend</code></td><td>Must encrypt entire <code>.db</code> file at storage level</td></tr>
+<tr><td><strong>Locked (container)</strong></td><td><code>SqliteBackend</code> with <code>encryption</code> feature</td><td>Must encrypt entire <code>.db</code> file at storage level</td></tr>
 <tr><td><strong>Privacy (file contents)</strong></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code> middleware</td><td>Content encryption is policy</td></tr>
 <tr><td><strong>Normal</strong></td><td><code>SqliteBackend</code></td><td>User applies encryption as needed</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Why Locked mode requires a separate backend:</strong></p>
+<p><strong>Why encryption is a feature, not a separate type:</strong></p>
 <ul>
-<li>SQLCipher encrypts the entire database file transparently</li>
+<li>SQLCipher is a drop-in replacement for SQLite with identical API</li>
+<li>The only difference is how the connection is opened (with password/key)</li>
 <li>Connection must be opened with password before ANY query</li>
 <li>Cannot be added as middleware - it’s a property of the connection itself</li>
 <li>Everything is encrypted: file contents, filenames, directory structure, timestamps, inodes</li>
 </ul>
-<h3 id="sqlitecipherbackend-built-in-feature-sqlite-cipher"><a class="header" href="#sqlitecipherbackend-built-in-feature-sqlite-cipher">SqliteCipherBackend (Built-in, feature: <code>sqlite-cipher</code>)</a></h3>
-<p>Full container encryption using <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a>:</p>
+<h3 id="sqlitebackend-encryption-ecosystem-crate-feature-encryption"><a class="header" href="#sqlitebackend-encryption-ecosystem-crate-feature-encryption">SqliteBackend Encryption (Ecosystem Crate, feature: <code>encryption</code>)</a></h3>
+<p>Full container encryption using <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a>. Encryption is a feature of <code>SqliteBackend</code>, not a separate type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// SQLite backend with full AES-256 encryption via SQLCipher.
-/// Requires `sqlite-cipher` feature (uses rusqlite with bundled-sqlcipher).
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+/// Encryption methods are only available with the `encryption` feature.
+/// Uses SQLCipher for transparent AES-256 encryption.
 ///
 /// Without the password, the .db file is indistinguishable from random bytes.
-pub struct SqliteCipherBackend {
-    conn: Connection,
-}
 
-impl SqliteCipherBackend {
-    /// Open with password (derives key via PBKDF2).
-    pub fn open(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path.as_ref())?;
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-        // SQLCipher: Set encryption key derived from password
-        conn.pragma_update(None, "key", password)?;
+// Open with raw 256-bit key (no key derivation)
+let backend = SqliteBackend::open_with_key("secure.db", &amp;key)?;
 
-        // Verify we can read (wrong password = SQLITE_NOTADB)
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
+// Create new encrypted database
+let backend = SqliteBackend::create_encrypted("new.db", "password")?;
 
-        Self::init_schema(&amp;conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Open with raw 256-bit key (no key derivation).
-    pub fn open_with_key(path: impl AsRef&lt;Path&gt;, key: &amp;[u8; 32]) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path.as_ref())?;
-
-        // SQLCipher: Set raw key (hex-encoded with x'' prefix)
-        let hex_key = format!("x'{}'", hex::encode(key));
-        conn.pragma_update(None, "key", &amp;hex_key)?;
-
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
-
-        Self::init_schema(&amp;conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Create new encrypted database with password.
-    pub fn create(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        if path.as_ref().exists() {
-            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf(), operation: "create" });
-        }
-        Self::open(path, password)
-    }
-
-    /// Change the password on an open database.
-    pub fn change_password(&amp;self, new_password: &amp;str) -&gt; Result&lt;(), FsError&gt; {
-        self.conn.pragma_update(None, "rekey", new_password)?;
-        Ok(())
-    }
-
-    fn init_schema(conn: &amp;Connection) -&gt; Result&lt;(), FsError&gt; {
-        conn.execute_batch(r#"
-            -- Node table: directories, files, symlinks
-            CREATE TABLE IF NOT EXISTS nodes (
-                inode INTEGER PRIMARY KEY,
-                parent_inode INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                node_type INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
-                size INTEGER NOT NULL DEFAULT 0,
-                mode INTEGER NOT NULL DEFAULT 0o644,
-                nlink INTEGER NOT NULL DEFAULT 1,
-                uid INTEGER NOT NULL DEFAULT 0,
-                gid INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER,
-                modified_at INTEGER,
-                accessed_at INTEGER,
-                symlink_target TEXT,
-                UNIQUE(parent_inode, name),
-                FOREIGN KEY (parent_inode) REFERENCES nodes(inode)
-            );
-
-            -- Content table: file data (separate for efficient large files)
-            CREATE TABLE IF NOT EXISTS content (
-                inode INTEGER PRIMARY KEY,
-                data BLOB NOT NULL,
-                FOREIGN KEY (inode) REFERENCES nodes(inode) ON DELETE CASCADE
-            );
-
-            -- Index for directory listing performance
-            CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent_inode);
-
-            -- Root directory (inode 1, parent is self)
-            INSERT OR IGNORE INTO nodes (inode, parent_inode, name, node_type, mode)
-            VALUES (1, 1, '', 1, 0o755);
-        "#)?;
-        Ok(())
-    }
-}
-
-// Implements same traits as SqliteBackend - only difference is encrypted storage
-impl Fs for SqliteCipherBackend { /* ... */ }
-impl FsFull for SqliteCipherBackend { /* ... */ }
-impl FsFuse for SqliteCipherBackend { /* ... */ }
+// Change password on open database
+backend.change_password("new_password")?;
 <span class="boring">}</span></code></pre>
 <h4 id="what-sqlcipher-encrypts"><a class="header" href="#what-sqlcipher-encrypts">What SQLCipher Encrypts</a></h4>
 <div class="table-wrapper">
@@ -1024,26 +940,20 @@ impl FsFuse for SqliteCipherBackend { /* ... */ }
 </div>
 <h4 id="cargo-configuration"><a class="header" href="#cargo-configuration">Cargo Configuration</a></h4>
 <pre><code class="language-toml">[dependencies]
-# Regular SQLite (no encryption)
-rusqlite = { version = "0.31", features = ["bundled"] }
-
-# SQLCipher (full encryption) - mutually exclusive with above
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+# anyfs-sqlite ecosystem crate with optional encryption
+anyfs-sqlite = { version = "0.1" }                     # No encryption
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
 </code></pre>
-<p><strong>Feature flags in anyfs:</strong></p>
-<pre><code class="language-toml">[features]
-default = ["memory"]
-sqlite = ["rusqlite/bundled"]
-sqlite-cipher = ["rusqlite/bundled-sqlcipher"]  # Replaces sqlite
-</code></pre>
-<p><strong>Note:</strong> <code>sqlite</code> and <code>sqlite-cipher</code> are mutually exclusive. SQLCipher is a drop-in replacement with the same schema and API.</p>
+<p><strong>Note:</strong> The <code>encryption</code> feature enables SQLCipher. When enabled, <code>open_encrypted()</code> and <code>open_with_key()</code> methods become available.</p>
 <h3 id="achieving-security-modes-with-composition"><a class="header" href="#achieving-security-modes-with-composition">Achieving Security Modes with Composition</a></h3>
 <p>Users compose backends and middleware to achieve their desired security level:</p>
 <h4 id="locked-mode-full-container-encryption"><a class="header" href="#locked-mode-full-container-encryption">Locked Mode (Full Container Encryption)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Everything encrypted - password required to access anything
-let backend = SqliteCipherBackend::open("tenant.db", "correct-horse-battery-staple")?;
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
+// Everything encrypted - password required to access anything
+let backend = SqliteBackend::open_encrypted("tenant.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // Without password: .db file is random bytes
@@ -1052,7 +962,9 @@ let fs = FileStorage::new(backend);
 <h4 id="privacy-mode-contents-encrypted-metadata-visible"><a class="header" href="#privacy-mode-contents-encrypted-metadata-visible">Privacy Mode (Contents Encrypted, Metadata Visible)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// File contents encrypted, metadata (names, sizes, structure) visible
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// File contents encrypted, metadata (names, sizes, structure) visible
 let backend = FileEncryption::new(
     SqliteBackend::open("tenant.db")?
 )
@@ -1066,7 +978,9 @@ let fs = FileStorage::new(backend);
 <h4 id="normal-mode-no-encryption"><a class="header" href="#normal-mode-no-encryption">Normal Mode (No Encryption)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// No encryption - user encrypts sensitive files themselves
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// No encryption - user encrypts sensitive files themselves
 let backend = SqliteBackend::open("tenant.db")?;
 let fs = FileStorage::new(backend);
 
@@ -1079,7 +993,7 @@ let fs = FileStorage::new(backend);
 <tr><th>Aspect</th><th>Locked</th><th>Privacy</th><th>Normal</th></tr>
 </thead>
 <tbody>
-<tr><td>Implementation</td><td><code>SqliteCipherBackend</code></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code></td><td><code>SqliteBackend</code></td></tr>
+<tr><td>Implementation</td><td><code>SqliteBackend</code> with <code>encryption</code></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code></td><td><code>SqliteBackend</code></td></tr>
 <tr><td>File contents</td><td>Encrypted (SQLCipher)</td><td>Encrypted (AES-GCM)</td><td>Plaintext</td></tr>
 <tr><td>Filenames</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
 <tr><td>Directory structure</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
@@ -1087,7 +1001,7 @@ let fs = FileStorage::new(backend);
 <tr><td>Timestamps</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
 <tr><td>Host can analyze</td><td>Nothing</td><td>Metadata only</td><td>Everything</td></tr>
 <tr><td>Performance</td><td>Slowest (~10-15% overhead)</td><td>Medium</td><td>Fastest</td></tr>
-<tr><td>Feature flag</td><td><code>sqlite-cipher</code></td><td><code>sqlite</code> + middleware</td><td><code>sqlite</code></td></tr>
+<tr><td>Feature flag</td><td><code>encryption</code></td><td>middleware</td><td>(none)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1126,13 +1040,15 @@ impl SecureSqliteBackend {
 <h4 id="multi-tenant-isolation-1"><a class="header" href="#multi-tenant-isolation-1">Multi-Tenant Isolation</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Each tenant gets their own .db file - complete physical isolation
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
+/// Each tenant gets their own .db file - complete physical isolation
 fn create_tenant_storage(tenant_id: &amp;str, encrypted: bool) -&gt; impl Fs {
     let path = format!("tenants/{}.db", tenant_id);
 
     if encrypted {
         let password = get_tenant_password(tenant_id);
-        SqliteCipherBackend::open(&amp;path, &amp;password).unwrap()
+        SqliteBackend::open_encrypted(&amp;path, &amp;password).unwrap()
     } else {
         SqliteBackend::open(&amp;path).unwrap()
     }
@@ -1202,10 +1118,10 @@ fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Re
     std::fs::read(safe_path)  // Another process could have modified
 }
 <span class="boring">}</span></code></pre>
-<p><strong>After (SqliteCipherBackend):</strong></p>
+<p><strong>After (SqliteBackend with encryption - ecosystem crate):</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteCipherBackend;
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
 
 fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt; {
     // Separate encrypted database per tenant - no path containment needed
@@ -1225,7 +1141,7 @@ fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Re
 <tr><td>Symlink attacks</td><td>Resolved at check time</td><td><strong>We control all symlinks</strong></td></tr>
 <tr><td>Cross-tenant leakage</td><td>Bug in filtering could leak</td><td><strong>No shared data exists</strong></td></tr>
 <tr><td>Performance</td><td>Real FS I/O + canonicalization</td><td>SQLite (often faster for small files)</td></tr>
-<tr><td>Encryption</td><td>Separate concern</td><td>Built-in (<code>SqliteCipherBackend</code>) or middleware</td></tr>
+<tr><td>Encryption</td><td>Separate concern</td><td>Built-in (<code>encryption</code> feature) or middleware</td></tr>
 </tbody>
 </table>
 </div>

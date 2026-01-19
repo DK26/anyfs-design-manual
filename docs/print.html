@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-1628b8da.js"></script>
+        <script src="toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,10 +223,10 @@
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Layer-based composition
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -363,10 +363,10 @@ fs.write("/data/file.txt", b"hello")?;
 <h2 id="quick-example-1"><a class="header" href="#quick-example-1">Quick example</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 // Layer-based composition
-let backend = SqliteBackend::open("tenant.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -425,17 +425,14 @@ fs.write("/documents/hello.txt", b"Hello!")?;
     types.rs                # Metadata, DirEntry, Permissions, StatFs
     error.rs                # FsError
 
-anyfs/                      # Crate 2: backends + middleware + ergonomics
+anyfs/                      # Crate 2: framework glue (simple backends + middleware + ergonomics)
   Cargo.toml
   src/
     lib.rs
     backends/
-      memory.rs             # MemoryBackend [feature: memory, default]
-      sqlite.rs             # SqliteBackend [feature: sqlite]
-      sqlite_cipher.rs      # SqliteCipherBackend [feature: sqlite-cipher]
-      indexed.rs            # IndexedBackend [feature: indexed]
-      stdfs.rs              # StdFsBackend [feature: stdfs]
-      vrootfs.rs            # VRootFsBackend [feature: vrootfs]
+      memory.rs             # MemoryBackend (in-memory, simple)
+      stdfs.rs              # StdFsBackend (thin std::fs wrapper)
+      vrootfs.rs            # VRootFsBackend (std::fs + path containment)
     middleware/
       quota.rs              # Quota&lt;B&gt;
       restrictions.rs       # Restrictions&lt;B&gt;
@@ -452,6 +449,13 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
       caching.rs            # CachingResolver (LRU cache wrapper)
     container.rs            # FileStorage&lt;B&gt;
     stack.rs                # BackendStack builder
+</code></pre>
+<h3 id="ecosystem-crates-separate-repositories"><a class="header" href="#ecosystem-crates-separate-repositories">Ecosystem Crates (Separate Repositories)</a></h3>
+<p>Complex backends with internal runtime requirements:</p>
+<pre><code>anyfs-sqlite/               # SQLite backend (connection pooling, WAL, sharding)
+anyfs-indexed/              # Hybrid backend (SQLite index + disk blobs)
+anyfs-s3/                   # Third-party: S3 backend
+anyfs-redis/                # Third-party: Redis backend
 </code></pre>
 <hr>
 <h2 id="dependency-model"><a class="header" href="#dependency-model">Dependency Model</a></h2>
@@ -471,19 +475,22 @@ anyfs/                      # Crate 2: backends + middleware + ergonomics
     wraps -&gt; Tracing&lt;B&gt;
         wraps -&gt; Restrictions&lt;B&gt;
             wraps -&gt; Quota&lt;B&gt;
-                wraps -&gt; SqliteBackend (or any Fs)
+                wraps -&gt; MemoryBackend (or any Fs)
 </code></pre>
 <p>Each layer implements <code>Fs</code>, enabling composition.</p>
 <hr>
 <h2 id="cargo-features"><a class="header" href="#cargo-features">Cargo Features</a></h2>
-<h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
+<h3 id="backends-anyfs-crate"><a class="header" href="#backends-anyfs-crate">Backends (anyfs crate)</a></h3>
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
-<li><code>sqlite</code> — SQLite-backed persistent storage</li>
-<li><code>sqlite-cipher</code> — Encrypted SQLite via SQLCipher (mutually exclusive with <code>sqlite</code>)</li>
-<li><code>indexed</code> — SQLite index + disk blobs for large file performance</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment (uses <code>strict-path</code>)</li>
+</ul>
+<h3 id="ecosystem-backends-separate-crates"><a class="header" href="#ecosystem-backends-separate-crates">Ecosystem Backends (Separate Crates)</a></h3>
+<p>Complex backends live in their own crates:</p>
+<ul>
+<li><code>anyfs-sqlite</code> — SQLite-backed persistent storage (pooling, WAL, sharding, encryption)</li>
+<li><code>anyfs-indexed</code> — SQLite index + disk blobs for large file performance</li>
 </ul>
 <h3 id="middleware-mvp-scope"><a class="header" href="#middleware-mvp-scope">Middleware (MVP Scope)</a></h3>
 <p>Following the <strong>Tower/Axum</strong> pattern, feature flags keep the core lightweight:</p>
@@ -519,12 +526,18 @@ anyfs = "0.1"
 </code></pre>
 <p>For additional backends:</p>
 <pre><code class="language-toml">[dependencies]
-anyfs = { version = "0.1", features = ["sqlite", "stdfs", "vrootfs"] }
+anyfs = { version = "0.1", features = ["stdfs", "vrootfs"] }
+
+# SQLite storage (ecosystem crate)
+anyfs-sqlite = "0.1"
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
+
+# Hybrid backend: SQLite metadata + disk blobs (ecosystem crate)
+anyfs-indexed = "0.1"
 </code></pre>
-<p>Available features:</p>
+<p>Available <code>anyfs</code> features:</p>
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
-<li><code>sqlite</code> — SQLite-backed persistent storage</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment</li>
 </ul>
@@ -544,14 +557,14 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="with-quotas"><a class="header" href="#with-quotas">With Quotas</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, Quota, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, QuotaLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let backend = QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)  // 100 MB
         .max_file_size(10 * 1024 * 1024)    // 10 MB per file
         .build()
-        .layer(SqliteBackend::open_or_create("data.db")?);
+        .layer(MemoryBackend::new());
 
     let fs = FileStorage::new(backend);
 
@@ -578,10 +591,10 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="full-stack-layer-based"><a class="header" href="#full-stack-layer-based">Full Stack (Layer-based)</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let backend = SqliteBackend::open_or_create("data.db")?
+    let backend = MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .max_file_size(10 * 1024 * 1024)
@@ -756,13 +769,13 @@ fn test_quota_exceeded() {
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Use Case</th><th>Backend</th></tr>
+<tr><th>Use Case</th><th>Backend</th><th>Crate</th></tr>
 </thead>
 <tbody>
-<tr><td>Testing</td><td><code>MemoryBackend</code></td></tr>
-<tr><td>Production (portable)</td><td><code>SqliteBackend</code></td></tr>
-<tr><td>Host filesystem (with containment)</td><td><code>VRootFsBackend</code></td></tr>
-<tr><td>Host filesystem (direct access)</td><td><code>StdFsBackend</code></td></tr>
+<tr><td>Testing</td><td><code>MemoryBackend</code></td><td><code>anyfs</code></td></tr>
+<tr><td>Production (portable)</td><td><code>SqliteBackend</code></td><td><code>anyfs-sqlite</code></td></tr>
+<tr><td>Host filesystem (with containment)</td><td><code>VRootFsBackend</code></td><td><code>anyfs</code></td></tr>
+<tr><td>Host filesystem (direct access)</td><td><code>StdFsBackend</code></td><td><code>anyfs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -781,8 +794,9 @@ let fs = FileStorage::new(
 );
 
 // Sandboxed (layer-based)
+let temp_dir = tempfile::tempdir()?;
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    VRootFsBackend::new(temp_dir.path())?
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -819,10 +833,11 @@ let fs = FileStorage::new(
 │                         │        └──────────────┘           │
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
-<p><strong>SQLite Example (API sketch, planned):</strong></p>
+<p><strong>SQLite Example (using ecosystem crate - API sketch, planned):</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer, MountHandle};
+</span>use anyfs::{QuotaLayer, TracingLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Mount the drive
 let backend = SqliteBackend::open("tenant.db")?
@@ -937,21 +952,22 @@ let mount = MountHandle::mount(
 <pre><code class="language-toml">[dependencies]
 anyfs = "0.1"
 </code></pre>
-<p>With backends and optional features:</p>
-<pre><code class="language-toml">anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
+<p>With optional features and ecosystem crates:</p>
+<pre><code class="language-toml">anyfs = { version = "0.1", features = ["vrootfs", "bytes"] }
+anyfs-sqlite = "0.1"  # SQLite backend (ecosystem crate)
 </code></pre>
 <hr>
 <h2 id="creating-a-backend-stack"><a class="header" href="#creating-a-backend-stack">Creating a Backend Stack</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Simple
 let fs = FileStorage::new(MemoryBackend::new());
 
 // With limits
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .max_file_size(10 * 1024 * 1024)
@@ -959,7 +975,7 @@ let fs = FileStorage::new(
 );
 
 // Full stack (fluent composition)
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -973,7 +989,7 @@ let fs = FileStorage::new(backend);
 // BackendStack builder (fluent API)
 use anyfs::BackendStack;
 
-let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+let fs = BackendStack::new(MemoryBackend::new())
     .limited(|l| l.max_total_size(100 * 1024 * 1024))
     .restricted(|g| g.deny_permissions())
     .traced()
@@ -1103,10 +1119,10 @@ IndexLayer::builder()
 <h2 id="overlay-methods"><a class="header" href="#overlay-methods">Overlay Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, MemoryBackend, Overlay};
+</span>use anyfs::{VRootFsBackend, MemoryBackend, Overlay};
 
-let base = SqliteBackend::open("base.db")?;  // Read-only base
-let upper = MemoryBackend::new();             // Writable upper
+let base = VRootFsBackend::new("/var/templates")?;  // Read-only base
+let upper = MemoryBackend::new();                    // Writable upper
 
 let overlay = Overlay::new(base, upper);
 
@@ -1272,7 +1288,7 @@ assert_eq!(ino1, ino2);  // Same inode!
 </thead>
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>Internal node IDs (incrementing counter)</td></tr>
-<tr><td><code>SqliteBackend</code></td><td>SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</td></tr>
+<tr><td><code>anyfs-sqlite: SqliteBackend</code></td><td>SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td>OS inode numbers (<code>Metadata::ino()</code>)</td></tr>
 </tbody>
 </table>
@@ -1320,42 +1336,56 @@ match result {
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="built-in-backends"><a class="header" href="#built-in-backends">Built-in Backends</a></h2>
+<h2 id="built-in-backends-anyfs-crate"><a class="header" href="#built-in-backends-anyfs-crate">Built-in Backends (anyfs crate)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Type</th><th>Feature</th><th>Description</th></tr>
+<tr><th>Type</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>MemoryBackend</code></td><td><code>memory</code> (default)</td><td>In-memory</td></tr>
-<tr><td><code>SqliteBackend</code></td><td><code>sqlite</code></td><td>Persistent single-file database</td></tr>
-<tr><td><code>SqliteCipherBackend</code></td><td><code>sqlite-cipher</code></td><td>Encrypted SQLite (AES-256 via SQLCipher)</td></tr>
-<tr><td><code>IndexedBackend</code></td><td><code>indexed</code></td><td>Virtual paths + disk blobs (large file support)</td></tr>
-<tr><td><code>StdFsBackend</code></td><td><code>stdfs</code></td><td>Direct <code>std::fs</code> (no containment)</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td><code>vrootfs</code></td><td>Host filesystem (with containment)</td></tr>
+<tr><td><code>MemoryBackend</code></td><td>In-memory storage (default)</td></tr>
+<tr><td><code>StdFsBackend</code></td><td>Direct <code>std::fs</code> (no containment)</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td>Host filesystem (with path containment)</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Note:</strong> <code>sqlite</code> and <code>sqlite-cipher</code> are mutually exclusive features.</p>
+<h3 id="ecosystem-backends-separate-crates-1"><a class="header" href="#ecosystem-backends-separate-crates-1">Ecosystem Backends (Separate Crates)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>anyfs-sqlite</code></td><td><code>SqliteBackend</code></td><td>Persistent single-file database (optional encryption via SQLCipher)</td></tr>
+<tr><td><code>anyfs-indexed</code></td><td><code>IndexedBackend</code></td><td>Virtual paths + disk blobs (large files)</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
-<h2 id="sqlitecipherbackend-methods"><a class="header" href="#sqlitecipherbackend-methods">SqliteCipherBackend Methods</a></h2>
+<h2 id="sqlitebackend-encryption-ecosystem-crate"><a class="header" href="#sqlitebackend-encryption-ecosystem-crate">SqliteBackend Encryption (Ecosystem Crate)</a></h2>
+<blockquote>
+<p><strong>Crate:</strong> <code>anyfs-sqlite</code> with <code>encryption</code> feature</p>
+</blockquote>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteCipherBackend;
+</span>use anyfs_sqlite::SqliteBackend;
 
-// Open with password (key derived via PBKDF2)
-let backend = SqliteCipherBackend::open("encrypted.db", "password")?;
+// Standard (no encryption)
+let backend = SqliteBackend::open("data.db")?;
 
-// Open with raw 256-bit key
-let backend = SqliteCipherBackend::open_with_key("encrypted.db", &amp;key)?;
+// With encryption (requires `encryption` feature)
+let backend = SqliteBackend::open_encrypted("encrypted.db", "password")?;
 
-// Create new encrypted database
-let backend = SqliteCipherBackend::create("new.db", "password")?;
+// With raw 256-bit key
+let backend = SqliteBackend::open_with_key("encrypted.db", &amp;key)?;
 
-// Change password on open database
+// Change password on open encrypted database
 backend.change_password("new-password")?;
 <span class="boring">}</span></code></pre>
 <p>Without the correct password, the <code>.db</code> file appears as random bytes.</p>
+<blockquote>
+<p><strong>Feature:</strong> <code>anyfs-sqlite = { version = "0.1", features = ["encryption"] }</code></p>
+</blockquote>
 <hr>
 <h2 id="middleware-1"><a class="header" href="#middleware-1">Middleware</a></h2>
 <div class="table-wrapper">
@@ -1491,7 +1521,6 @@ backend.change_password("new-password")?;
 </thead>
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>In-memory backend</td></tr>
-<tr><td><code>SqliteBackend</code></td><td>SQLite backend</td></tr>
 <tr><td><code>StdFsBackend</code></td><td>Direct <code>std::fs</code> backend (no containment)</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td>Host FS backend (with containment)</td></tr>
 <tr><td><code>Quota&lt;B&gt;</code></td><td>Quota middleware</td></tr>
@@ -1512,6 +1541,18 @@ backend.change_password("new-password")?;
 <tr><td><code>DryRunLayer</code></td><td>Layer for DryRun</td></tr>
 <tr><td><code>CacheLayer</code></td><td>Layer for Cache</td></tr>
 <tr><td><code>OverlayLayer</code></td><td>Layer for Overlay</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="from-ecosystem-crates"><a class="header" href="#from-ecosystem-crates">From Ecosystem Crates</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>anyfs-sqlite</code></td><td><code>SqliteBackend</code></td><td>SQLite backend (optional encryption with feature)</td></tr>
+<tr><td><code>anyfs-indexed</code></td><td><code>IndexedBackend</code></td><td>Virtual paths + disk blobs</td></tr>
 </tbody>
 </table>
 </div>
@@ -1717,7 +1758,8 @@ impl AiSandbox {
 </span><span class="boring">fn main() {
 </span>// anyfs-python/src/lib.rs
 use pyo3::prelude::*;
-use anyfs::{FileStorage, MemoryBackend, SqliteBackend, Fs};
+use anyfs::{FileStorage, MemoryBackend, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 #[pyclass]
 struct PyFileStorage {
@@ -2375,7 +2417,7 @@ pub struct StatFs {
 <p>Enforces quota limits. Tracks usage and rejects operations that would exceed limits.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota};
+</span>use anyfs::{MemoryBackend, QuotaLayer};
 
 let backend = QuotaLayer::builder()
     .max_total_size(100 * 1024 * 1024)   // 100 MB
@@ -2384,7 +2426,7 @@ let backend = QuotaLayer::builder()
     .max_dir_entries(1_000)              // 1K entries per dir
     .max_path_depth(64)
     .build()
-    .layer(SqliteBackend::open("data.db")?);
+    .layer(MemoryBackend::new());
 
 // Check usage
 let usage = backend.usage();
@@ -2408,9 +2450,9 @@ let backend = RestrictionsLayer::builder()
 <p>Integrates with the <a href="https://docs.rs/tracing">tracing</a> ecosystem for structured logging and instrumentation.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, TracingLayer};
+</span>use anyfs::{MemoryBackend, TracingLayer};
 
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(TracingLayer::new()
         .with_target("anyfs")
         .with_level(tracing::Level::DEBUG));
@@ -2444,10 +2486,10 @@ let backend = PathFilterLayer::builder()
 <p>Prevents all write operations. Useful for publishing immutable data.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, ReadOnly, FileStorage};
+</span>use anyfs::{VRootFsBackend, ReadOnly, FileStorage};
 
 // Wrap any backend to make it read-only
-let backend = ReadOnly::new(SqliteBackend::open("published.db")?);
+let backend = ReadOnly::new(VRootFsBackend::new("/var/published")?);
 let fs = FileStorage::new(backend);
 
 fs.read("/doc.txt")?;     // OK
@@ -2487,13 +2529,13 @@ let _ = fs.read("/test.txt");       // Error: file doesn't exist
 <p>LRU cache for read operations. Essential for slow backends (S3, network).</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Cache, FileStorage};
+</span>use anyfs::{MemoryBackend, CacheLayer, FileStorage};
 
 let backend = CacheLayer::builder()
     .max_size(100 * 1024 * 1024)      // 100 MB cache
     .max_entries(10_000)              // Max 10K entries
     .build()
-    .layer(SqliteBackend::open("data.db")?);
+    .layer(MemoryBackend::new());
 let fs = FileStorage::new(backend);
 
 // First read: hits backend, caches result
@@ -2506,10 +2548,10 @@ let data = fs.read("/file.txt")?;
 <p>Union filesystem with a read-only base and writable upper layer. Like Docker.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, MemoryBackend, Overlay};
+</span>use anyfs::{VRootFsBackend, MemoryBackend, Overlay};
 
 // Base: read-only template
-let base = SqliteBackend::open("template.db")?;
+let base = VRootFsBackend::new("/var/templates")?;
 
 // Upper: writable layer for changes
 let upper = MemoryBackend::new();
@@ -2550,7 +2592,8 @@ let content = fs.read("/documents/hello.txt")?;
 <p>If you need compile-time safety to prevent mixing filesystems, create wrapper types:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
+</span>use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Define wrapper types for your domains
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
@@ -2573,7 +2616,9 @@ process_sandbox(&amp;sandbox);   // OK
 <h3 id="type-aliases-for-clean-code"><a class="header" href="#type-aliases-for-clean-code">Type Aliases for Clean Code</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Define your standard secure stack
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Define your standard secure stack
 type SecureBackend = Tracing&lt;Restrictions&lt;Quota&lt;SqliteBackend&gt;&gt;&gt;;
 
 // Type aliases for common combinations
@@ -2609,7 +2654,9 @@ impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
 <p>When you need uniform types (e.g., collections), use <code>.boxed()</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Type-erased for uniform storage
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Type-erased for uniform storage
 let filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![
     FileStorage::new(MemoryBackend::new()).boxed(),
     FileStorage::new(SqliteBackend::open("a.db")?).boxed(),
@@ -2647,9 +2694,9 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
 <p>Use the <code>.layer()</code> extension method for Axum-style composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer};
 
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -2664,7 +2711,7 @@ let backend = SqliteBackend::open("data.db")?
 </span><span class="boring">fn main() {
 </span>use anyfs::BackendStack;
 
-let fs = BackendStack::new(SqliteBackend::open("data.db")?)
+let fs = BackendStack::new(MemoryBackend::new())
     .limited(|l| l
         .max_total_size(100 * 1024 * 1024)
         .max_file_size(10 * 1024 * 1024))
@@ -2674,23 +2721,33 @@ let fs = BackendStack::new(SqliteBackend::open("data.db")?)
     .into_container();
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="built-in-backends-1"><a class="header" href="#built-in-backends-1">Built-in Backends</a></h2>
+<h2 id="built-in-backends-anyfs-crate-1"><a class="header" href="#built-in-backends-anyfs-crate-1">Built-in Backends (anyfs crate)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Backend</th><th>Feature</th><th>Description</th></tr>
+<tr><th>Backend</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>MemoryBackend</code></td><td><code>memory</code> (default)</td><td>In-memory storage</td></tr>
-<tr><td><code>SqliteBackend</code></td><td><code>sqlite</code></td><td>Single-file portable database</td></tr>
-<tr><td><code>SqliteCipherBackend</code></td><td><code>sqlite-cipher</code></td><td>Encrypted SQLite via SQLCipher (AES-256)</td></tr>
-<tr><td><code>IndexedBackend</code></td><td><code>indexed</code></td><td>Virtual paths + disk blobs (large file support with isolation)</td></tr>
-<tr><td><code>StdFsBackend</code></td><td><code>stdfs</code></td><td>Direct <code>std::fs</code> delegation (no containment)</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td><code>vrootfs</code></td><td>Host filesystem with path containment (via strict-path)</td></tr>
+<tr><td><code>MemoryBackend</code></td><td>In-memory storage, implements <code>Clone</code> for snapshots</td></tr>
+<tr><td><code>StdFsBackend</code></td><td>Direct <code>std::fs</code> delegation (no containment)</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td>Host filesystem with path containment (via strict-path)</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Note:</strong> <code>sqlite</code> and <code>sqlite-cipher</code> features are mutually exclusive (both use rusqlite with different SQLite builds).</p>
+<h3 id="ecosystem-backends-separate-crates-2"><a class="header" href="#ecosystem-backends-separate-crates-2">Ecosystem Backends (Separate Crates)</a></h3>
+<p>Complex backends with internal runtime requirements live in their own crates:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Backend</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>anyfs-sqlite</code></td><td><code>SqliteBackend</code></td><td>Single-file database with pooling, WAL, sharding; optional encryption</td></tr>
+<tr><td><code>anyfs-indexed</code></td><td><code>IndexedBackend</code></td><td>Virtual paths + disk blobs (large file support)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Why separate crates?</strong> Complex backends need internal runtimes (connection pools, sharding, chunking). Keeps <code>anyfs</code> lightweight and focused on framework glue.</p>
 <hr>
 <h2 id="path-handling"><a class="header" href="#path-handling">Path Handling</a></h2>
 <p>Core traits take <code>&amp;Path</code> so they are object-safe (<code>dyn Fs</code> works). The ergonomic layer (<code>FileStorage</code> and <code>FsExt</code>) accepts <code>impl AsRef&lt;Path&gt;</code>:</p>
@@ -2727,7 +2784,7 @@ pub struct IterativeResolver {
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Resolution behavior depends on the resolver used.</strong> The default <code>IterativeResolver</code> follows symlinks when the backend implements <code>FsLink</code>. For backends without <code>FsLink</code>, it traverses directories but treats symlinks as regular files. Users can provide custom resolvers for case-insensitive matching, caching, or other behaviors.</p>
-<p><strong>Note:</strong> All built-in virtual backends (MemoryBackend, SqliteBackend) implement <code>FsLink</code>, so symlink-aware resolution works out of the box.</p>
+<p><strong>Note:</strong> Built-in virtual backends (<code>MemoryBackend</code>) and ecosystem backends (<code>SqliteBackend</code>) implement <code>FsLink</code>, so symlink-aware resolution works out of the box.</p>
 <h3 id="when-resolution-is-needed"><a class="header" href="#when-resolution-is-needed">When Resolution Is Needed</a></h3>
 <div class="table-wrapper">
 <table>
@@ -2742,7 +2799,7 @@ pub struct IterativeResolver {
 </table>
 </div>
 <h3 id="opt-out-mechanism"><a class="header" href="#opt-out-mechanism">Opt-out Mechanism</a></h3>
-<p>Virtual backends need resolution by default. Real filesystem backends opt out via a marker trait or associated constant:</p>
+<p>Virtual backends need resolution by default. Real filesystem backends opt out via a marker trait:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>/// Marker trait for backends that handle their own path resolution.
@@ -2880,7 +2937,8 @@ let path = simplified(r"\\?\C:\Users\foo\bar.txt");
 <h2 id="filesystem-semantics-linux-like-by-default"><a class="header" href="#filesystem-semantics-linux-like-by-default">Filesystem Semantics: Linux-like by Default</a></h2>
 <p><strong>Design principle:</strong> Simple, secure defaults. Don’t close doors for alternative semantics.</p>
 <p>See ADR-028 for the decision rationale.</p>
-<h3 id="default-behavior-built-in-backends"><a class="header" href="#default-behavior-built-in-backends">Default Behavior (Built-in Backends)</a></h3>
+<h3 id="default-behavior-virtual-backends"><a class="header" href="#default-behavior-virtual-backends">Default Behavior (Virtual Backends)</a></h3>
+<p>Virtual backends (<code>MemoryBackend</code>, <code>SqliteBackend</code>) use Linux-like semantics:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2895,6 +2953,7 @@ let path = simplified(r"\\?\C:\Users\foo\bar.txt");
 </tbody>
 </table>
 </div>
+<p><strong>Real filesystem backends</strong> (<code>StdFsBackend</code>, <code>VRootFsBackend</code>) follow OS semantics—case-insensitive on Windows/macOS, case-sensitive on Linux.</p>
 <h3 id="trait-is-agnostic"><a class="header" href="#trait-is-agnostic">Trait is Agnostic</a></h3>
 <p>The <code>Fs</code> trait doesn’t enforce filesystem semantics - backends decide their behavior:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -2902,7 +2961,7 @@ let path = simplified(r"\\?\C:\Users\foo\bar.txt");
 </span>use anyfs::{FileStorage, MemoryBackend};
 use std::path::Path;
 
-// Built-in backends: Linux-like (case-sensitive)
+// Virtual backends: Linux-like (case-sensitive)
 let linux_fs = FileStorage::new(MemoryBackend::new());
 assert!(linux_fs.exists("/Foo.txt")? != linux_fs.exists("/foo.txt")?);
 
@@ -3210,7 +3269,7 @@ pub enum FsError {
         operation: &amp;'static str,
     },
 
-    /// Invalid password or encryption key (from SqliteCipherBackend).
+    /// Invalid password or encryption key (from SqliteBackend with encryption).
     InvalidPassword,
 
     /// Conflict during sync (from offline mode).
@@ -3259,14 +3318,13 @@ impl From&lt;std::io::Error&gt; for FsError {
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
 <tr><td><code>SqliteBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅*</td></tr>
-<tr><td><code>SqliteCipherBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td><code>IndexedBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td><code>StdFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td><code>VRootFsBackend</code></td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 </tbody>
 </table>
 </div>
-<p>*SQLite on WASM requires <code>wasm32</code> build of rusqlite with bundled SQLite.</p>
+<p>*SQLiteBackend on WASM requires <code>wasm32</code> build of rusqlite with bundled SQLite. Encryption feature not available on WASM.</p>
 <h3 id="feature-compatibility"><a class="header" href="#feature-compatibility">Feature Compatibility</a></h3>
 <div class="table-wrapper">
 <table>
@@ -3732,26 +3790,38 @@ struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 fn process_sandbox(fs: &amp;SandboxFs) { /* only accepts SandboxFs */ }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="adr-009-built-in-backends-are-feature-gated"><a class="header" href="#adr-009-built-in-backends-are-feature-gated">ADR-009: Built-in backends are feature-gated</a></h2>
-<p><strong>Decision:</strong> <code>anyfs</code> uses Cargo features so users only pull the dependencies they need.</p>
+<h2 id="adr-009-simple-backends-in-anyfs-complex-backends-as-ecosystem-crates"><a class="header" href="#adr-009-simple-backends-in-anyfs-complex-backends-as-ecosystem-crates">ADR-009: Simple backends in anyfs, complex backends as ecosystem crates</a></h2>
+<p><strong>Decision:</strong> Simple backends (<code>MemoryBackend</code>, <code>StdFsBackend</code>, <code>VRootFsBackend</code>) are built into <code>anyfs</code> with feature flags. Complex backends (<code>SqliteBackend</code>, <code>IndexedBackend</code>) live in separate ecosystem crates.</p>
+<p><strong>Built-in backends (anyfs features):</strong></p>
 <ul>
 <li><code>memory</code> (default)</li>
-<li><code>sqlite</code> (optional)</li>
+<li><code>stdfs</code> (optional)</li>
 <li><code>vrootfs</code> (optional)</li>
 </ul>
-<p><strong>Why:</strong> Minimizes binary size and compile time for users who don’t need all backends.</p>
+<p><strong>Ecosystem crates:</strong></p>
+<ul>
+<li><code>anyfs-sqlite</code> — <code>SqliteBackend</code> with optional <code>encryption</code> feature</li>
+<li><code>anyfs-indexed</code> — <code>IndexedBackend</code> (SQLite metadata + disk blobs)</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Simple backends have minimal dependencies (just <code>std</code>)</li>
+<li>Complex backends need internal runtimes (connection pools, sharding, chunking)</li>
+<li>Follows Tower/Axum pattern: framework is minimal, complex implementations in their own crates</li>
+<li>Reduces compile time and binary size for users who don’t need complex backends</li>
+</ul>
 <hr>
 <h2 id="adr-010-sync-first-async-ready-design"><a class="header" href="#adr-010-sync-first-async-ready-design">ADR-010: Sync-first, async-ready design</a></h2>
 <p><strong>Decision:</strong> <code>Fs</code> traits are synchronous. The API is designed to allow adding <code>AsyncFs</code> later without breaking changes.</p>
 <p><strong>Rationale:</strong></p>
 <ul>
-<li>All built-in backends are naturally synchronous:
+<li>Built-in backends are naturally synchronous:
 <ul>
 <li><code>MemoryBackend</code> - in-memory, instant</li>
-<li><code>SqliteBackend</code> - rusqlite is sync</li>
-<li><code>VRootFsBackend</code> - std::fs is sync</li>
+<li><code>StdFsBackend</code> / <code>VRootFsBackend</code> - std::fs is sync</li>
 </ul>
 </li>
+<li>Ecosystem backends are also sync (e.g., <code>SqliteBackend</code> uses rusqlite which is sync)</li>
 <li>Sync is simpler - no runtime dependency (tokio/async-std)</li>
 <li>Users can wrap sync backends in <code>spawn_blocking</code> if needed</li>
 </ul>
@@ -3810,7 +3880,8 @@ pub trait AsyncFs: Send + Sync {
 <p><strong>Example:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = SqliteBackend::open("data.db")?
+</span>// SqliteBackend from anyfs-sqlite crate
+let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::builder()
         .max_total_size(100_000)
         .build())
@@ -4061,7 +4132,6 @@ fs.write("/test.txt", b"hello")?;  // Logged but not written
 <li>Do NOT cache <code>open_read()</code> - streams are for large files that shouldn’t be cached.</li>
 <li>Invalidate cache entry on any write to that path.</li>
 <li>Use <code>lru</code> crate or similar for LRU eviction.</li>
-<li>Check TTL on cache hits; evict expired entries.</li>
 </ul>
 <hr>
 <h2 id="adr-021-overlay-for-union-filesystem"><a class="header" href="#adr-021-overlay-for-union-filesystem">ADR-021: Overlay for union filesystem</a></h2>
@@ -4069,7 +4139,8 @@ fs.write("/test.txt", b"hello")?;  // Logged but not written
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let base = SqliteBackend::open("base.db")?;  // Read-only base
+</span>// SqliteBackend from anyfs-sqlite crate
+let base = SqliteBackend::open("base.db")?;  // Read-only base
 let upper = MemoryBackend::new();             // Writable upper layer
 
 let overlay = Overlay::new(base, upper);
@@ -5147,7 +5218,7 @@ Are error messages informative?
 <p><strong>SQLite Metadata + Content-Addressed Blob Storage</strong></p>
 <p>This document describes the IndexedBackend architecture pattern: separating filesystem metadata (stored in SQLite) from file content (stored as blobs). This enables efficient queries, large file support, and flexible storage backends.</p>
 <blockquote>
-<p><strong>Built-in Implementation:</strong> AnyFS ships <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="#indexedbackend">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
+<p><strong>Ecosystem Implementation:</strong> The <code>anyfs-indexed</code> crate provides <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="#indexedbackend">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
 </blockquote>
 <hr>
 <h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
@@ -6778,10 +6849,10 @@ let fs = FileStorage::new(MemoryBackend::new());
 <p>With middleware (layer-based):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -6807,7 +6878,8 @@ let fs = FileStorage::with_resolver(
 <p>If you need compile-time safety to prevent mixing filesystems, create wrapper newtypes:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
+</span>use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Define your own wrapper types
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
@@ -6938,7 +7010,8 @@ impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
 <p>When you need simpler types (e.g., storing in collections), use <code>.boxed()</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs};
+</span>use anyfs::{MemoryBackend, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Type-erased for uniform storage
 let filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![
@@ -6980,8 +7053,8 @@ fs.write("/file.txt", b"data")?;
 <span class="boring">}</span></code></pre>
 <p><code>FileStorage&lt;B&gt;</code> is part of the <code>anyfs</code> crate, not a separate crate.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="built-in-backends-guide"><a class="header" href="#built-in-backends-guide">Built-in Backends Guide</a></h1>
-<p>This guide explains each built-in backend in AnyFS, how it works internally, when to use it, and the trade-offs involved.</p>
+<h1 id="backends-guide"><a class="header" href="#backends-guide">Backends Guide</a></h1>
+<p>This guide explains each backend available for AnyFS—both built-in (in <code>anyfs</code>) and ecosystem crates (<code>anyfs-sqlite</code>, <code>anyfs-indexed</code>)—how they work internally, when to use them, and the trade-offs involved.</p>
 <hr>
 <h2 id="quick-reference-which-backend-should-you-use"><a class="header" href="#quick-reference-which-backend-should-you-use">Quick Reference: Which Backend Should You Use?</a></h2>
 <blockquote>
@@ -6994,10 +7067,10 @@ fs.write("/file.txt", b"data")?;
 </thead>
 <tbody>
 <tr><td>Writing tests</td><td><strong>MemoryBackend</strong></td><td>Fast, isolated, no cleanup</td></tr>
-<tr><td>Running in WASM/browser</td><td><strong>MemoryBackend</strong></td><td>Simplest; SqliteBackend also works</td></tr>
-<tr><td>Need encrypted single-file storage</td><td><strong>SqliteCipherBackend</strong></td><td>AES-256, portable</td></tr>
-<tr><td>Need portable single-file database</td><td><strong>SqliteBackend</strong></td><td>Cross-platform, ACID</td></tr>
-<tr><td>Large files (&gt;100MB) with path isolation</td><td><strong>IndexedBackend</strong></td><td>Virtual paths + native disk I/O</td></tr>
+<tr><td>Running in WASM/browser</td><td><strong>MemoryBackend</strong></td><td>Simplest option</td></tr>
+<tr><td>Need encrypted single-file storage</td><td><strong>anyfs-sqlite: SqliteBackend</strong></td><td>AES-256 via <code>encryption</code> feature (ecosystem crate)</td></tr>
+<tr><td>Need portable single-file database</td><td><strong>anyfs-sqlite: SqliteBackend</strong></td><td>Cross-platform, ACID (ecosystem crate)</td></tr>
+<tr><td>Large files (&gt;100MB) with path isolation</td><td><strong>anyfs-indexed: IndexedBackend</strong></td><td>Virtual paths + native disk I/O (ecosystem crate)</td></tr>
 <tr><td>Containing untrusted code to a directory</td><td><strong>VRootFsBackend</strong></td><td>Prevents path traversal attacks</td></tr>
 <tr><td>Working with real files in trusted environment</td><td><strong>StdFsBackend</strong></td><td>Direct OS operations</td></tr>
 <tr><td>Need layered filesystem (container-like)</td><td><strong>Overlay</strong> (middleware)</td><td>Base + writable upper layer</td></tr>
@@ -7005,6 +7078,9 @@ fs.write("/file.txt", b"data")?;
 </table>
 </div>
 <p>⚠️ <strong>Security Warning:</strong> <code>StdFsBackend</code> provides <strong>NO isolation</strong>. Never use with untrusted input.</p>
+<blockquote>
+<p><strong>Ecosystem Crates:</strong> Complex backends like <code>SqliteBackend</code> and <code>IndexedBackend</code> live in separate crates (<code>anyfs-sqlite</code>, <code>anyfs-indexed</code>) because they require internal runtime complexity (connection pooling, sharding, chunking).</p>
+</blockquote>
 <hr>
 <h2 id="backend-categories"><a class="header" href="#backend-categories">Backend Categories</a></h2>
 <p>AnyFS backends fall into two fundamental categories based on <strong>who resolves paths</strong>:</p>
@@ -7094,8 +7170,8 @@ fs.write("/data.txt", b"Hello, World!")?;
 <tr><td>Integration tests</td><td>✅ <strong>Ideal</strong> - no filesystem pollution</td></tr>
 <tr><td>Temporary workspaces</td><td>✅ <strong>Good</strong> - fast scratch space</td></tr>
 <tr><td>Build caches</td><td>✅ <strong>Good</strong> - if fits in memory</td></tr>
-<tr><td>WASM/Browser</td><td>✅ <strong>Ideal</strong> - simplest option (SqliteBackend also works)</td></tr>
-<tr><td>Large file storage</td><td>❌ <strong>Avoid</strong> - use SqliteBackend or disk</td></tr>
+<tr><td>WASM/Browser</td><td>✅ <strong>Ideal</strong> - simplest option</td></tr>
+<tr><td>Large file storage</td><td>❌ <strong>Avoid</strong> - use anyfs-sqlite or disk</td></tr>
 <tr><td>Persistent data</td><td>❌ <strong>Avoid</strong> - unless you handle serialization</td></tr>
 </tbody>
 </table>
@@ -7112,15 +7188,20 @@ fs.write("/data.txt", b"Hello, World!")?;
 <p><strong>❌ DON’T USE MemoryBackend when:</strong></p>
 <ul>
 <li>Storing files larger than available RAM</li>
-<li>Data must survive process restart (use SqliteBackend)</li>
+<li>Data must survive process restart (use anyfs-sqlite)</li>
 <li>Working with existing files on disk (use VRootFsBackend)</li>
 </ul>
 <hr>
-<h3 id="sqlitebackend"><a class="header" href="#sqlitebackend">SqliteBackend</a></h3>
+<h3 id="sqlitebackend-ecosystem-crate"><a class="header" href="#sqlitebackend-ecosystem-crate">SqliteBackend (Ecosystem Crate)</a></h3>
+<blockquote>
+<p><strong>Crate:</strong> <code>anyfs-sqlite</code></p>
+<p>Complex backends live in separate crates. See AGENTS.md “Crate Ecosystem” section.</p>
+</blockquote>
 <p>Stores the entire filesystem in a single SQLite database file.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, FileStorage};
+</span>use anyfs_sqlite::SqliteBackend;
+use anyfs::FileStorage;
 
 let fs = FileStorage::new(SqliteBackend::open("myfs.db")?);
 fs.write("/documents/report.txt", b"Annual Report")?;
@@ -7155,7 +7236,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <li><strong>Cross-platform</strong> - works on all platforms including WASM</li>
 <li><strong>Complete isolation</strong> - no interaction with host filesystem</li>
 <li><strong>Queryable</strong> - can inspect with SQLite tools</li>
-<li><strong>Encryption available</strong> - via <code>SqliteCipherBackend</code></li>
+<li><strong>Optional encryption</strong> - AES-256 via SQLCipher with <code>encryption</code> feature</li>
 </ul>
 <h4 id="disadvantages-1"><a class="header" href="#disadvantages-1">Disadvantages</a></h4>
 <ul>
@@ -7173,7 +7254,7 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <tr><td>Portable storage</td><td>✅ <strong>Ideal</strong> - single file, works everywhere</td></tr>
 <tr><td>Embedded databases</td><td>✅ <strong>Ideal</strong> - self-contained</td></tr>
 <tr><td>Sandboxed environments</td><td>✅ <strong>Good</strong> - complete isolation</td></tr>
-<tr><td>Encrypted storage</td><td>✅ <strong>Good</strong> - use SqliteCipherBackend</td></tr>
+<tr><td>Encrypted storage</td><td>✅ <strong>Good</strong> - use <code>open_encrypted()</code> with feature</td></tr>
 <tr><td>Archive/backup</td><td>✅ <strong>Good</strong> - atomic, portable</td></tr>
 <tr><td>Large media files</td><td>✅ <strong>Works</strong> - higher memory pressure during I/O</td></tr>
 <tr><td>High-throughput I/O</td><td>⚠️ <strong>Tradeoff</strong> - database overhead vs MemoryBackend</td></tr>
@@ -7186,25 +7267,27 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 <li>Need portable, single-file storage (easy to copy, backup, share)</li>
 <li>Building embedded/self-contained applications</li>
 <li>Complete isolation from host filesystem is required</li>
-<li>Want encryption (use SqliteCipherBackend)</li>
+<li>Want encryption (use <code>open_encrypted()</code> with <code>encryption</code> feature)</li>
 <li>Need ACID transactions and crash recovery</li>
 <li>Cross-platform consistency is critical</li>
 </ul>
 <p><strong>❌ DON’T USE SqliteBackend when:</strong></p>
 <ul>
 <li>Files must be accessible to external tools (use VRootFsBackend)</li>
-<li>Minimizing memory pressure for very large files is critical (use IndexedBackend)</li>
+<li>Minimizing memory pressure for very large files is critical (use anyfs-indexed)</li>
 </ul>
 <hr>
-<h3 id="indexedbackend"><a class="header" href="#indexedbackend">IndexedBackend</a></h3>
-<p>A hybrid backend: <strong>virtual paths</strong> with <strong>disk-based content storage</strong>. Paths, directories, symlinks, and metadata are stored in an index database. File content is stored on the real filesystem as opaque blobs.</p>
+<h3 id="indexedbackend-ecosystem-crate"><a class="header" href="#indexedbackend-ecosystem-crate">IndexedBackend (Ecosystem Crate)</a></h3>
 <blockquote>
-<p><strong>Feature:</strong> <code>indexed</code></p>
-<p><strong>Key insight:</strong> Same isolation model as SqliteBackend, but file content stored externally for native I/O performance with large files.</p>
+<p><strong>Crate:</strong> <code>anyfs-indexed</code></p>
+<p>Complex backends live in separate crates. See AGENTS.md “Crate Ecosystem” section.</p>
 </blockquote>
+<p>A hybrid backend: <strong>virtual paths</strong> with <strong>disk-based content storage</strong>. Paths, directories, symlinks, and metadata are stored in an index database. File content is stored on the real filesystem as opaque blobs.</p>
+<p><strong>Key insight:</strong> Same isolation model as SqliteBackend, but file content stored externally for native I/O performance with large files.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{IndexedBackend, FileStorage};
+</span>use anyfs_indexed::IndexedBackend;
+use anyfs::FileStorage;
 
 // Files stored in ./storage/, index in ./storage/index.db
 let fs = FileStorage::new(IndexedBackend::open("./storage")?);
@@ -7274,7 +7357,7 @@ index.db contains:
 <tr><td>Media libraries</td><td>✅ <strong>Ideal</strong> - stream large videos/images</td></tr>
 <tr><td>Document management</td><td>✅ <strong>Good</strong> - virtual paths + fast I/O</td></tr>
 <tr><td>Sandboxed + large files</td><td>✅ <strong>Ideal</strong> - virtual paths, real I/O</td></tr>
-<tr><td>Single-file portability</td><td>❌ <strong>Avoid</strong> - use SqliteBackend</td></tr>
+<tr><td>Single-file portability</td><td>❌ <strong>Avoid</strong> - use anyfs-sqlite: SqliteBackend</td></tr>
 <tr><td>Content confidentiality</td><td>⚠️ <strong>Wrap</strong> - use Encryption middleware for protection</td></tr>
 <tr><td>WASM/Browser</td><td>❌ <strong>Avoid</strong> - requires real filesystem</td></tr>
 </tbody>
@@ -7290,9 +7373,9 @@ index.db contains:
 </ul>
 <p><strong>❌ DON’T USE IndexedBackend when:</strong></p>
 <ul>
-<li>Need single-file portability (use SqliteBackend)</li>
-<li>Content must be hidden from host filesystem (use SqliteBackend or SqliteCipherBackend)</li>
-<li>Need WASM/browser support (use MemoryBackend or SqliteBackend)</li>
+<li>Need single-file portability (use anyfs-sqlite: SqliteBackend)</li>
+<li>Content must be hidden from host filesystem (use anyfs-sqlite: SqliteBackend with encryption)</li>
+<li>Need WASM/browser support (use MemoryBackend)</li>
 </ul>
 <blockquote>
 <p>🔒 <strong>Encryption Tip:</strong> If you need large file performance but content confidentiality matters, wrap IndexedBackend with <code>Encryption&lt;B&gt;</code> middleware to encrypt blob contents at rest. This protects data while preserving native I/O streaming.</p>
@@ -7482,10 +7565,10 @@ fs.read("/../../../etc/passwd")?;
 </blockquote>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, MemoryBackend, Overlay, FileStorage};
+</span>use anyfs::{VRootFsBackend, MemoryBackend, Overlay, FileStorage};
 
 // Base: read-only template
-let base = SqliteBackend::open("template.db")?;
+let base = VRootFsBackend::new("/var/templates")?;
 
 // Upper: writable scratch layer  
 let upper = MemoryBackend::new();
@@ -7638,7 +7721,7 @@ fs.remove_file("/unwanted.txt")?;
 <tr><td>Unit testing</td><td>MemoryBackend</td></tr>
 <tr><td>Integration testing</td><td>MemoryBackend or SqliteBackend</td></tr>
 <tr><td>Portable application data</td><td>SqliteBackend</td></tr>
-<tr><td>Encrypted storage</td><td>SqliteCipherBackend</td></tr>
+<tr><td>Encrypted storage</td><td>SqliteBackend (with <code>encryption</code> feature)</td></tr>
 <tr><td>Large file + isolation</td><td>IndexedBackend</td></tr>
 <tr><td>Media libraries</td><td>IndexedBackend</td></tr>
 <tr><td>Plugin/agent sandboxing</td><td>VRootFsBackend</td></tr>
@@ -7721,7 +7804,7 @@ fs.remove_file("/unwanted.txt")?;
 <p>Think of backends like different types of filing cabinets:</p>
 <ul>
 <li><strong>MemoryBackend</strong> = Files in your brain (RAM)</li>
-<li><strong>SqliteBackend</strong> = Files in a database</li>
+<li><strong>anyfs-sqlite: SqliteBackend</strong> = Files in a database (ecosystem crate)</li>
 <li><strong>VRootFsBackend</strong> = Files on your hard drive</li>
 </ul>
 <p>The path simplification logic is <strong>the same</strong> for all of them:</p>
@@ -7894,8 +7977,9 @@ pub struct FileStorage&lt;B&gt; {
 </thead>
 <tbody>
 <tr><td>Build an application</td><td><code>anyfs</code></td></tr>
-<tr><td>Use built-in backends (Memory, SQLite, VRootFs)</td><td><code>anyfs</code></td></tr>
+<tr><td>Use built-in backends (Memory, StdFs, VRootFs)</td><td><code>anyfs</code></td></tr>
 <tr><td>Use built-in middleware (Quota, PathFilter, etc.)</td><td><code>anyfs</code></td></tr>
+<tr><td>Use SQLite or IndexedBackend</td><td><code>anyfs-sqlite</code> / <code>anyfs-indexed</code></td></tr>
 <tr><td>Implement a custom backend</td><td><code>anyfs-backend</code> only</td></tr>
 <tr><td>Implement custom middleware</td><td><code>anyfs-backend</code> only</td></tr>
 </tbody>
@@ -7916,10 +8000,10 @@ fs.write("/data/file.txt", b"hello")?;
 <h3 id="with-middleware-quotas-sandboxing-tracing"><a class="header" href="#with-middleware-quotas-sandboxing-tracing">With middleware (quotas, sandboxing, tracing)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, TracingLayer};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, PathFilterLayer, TracingLayer};
 use anyfs::FileStorage;
 
-let stack = SqliteBackend::open("tenant.db")?
+let stack = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -8024,7 +8108,7 @@ This is a planning/specification document, not actual API documentation.</p>
 <pre><code>Is data persistence required?
 ├─ NO → MemoryBackend
 └─ YES → Is encryption needed?
-         ├─ YES → SqliteCipherBackend
+         ├─ YES → SqliteBackend with `encryption` feature
          └─ NO → [continue decision tree...]
 </code></pre>
 <h3 id="2-common-patterns"><a class="header" href="#2-common-patterns">2. Common Patterns</a></h3>
@@ -8537,8 +8621,8 @@ impl FsRead for MyBackend {
 </span><span class="boring">fn main() {
 </span>// Bad: Requires database, filesystem, network
 #[test]
-fn test_sqlite_backend() {
-    let db = SqliteBackend::open("test.db").unwrap(); // Creates real file!
+fn test_vrootfs_backend() {
+    let db = VRootFsBackend::new("/tmp/test").unwrap(); // Creates real files!
     // ...
 }
 <span class="boring">}</span></code></pre>
@@ -8991,10 +9075,10 @@ let mount = MountHandle::mount(backend, "X:")?;
 <p>All middleware works transparently when mounted:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, PathFilter, Tracing, RateLimit, MountHandle};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, TracingLayer, RateLimitLayer, MountHandle};
 
 // Build secure, audited, rate-limited mount
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(1024 * 1024 * 1024)  // 1 GB
         .build())
@@ -9047,7 +9131,9 @@ std::process::Command::new("cargo")
 <h3 id="portable-database-as-drive"><a class="header" href="#portable-database-as-drive">Portable Database as Drive</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// User's files stored in SQLite
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// User's files stored in SQLite
 let db = SqliteBackend::open("user_files.db")?;
 let mount = MountHandle::mount(db, "U:")?;
 
@@ -11714,7 +11800,7 @@ backend
 <h3 id="1-middleware-composition-nobody-else-has-this"><a class="header" href="#1-middleware-composition-nobody-else-has-this">1. Middleware Composition (Nobody Else Has This)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let fs = SqliteBackend::open("data.db")?
+</span>let fs = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100_MB)
         .max_file_count(1000)
@@ -11732,7 +11818,9 @@ backend
 <h3 id="2-type-safe-domain-separation-user-defined-wrappers"><a class="header" href="#2-type-safe-domain-separation-user-defined-wrappers">2. Type-Safe Domain Separation (User-Defined Wrappers)</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Users who need type-safe domain separation can create wrapper types
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Users who need type-safe domain separation can create wrapper types
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
 struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 
@@ -12168,7 +12256,8 @@ let fs = FileStorage::new(sandbox);
 <h3 id="multi-tenant-isolation"><a class="header" href="#multi-tenant-isolation">Multi-Tenant Isolation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, FileStorage};
+</span>use anyfs::{QuotaLayer, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorage&lt;impl Fs&gt; {
     let db_path = format!("tenants/{}.db", tenant_id);
@@ -12185,10 +12274,10 @@ fn create_tenant_storage(tenant_id: &amp;str, quota_bytes: u64) -&gt; FileStorag
 <h3 id="read-only-browsing"><a class="header" href="#read-only-browsing">Read-Only Browsing</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, ReadOnly, FileStorage};
+</span>use anyfs::{VRootFsBackend, ReadOnly, FileStorage};
 
 let readonly_fs = FileStorage::new(
-    ReadOnly::new(SqliteBackend::open("archive.db")?)
+    ReadOnly::new(VRootFsBackend::new("/var/archive")?)
 );
 
 // All write operations return FsError::ReadOnly
@@ -12254,31 +12343,21 @@ let readonly_fs = FileStorage::new(
 <p><strong>Recommendation:</strong> For sensitive data, prefer container-level encryption. Use file-level encryption when you need selective access (some files encrypted, others not).</p>
 <h3 id="container-level-encryption"><a class="header" href="#container-level-encryption">Container-Level Encryption</a></h3>
 <h4 id="option-1-sqlcipher-backend"><a class="header" href="#option-1-sqlcipher-backend">Option 1: SQLCipher Backend</a></h4>
-<p><a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a> provides transparent AES-256 encryption for SQLite:</p>
+<p><a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a> provides transparent AES-256 encryption for SQLite. In AnyFS, encryption is a feature of <code>SqliteBackend</code> (from the <code>anyfs-sqlite</code> ecosystem crate), not a separate type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// SQLite backend with full database encryption via SQLCipher.
-pub struct SqliteCipherBackend {
-    conn: rusqlite::Connection,  // Built with sqlcipher feature
-}
+</span>/// SqliteBackend with encryption enabled (requires `encryption` feature).
+/// Uses SQLCipher for transparent AES-256 encryption.
+use anyfs_sqlite::SqliteBackend;
 
-impl SqliteCipherBackend {
-    pub fn open(path: &amp;str, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path)?;
-        // SQLCipher: derive key from password, encrypt everything
-        conn.pragma_update(None, "key", password)?;
-        Ok(Self { conn })
-    }
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-    pub fn open_with_key(path: &amp;str, key: &amp;[u8; 32]) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path)?;
-        // Use raw key instead of password
-        conn.pragma_update(None, "key", &amp;format!("x'{}'", hex::encode(key)))?;
-        Ok(Self { conn })
-    }
-}
+// Or open with raw 256-bit key
+let backend = SqliteBackend::open_with_key("secure.db", &amp;key)?;
 
-impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
+// Change password on open database
+backend.change_password("new_password")?;
 <span class="boring">}</span></code></pre>
 <p><strong>What’s protected:</strong></p>
 <ul>
@@ -12291,7 +12370,7 @@ impl Fs for SqliteCipherBackend { /* same as SqliteBackend */ }
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = SqliteCipherBackend::open("secure.db", "correct-horse-battery-staple")?;
+</span>let backend = SqliteBackend::open_encrypted("secure.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // If someone gets secure.db without the password, they see random bytes
@@ -12528,7 +12607,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <tr><th>Approach</th><th>Protects Contents</th><th>Protects Structure</th><th>RAM Security</th><th>Persistence</th></tr>
 </thead>
 <tbody>
-<tr><td><code>SqliteCipherBackend</code></td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
+<tr><td><code>SqliteBackend</code> with encryption</td><td>Yes</td><td>Yes</td><td>No (SQLite uses plaintext RAM)</td><td>Encrypted <code>.db</code> file</td></tr>
 <tr><td><code>FileEncryption&lt;B&gt;</code> middleware</td><td>Yes</td><td>No</td><td>Depends on B</td><td>Depends on B</td></tr>
 <tr><td><code>EncryptedMemoryBackend</code> (illustrative)</td><td>Yes</td><td>Yes</td><td>Yes (encrypted in RAM)</td><td>Via <code>save_to_file()</code></td></tr>
 <tr><td><code>IntegrityVerified&lt;B&gt;</code> middleware</td><td>No</td><td>No (files only)</td><td>No</td><td>Depends on B</td></tr>
@@ -12540,7 +12619,7 @@ mimalloc = { version = "0.1", features = ["secure"] }
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Full protection: encrypted container + secure memory practices
-let backend = SqliteCipherBackend::open("secure.db", password)?;
+let backend = SqliteBackend::open_encrypted("secure.db", password)?;
 let fs = FileStorage::new(backend);
 <span class="boring">}</span></code></pre>
 <h4 id="high-security-ram-processing-illustrative"><a class="header" href="#high-security-ram-processing-illustrative">High-Security RAM Processing (Illustrative)</a></h4>
@@ -12555,7 +12634,9 @@ backend.save_to_file("snapshot.enc")?;  // Persists encrypted
 <h4 id="selective-file-encryption"><a class="header" href="#selective-file-encryption">Selective File Encryption</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Some files encrypted, structure visible
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// Some files encrypted, structure visible
 let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
     .with_key(key);
 <span class="boring">}</span></code></pre>
@@ -12625,119 +12706,42 @@ let backend = FileEncryption::new(SqliteBackend::open("data.db")?)
 <tr><th>Security Level</th><th>Implementation</th><th>Why</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Locked (container)</strong></td><td><code>SqliteCipherBackend</code></td><td>Must encrypt entire <code>.db</code> file at storage level</td></tr>
+<tr><td><strong>Locked (container)</strong></td><td><code>SqliteBackend</code> with <code>encryption</code> feature</td><td>Must encrypt entire <code>.db</code> file at storage level</td></tr>
 <tr><td><strong>Privacy (file contents)</strong></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code> middleware</td><td>Content encryption is policy</td></tr>
 <tr><td><strong>Normal</strong></td><td><code>SqliteBackend</code></td><td>User applies encryption as needed</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Why Locked mode requires a separate backend:</strong></p>
+<p><strong>Why encryption is a feature, not a separate type:</strong></p>
 <ul>
-<li>SQLCipher encrypts the entire database file transparently</li>
+<li>SQLCipher is a drop-in replacement for SQLite with identical API</li>
+<li>The only difference is how the connection is opened (with password/key)</li>
 <li>Connection must be opened with password before ANY query</li>
 <li>Cannot be added as middleware - it’s a property of the connection itself</li>
 <li>Everything is encrypted: file contents, filenames, directory structure, timestamps, inodes</li>
 </ul>
-<h3 id="sqlitecipherbackend-built-in-feature-sqlite-cipher"><a class="header" href="#sqlitecipherbackend-built-in-feature-sqlite-cipher">SqliteCipherBackend (Built-in, feature: <code>sqlite-cipher</code>)</a></h3>
-<p>Full container encryption using <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a>:</p>
+<h3 id="sqlitebackend-encryption-ecosystem-crate-feature-encryption"><a class="header" href="#sqlitebackend-encryption-ecosystem-crate-feature-encryption">SqliteBackend Encryption (Ecosystem Crate, feature: <code>encryption</code>)</a></h3>
+<p>Full container encryption using <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a>. Encryption is a feature of <code>SqliteBackend</code>, not a separate type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// SQLite backend with full AES-256 encryption via SQLCipher.
-/// Requires `sqlite-cipher` feature (uses rusqlite with bundled-sqlcipher).
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+/// Encryption methods are only available with the `encryption` feature.
+/// Uses SQLCipher for transparent AES-256 encryption.
 ///
 /// Without the password, the .db file is indistinguishable from random bytes.
-pub struct SqliteCipherBackend {
-    conn: Connection,
-}
 
-impl SqliteCipherBackend {
-    /// Open with password (derives key via PBKDF2).
-    pub fn open(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path.as_ref())?;
+// Open with password (derives key via PBKDF2)
+let backend = SqliteBackend::open_encrypted("secure.db", "password")?;
 
-        // SQLCipher: Set encryption key derived from password
-        conn.pragma_update(None, "key", password)?;
+// Open with raw 256-bit key (no key derivation)
+let backend = SqliteBackend::open_with_key("secure.db", &amp;key)?;
 
-        // Verify we can read (wrong password = SQLITE_NOTADB)
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
+// Create new encrypted database
+let backend = SqliteBackend::create_encrypted("new.db", "password")?;
 
-        Self::init_schema(&amp;conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Open with raw 256-bit key (no key derivation).
-    pub fn open_with_key(path: impl AsRef&lt;Path&gt;, key: &amp;[u8; 32]) -&gt; Result&lt;Self, FsError&gt; {
-        let conn = Connection::open(path.as_ref())?;
-
-        // SQLCipher: Set raw key (hex-encoded with x'' prefix)
-        let hex_key = format!("x'{}'", hex::encode(key));
-        conn.pragma_update(None, "key", &amp;hex_key)?;
-
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .map_err(|_| FsError::InvalidPassword)?;
-
-        Self::init_schema(&amp;conn)?;
-        Ok(Self { conn })
-    }
-
-    /// Create new encrypted database with password.
-    pub fn create(path: impl AsRef&lt;Path&gt;, password: &amp;str) -&gt; Result&lt;Self, FsError&gt; {
-        if path.as_ref().exists() {
-            return Err(FsError::AlreadyExists { path: path.as_ref().to_path_buf(), operation: "create" });
-        }
-        Self::open(path, password)
-    }
-
-    /// Change the password on an open database.
-    pub fn change_password(&amp;self, new_password: &amp;str) -&gt; Result&lt;(), FsError&gt; {
-        self.conn.pragma_update(None, "rekey", new_password)?;
-        Ok(())
-    }
-
-    fn init_schema(conn: &amp;Connection) -&gt; Result&lt;(), FsError&gt; {
-        conn.execute_batch(r#"
-            -- Node table: directories, files, symlinks
-            CREATE TABLE IF NOT EXISTS nodes (
-                inode INTEGER PRIMARY KEY,
-                parent_inode INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                node_type INTEGER NOT NULL,  -- 0=file, 1=dir, 2=symlink
-                size INTEGER NOT NULL DEFAULT 0,
-                mode INTEGER NOT NULL DEFAULT 0o644,
-                nlink INTEGER NOT NULL DEFAULT 1,
-                uid INTEGER NOT NULL DEFAULT 0,
-                gid INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER,
-                modified_at INTEGER,
-                accessed_at INTEGER,
-                symlink_target TEXT,
-                UNIQUE(parent_inode, name),
-                FOREIGN KEY (parent_inode) REFERENCES nodes(inode)
-            );
-
-            -- Content table: file data (separate for efficient large files)
-            CREATE TABLE IF NOT EXISTS content (
-                inode INTEGER PRIMARY KEY,
-                data BLOB NOT NULL,
-                FOREIGN KEY (inode) REFERENCES nodes(inode) ON DELETE CASCADE
-            );
-
-            -- Index for directory listing performance
-            CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent_inode);
-
-            -- Root directory (inode 1, parent is self)
-            INSERT OR IGNORE INTO nodes (inode, parent_inode, name, node_type, mode)
-            VALUES (1, 1, '', 1, 0o755);
-        "#)?;
-        Ok(())
-    }
-}
-
-// Implements same traits as SqliteBackend - only difference is encrypted storage
-impl Fs for SqliteCipherBackend { /* ... */ }
-impl FsFull for SqliteCipherBackend { /* ... */ }
-impl FsFuse for SqliteCipherBackend { /* ... */ }
+// Change password on open database
+backend.change_password("new_password")?;
 <span class="boring">}</span></code></pre>
 <h4 id="what-sqlcipher-encrypts"><a class="header" href="#what-sqlcipher-encrypts">What SQLCipher Encrypts</a></h4>
 <div class="table-wrapper">
@@ -12760,26 +12764,20 @@ impl FsFuse for SqliteCipherBackend { /* ... */ }
 </div>
 <h4 id="cargo-configuration"><a class="header" href="#cargo-configuration">Cargo Configuration</a></h4>
 <pre><code class="language-toml">[dependencies]
-# Regular SQLite (no encryption)
-rusqlite = { version = "0.31", features = ["bundled"] }
-
-# SQLCipher (full encryption) - mutually exclusive with above
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+# anyfs-sqlite ecosystem crate with optional encryption
+anyfs-sqlite = { version = "0.1" }                     # No encryption
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
 </code></pre>
-<p><strong>Feature flags in anyfs:</strong></p>
-<pre><code class="language-toml">[features]
-default = ["memory"]
-sqlite = ["rusqlite/bundled"]
-sqlite-cipher = ["rusqlite/bundled-sqlcipher"]  # Replaces sqlite
-</code></pre>
-<p><strong>Note:</strong> <code>sqlite</code> and <code>sqlite-cipher</code> are mutually exclusive. SQLCipher is a drop-in replacement with the same schema and API.</p>
+<p><strong>Note:</strong> The <code>encryption</code> feature enables SQLCipher. When enabled, <code>open_encrypted()</code> and <code>open_with_key()</code> methods become available.</p>
 <h3 id="achieving-security-modes-with-composition"><a class="header" href="#achieving-security-modes-with-composition">Achieving Security Modes with Composition</a></h3>
 <p>Users compose backends and middleware to achieve their desired security level:</p>
 <h4 id="locked-mode-full-container-encryption"><a class="header" href="#locked-mode-full-container-encryption">Locked Mode (Full Container Encryption)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Everything encrypted - password required to access anything
-let backend = SqliteCipherBackend::open("tenant.db", "correct-horse-battery-staple")?;
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
+// Everything encrypted - password required to access anything
+let backend = SqliteBackend::open_encrypted("tenant.db", "correct-horse-battery-staple")?;
 let fs = FileStorage::new(backend);
 
 // Without password: .db file is random bytes
@@ -12788,7 +12786,9 @@ let fs = FileStorage::new(backend);
 <h4 id="privacy-mode-contents-encrypted-metadata-visible"><a class="header" href="#privacy-mode-contents-encrypted-metadata-visible">Privacy Mode (Contents Encrypted, Metadata Visible)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// File contents encrypted, metadata (names, sizes, structure) visible
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// File contents encrypted, metadata (names, sizes, structure) visible
 let backend = FileEncryption::new(
     SqliteBackend::open("tenant.db")?
 )
@@ -12802,7 +12802,9 @@ let fs = FileStorage::new(backend);
 <h4 id="normal-mode-no-encryption"><a class="header" href="#normal-mode-no-encryption">Normal Mode (No Encryption)</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// No encryption - user encrypts sensitive files themselves
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// No encryption - user encrypts sensitive files themselves
 let backend = SqliteBackend::open("tenant.db")?;
 let fs = FileStorage::new(backend);
 
@@ -12815,7 +12817,7 @@ let fs = FileStorage::new(backend);
 <tr><th>Aspect</th><th>Locked</th><th>Privacy</th><th>Normal</th></tr>
 </thead>
 <tbody>
-<tr><td>Implementation</td><td><code>SqliteCipherBackend</code></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code></td><td><code>SqliteBackend</code></td></tr>
+<tr><td>Implementation</td><td><code>SqliteBackend</code> with <code>encryption</code></td><td><code>FileEncryption&lt;SqliteBackend&gt;</code></td><td><code>SqliteBackend</code></td></tr>
 <tr><td>File contents</td><td>Encrypted (SQLCipher)</td><td>Encrypted (AES-GCM)</td><td>Plaintext</td></tr>
 <tr><td>Filenames</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
 <tr><td>Directory structure</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
@@ -12823,7 +12825,7 @@ let fs = FileStorage::new(backend);
 <tr><td>Timestamps</td><td>Encrypted</td><td>Visible</td><td>Visible</td></tr>
 <tr><td>Host can analyze</td><td>Nothing</td><td>Metadata only</td><td>Everything</td></tr>
 <tr><td>Performance</td><td>Slowest (~10-15% overhead)</td><td>Medium</td><td>Fastest</td></tr>
-<tr><td>Feature flag</td><td><code>sqlite-cipher</code></td><td><code>sqlite</code> + middleware</td><td><code>sqlite</code></td></tr>
+<tr><td>Feature flag</td><td><code>encryption</code></td><td>middleware</td><td>(none)</td></tr>
 </tbody>
 </table>
 </div>
@@ -12862,13 +12864,15 @@ impl SecureSqliteBackend {
 <h4 id="multi-tenant-isolation-1"><a class="header" href="#multi-tenant-isolation-1">Multi-Tenant Isolation</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Each tenant gets their own .db file - complete physical isolation
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
+
+/// Each tenant gets their own .db file - complete physical isolation
 fn create_tenant_storage(tenant_id: &amp;str, encrypted: bool) -&gt; impl Fs {
     let path = format!("tenants/{}.db", tenant_id);
 
     if encrypted {
         let password = get_tenant_password(tenant_id);
-        SqliteCipherBackend::open(&amp;path, &amp;password).unwrap()
+        SqliteBackend::open_encrypted(&amp;path, &amp;password).unwrap()
     } else {
         SqliteBackend::open(&amp;path).unwrap()
     }
@@ -12938,10 +12942,10 @@ fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Re
     std::fs::read(safe_path)  // Another process could have modified
 }
 <span class="boring">}</span></code></pre>
-<p><strong>After (SqliteCipherBackend):</strong></p>
+<p><strong>After (SqliteBackend with encryption - ecosystem crate):</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::SqliteCipherBackend;
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate with `encryption` feature
 
 fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt; {
     // Separate encrypted database per tenant - no path containment needed
@@ -12961,7 +12965,7 @@ fn handle_tenant_request(tenant_id: &amp;str, requested_path: &amp;str) -&gt; Re
 <tr><td>Symlink attacks</td><td>Resolved at check time</td><td><strong>We control all symlinks</strong></td></tr>
 <tr><td>Cross-tenant leakage</td><td>Bug in filtering could leak</td><td><strong>No shared data exists</strong></td></tr>
 <tr><td>Performance</td><td>Real FS I/O + canonicalization</td><td>SQLite (often faster for small files)</td></tr>
-<tr><td>Encryption</td><td>Separate concern</td><td>Built-in (<code>SqliteCipherBackend</code>) or middleware</td></tr>
+<tr><td>Encryption</td><td>Separate concern</td><td>Built-in (<code>encryption</code> feature) or middleware</td></tr>
 </tbody>
 </table>
 </div>
@@ -13041,10 +13045,10 @@ fs.toolcall_start("tool")?;  // Auditing bundled
 <p>Tower-style middleware + pluggable backends:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 // Compose middleware stack
-let backend = SqliteBackend::open("data.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -13351,9 +13355,9 @@ let vfs_fs: Box&lt;dyn vfs::FileSystem&gt; = Box::new(AnyFsCompat::new(anyfs_bac
 <p>The middleware pattern (like Tower/Axum) enables composition:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, PathFilterLayer, TracingLayer, FileStorage};
 
-let backend = SqliteBackend::open("tenant.db")?
+let backend = MemoryBackend::new()
     .layer(QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)
         .build())
@@ -14505,7 +14509,8 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <ul>
 <li>Walks path component by component using <code>metadata()</code> and <code>read_link()</code></li>
 <li>Handles <code>..</code> correctly after symlink resolution (symlink-aware, not lexical)</li>
-<li>Follows symlinks for non-<code>SelfResolving</code> backends that implement <code>FsLink</code> (no toggle)</li>
+<li>Default <code>IterativeResolver</code> follows symlinks for backends that implement <code>FsLink</code></li>
+<li>Custom resolvers can implement different behaviors (e.g., no symlink following)</li>
 <li>Detects circular symlinks (max depth or visited set)</li>
 <li>Returns canonical resolved path to the backend</li>
 </ul>
@@ -14519,25 +14524,6 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li>Implements: <code>Fs</code> + <code>FsLink</code> + <code>FsPermissions</code> + <code>FsSync</code> + <code>FsStats</code> + <code>FsInode</code> = <code>FsFuse</code></li>
 <li>FileStorage handles path resolution (symlink-aware)</li>
 <li>Inode source: internal node IDs (incrementing counter)</li>
-</ul>
-</li>
-<li><code>sqlite</code> (optional): <code>SqliteBackend</code>
-<ul>
-<li>Implements: <code>FsFuse</code> (all traits through Layer 3)</li>
-<li>FileStorage handles path resolution (symlink-aware)</li>
-<li>Inode source: SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</li>
-</ul>
-</li>
-<li><code>sqlite-cipher</code> (optional): <code>SqliteCipherBackend</code>
-<ul>
-<li>Implements: <code>FsFuse</code> (same as SqliteBackend)</li>
-<li>Full AES-256 encryption via <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a></li>
-<li>Password-protected: <code>.db</code> file is random bytes without password</li>
-<li>Uses <code>rusqlite</code> with <code>bundled-sqlcipher</code> feature</li>
-<li><code>open(path, password)</code> - derive key from password (PBKDF2)</li>
-<li><code>open_with_key(path, key)</code> - use raw 256-bit key</li>
-<li><code>change_password(new_password)</code> - re-key database</li>
-<li><strong>Mutually exclusive with <code>sqlite</code> feature</strong> (different SQLite builds)</li>
 </ul>
 </li>
 <li><code>stdfs</code> (optional): <code>StdFsBackend</code> - direct <code>std::fs</code> delegation
@@ -15015,7 +15001,8 @@ impl&lt;B: Fs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <p>Expose any <code>Fs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Your storage backend with quotas and audit logging
@@ -15097,7 +15084,8 @@ let fs = FileStorage::new(backend);
 <h4 id="multi-tenant-cloud-storage-example"><a class="header" href="#multi-tenant-cloud-storage-example">Multi-Tenant Cloud Storage Example</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, PathFilterLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
@@ -15150,7 +15138,8 @@ S3Server::new_multi_tenant(|request| {
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
@@ -15194,7 +15183,8 @@ sftp&gt; rm old_file.txt
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, MountHandle};
+</span>use anyfs::{QuotaLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_ssh_shell::SshShellServer;
 
 // On user login, mount their isolated storage as $HOME
@@ -16658,7 +16648,7 @@ fs.save_to("state.bin")?;
 // Load from disk
 let fs = MemoryBackend::load_from("state.bin")?;
 <span class="boring">}</span></code></pre>
-<h3 id="sqlitebackend-1"><a class="header" href="#sqlitebackend-1">SqliteBackend</a></h3>
+<h3 id="sqlitebackend"><a class="header" href="#sqlitebackend">SqliteBackend</a></h3>
 <p>SQLite already has persistence - the database file IS the snapshot. For explicit snapshots:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -17883,7 +17873,10 @@ impl AuditLogger {
 <p>Use <code>PathFilterLayer</code> middleware for path-based restrictions:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = SqliteBackend::open("data.db")?
+</span>use anyfs::{PathFilterLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+let backend = SqliteBackend::open("data.db")?
     .layer(PathFilterLayer::builder()
         // Allow specific directories
         .allow("/home/{user}/**")
@@ -18106,12 +18099,11 @@ fn memory_backend_conformance() {
 }
 
 #[test]
-fn sqlite_backend_conformance() {
+fn vrootfs_backend_conformance() {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
     run_conformance_suite(
-        SqliteBackend::open(&amp;db_path).unwrap(),
-        ConformanceLevel::FsFuse,
+        VRootFsBackend::new(temp.path()).unwrap(),
+        ConformanceLevel::FsFull,
     );
 }
 <span class="boring">}</span></code></pre>
@@ -18576,7 +18568,8 @@ fn test_filestorage_wrapper_types() {
 #[test]
 fn test_filestorage_boxed() {
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
-    let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
+    let temp = tempfile::tempdir().unwrap();
+    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
@@ -19245,10 +19238,9 @@ cargo test --target wasm32-unknown-unknown
 </span>// In anyfs-test crate
 
 /// Create a temporary backend for testing
-pub fn temp_sqlite_backend() -&gt; (SqliteBackend, tempfile::TempDir) {
+pub fn temp_vrootfs_backend() -&gt; (VRootFsBackend, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
-    let backend = SqliteBackend::open(&amp;db_path).unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
     (backend, temp)
 }
 
@@ -19261,8 +19253,8 @@ where
     let backend = MemoryBackend::new();
     test(&amp;mut backend);
 
-    // SQLite
-    let (mut backend, _temp) = temp_sqlite_backend();
+    // VRootFs (real filesystem with containment)
+    let (mut backend, _temp) = temp_vrootfs_backend();
     test(&amp;mut backend);
 }
 <span class="boring">}</span></code></pre>
@@ -22778,7 +22770,10 @@ pub enum FsError {
 <p><strong>Already solved:</strong> <code>ReadOnly&lt;B&gt;</code> middleware blocks all writes.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let readonly_fs = FileStorage::new(
+</span>use anyfs::{ReadOnly, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );
 // All write operations return FsError::ReadOnly
@@ -23132,7 +23127,9 @@ pub struct SqliteBackend { ... }
 <p><strong>Resolution:</strong> Users who need type-safe domain separation can create wrapper types:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// User-defined wrapper types provide compile-time safety
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// User-defined wrapper types provide compile-time safety
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
 struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 
@@ -23177,7 +23174,8 @@ process_sandbox(&amp;userdata);  // Compile error - different type!
 <p><strong>Decision:</strong> Sync-first, async-ready (see ADR-010).</p>
 <p><strong>Rationale:</strong></p>
 <ul>
-<li>All built-in backends are naturally synchronous (rusqlite, std::fs, memory)</li>
+<li>Built-in backends are naturally synchronous (std::fs, memory)</li>
+<li>Ecosystem backends are also sync (e.g., rusqlite is sync)</li>
 <li>No runtime dependency (tokio/async-std) required</li>
 <li>Rust 1.75+ has native async traits, so adding later is low-cost</li>
 </ul>

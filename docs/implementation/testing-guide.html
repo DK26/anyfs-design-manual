@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -216,12 +216,11 @@ fn memory_backend_conformance() {
 }
 
 #[test]
-fn sqlite_backend_conformance() {
+fn vrootfs_backend_conformance() {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
     run_conformance_suite(
-        SqliteBackend::open(&amp;db_path).unwrap(),
-        ConformanceLevel::FsFuse,
+        VRootFsBackend::new(temp.path()).unwrap(),
+        ConformanceLevel::FsFull,
     );
 }
 <span class="boring">}</span></code></pre>
@@ -686,7 +685,8 @@ fn test_filestorage_wrapper_types() {
 #[test]
 fn test_filestorage_boxed() {
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
-    let fs2 = FileStorage::new(SqliteBackend::open(":memory:").unwrap()).boxed();
+    let temp = tempfile::tempdir().unwrap();
+    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
@@ -1355,10 +1355,9 @@ cargo test --target wasm32-unknown-unknown
 </span>// In anyfs-test crate
 
 /// Create a temporary backend for testing
-pub fn temp_sqlite_backend() -&gt; (SqliteBackend, tempfile::TempDir) {
+pub fn temp_vrootfs_backend() -&gt; (VRootFsBackend, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
-    let db_path = temp.path().join("test.db");
-    let backend = SqliteBackend::open(&amp;db_path).unwrap();
+    let backend = VRootFsBackend::new(temp.path()).unwrap();
     (backend, temp)
 }
 
@@ -1371,8 +1370,8 @@ where
     let backend = MemoryBackend::new();
     test(&amp;mut backend);
 
-    // SQLite
-    let (mut backend, _temp) = temp_sqlite_backend();
+    // VRootFs (real filesystem with containment)
+    let (mut backend, _temp) = temp_vrootfs_backend();
     test(&amp;mut backend);
 }
 <span class="boring">}</span></code></pre>

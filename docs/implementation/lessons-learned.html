@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -432,7 +432,10 @@ pub enum FsError {
 <p><strong>Already solved:</strong> <code>ReadOnly&lt;B&gt;</code> middleware blocks all writes.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let readonly_fs = FileStorage::new(
+</span>use anyfs::{ReadOnly, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+let readonly_fs = FileStorage::new(
     ReadOnly::new(SqliteBackend::open("archive.db")?)
 );
 // All write operations return FsError::ReadOnly

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -389,7 +389,9 @@
 <p><strong>Resolution:</strong> Users who need type-safe domain separation can create wrapper types:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// User-defined wrapper types provide compile-time safety
+</span>use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
+// User-defined wrapper types provide compile-time safety
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
 struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 
@@ -434,7 +436,8 @@ process_sandbox(&amp;userdata);  // Compile error - different type!
 <p><strong>Decision:</strong> Sync-first, async-ready (see ADR-010).</p>
 <p><strong>Rationale:</strong></p>
 <ul>
-<li>All built-in backends are naturally synchronous (rusqlite, std::fs, memory)</li>
+<li>Built-in backends are naturally synchronous (std::fs, memory)</li>
+<li>Ecosystem backends are also sync (e.g., rusqlite is sync)</li>
 <li>No runtime dependency (tokio/async-std) required</li>
 <li>Rust 1.75+ has native async traits, so adding later is low-cost</li>
 </ul>

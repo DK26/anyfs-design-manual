@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,10 +223,10 @@ let fs = FileStorage::new(MemoryBackend::new());
 <p>With middleware (layer-based):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, FileStorage};
+</span>use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, FileStorage};
 
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -252,7 +252,8 @@ let fs = FileStorage::with_resolver(
 <p>If you need compile-time safety to prevent mixing filesystems, create wrapper newtypes:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, FileStorage};
+</span>use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Define your own wrapper types
 struct SandboxFs(FileStorage&lt;MemoryBackend&gt;);
@@ -383,7 +384,8 @@ impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
 <p>When you need simpler types (e.g., storing in collections), use <code>.boxed()</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, SqliteBackend, FileStorage, Fs};
+</span>use anyfs::{MemoryBackend, FileStorage, Fs};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Type-erased for uniform storage
 let filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -451,26 +451,38 @@ struct UserDataFs(FileStorage&lt;SqliteBackend&gt;);
 fn process_sandbox(fs: &amp;SandboxFs) { /* only accepts SandboxFs */ }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="adr-009-built-in-backends-are-feature-gated"><a class="header" href="#adr-009-built-in-backends-are-feature-gated">ADR-009: Built-in backends are feature-gated</a></h2>
-<p><strong>Decision:</strong> <code>anyfs</code> uses Cargo features so users only pull the dependencies they need.</p>
+<h2 id="adr-009-simple-backends-in-anyfs-complex-backends-as-ecosystem-crates"><a class="header" href="#adr-009-simple-backends-in-anyfs-complex-backends-as-ecosystem-crates">ADR-009: Simple backends in anyfs, complex backends as ecosystem crates</a></h2>
+<p><strong>Decision:</strong> Simple backends (<code>MemoryBackend</code>, <code>StdFsBackend</code>, <code>VRootFsBackend</code>) are built into <code>anyfs</code> with feature flags. Complex backends (<code>SqliteBackend</code>, <code>IndexedBackend</code>) live in separate ecosystem crates.</p>
+<p><strong>Built-in backends (anyfs features):</strong></p>
 <ul>
 <li><code>memory</code> (default)</li>
-<li><code>sqlite</code> (optional)</li>
+<li><code>stdfs</code> (optional)</li>
 <li><code>vrootfs</code> (optional)</li>
 </ul>
-<p><strong>Why:</strong> Minimizes binary size and compile time for users who don’t need all backends.</p>
+<p><strong>Ecosystem crates:</strong></p>
+<ul>
+<li><code>anyfs-sqlite</code> — <code>SqliteBackend</code> with optional <code>encryption</code> feature</li>
+<li><code>anyfs-indexed</code> — <code>IndexedBackend</code> (SQLite metadata + disk blobs)</li>
+</ul>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Simple backends have minimal dependencies (just <code>std</code>)</li>
+<li>Complex backends need internal runtimes (connection pools, sharding, chunking)</li>
+<li>Follows Tower/Axum pattern: framework is minimal, complex implementations in their own crates</li>
+<li>Reduces compile time and binary size for users who don’t need complex backends</li>
+</ul>
 <hr>
 <h2 id="adr-010-sync-first-async-ready-design"><a class="header" href="#adr-010-sync-first-async-ready-design">ADR-010: Sync-first, async-ready design</a></h2>
 <p><strong>Decision:</strong> <code>Fs</code> traits are synchronous. The API is designed to allow adding <code>AsyncFs</code> later without breaking changes.</p>
 <p><strong>Rationale:</strong></p>
 <ul>
-<li>All built-in backends are naturally synchronous:
+<li>Built-in backends are naturally synchronous:
 <ul>
 <li><code>MemoryBackend</code> - in-memory, instant</li>
-<li><code>SqliteBackend</code> - rusqlite is sync</li>
-<li><code>VRootFsBackend</code> - std::fs is sync</li>
+<li><code>StdFsBackend</code> / <code>VRootFsBackend</code> - std::fs is sync</li>
 </ul>
 </li>
+<li>Ecosystem backends are also sync (e.g., <code>SqliteBackend</code> uses rusqlite which is sync)</li>
 <li>Sync is simpler - no runtime dependency (tokio/async-std)</li>
 <li>Users can wrap sync backends in <code>spawn_blocking</code> if needed</li>
 </ul>
@@ -529,7 +541,8 @@ pub trait AsyncFs: Send + Sync {
 <p><strong>Example:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = SqliteBackend::open("data.db")?
+</span>// SqliteBackend from anyfs-sqlite crate
+let backend = SqliteBackend::open("data.db")?
     .layer(QuotaLayer::builder()
         .max_total_size(100_000)
         .build())
@@ -780,7 +793,6 @@ fs.write("/test.txt", b"hello")?;  // Logged but not written
 <li>Do NOT cache <code>open_read()</code> - streams are for large files that shouldn’t be cached.</li>
 <li>Invalidate cache entry on any write to that path.</li>
 <li>Use <code>lru</code> crate or similar for LRU eviction.</li>
-<li>Check TTL on cache hits; evict expired entries.</li>
 </ul>
 <hr>
 <h2 id="adr-021-overlay-for-union-filesystem"><a class="header" href="#adr-021-overlay-for-union-filesystem">ADR-021: Overlay for union filesystem</a></h2>
@@ -788,7 +800,8 @@ fs.write("/test.txt", b"hello")?;  // Logged but not written
 <p><strong>Usage:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let base = SqliteBackend::open("base.db")?;  // Read-only base
+</span>// SqliteBackend from anyfs-sqlite crate
+let base = SqliteBackend::open("base.db")?;  // Read-only base
 let upper = MemoryBackend::new();             // Writable upper layer
 
 let overlay = Overlay::new(base, upper);

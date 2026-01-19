@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,12 +190,18 @@ anyfs = "0.1"
 </code></pre>
 <p>For additional backends:</p>
 <pre><code class="language-toml">[dependencies]
-anyfs = { version = "0.1", features = ["sqlite", "stdfs", "vrootfs"] }
+anyfs = { version = "0.1", features = ["stdfs", "vrootfs"] }
+
+# SQLite storage (ecosystem crate)
+anyfs-sqlite = "0.1"
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
+
+# Hybrid backend: SQLite metadata + disk blobs (ecosystem crate)
+anyfs-indexed = "0.1"
 </code></pre>
-<p>Available features:</p>
+<p>Available <code>anyfs</code> features:</p>
 <ul>
 <li><code>memory</code> — In-memory storage (default)</li>
-<li><code>sqlite</code> — SQLite-backed persistent storage</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment</li>
 </ul>
@@ -215,14 +221,14 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="with-quotas"><a class="header" href="#with-quotas">With Quotas</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, Quota, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, QuotaLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let backend = QuotaLayer::builder()
         .max_total_size(100 * 1024 * 1024)  // 100 MB
         .max_file_size(10 * 1024 * 1024)    // 10 MB per file
         .build()
-        .layer(SqliteBackend::open_or_create("data.db")?);
+        .layer(MemoryBackend::new());
 
     let fs = FileStorage::new(backend);
 
@@ -249,10 +255,10 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="full-stack-layer-based"><a class="header" href="#full-stack-layer-based">Full Stack (Layer-based)</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{SqliteBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, QuotaLayer, RestrictionsLayer, TracingLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let backend = SqliteBackend::open_or_create("data.db")?
+    let backend = MemoryBackend::new()
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .max_file_size(10 * 1024 * 1024)
@@ -427,13 +433,13 @@ fn test_quota_exceeded() {
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Use Case</th><th>Backend</th></tr>
+<tr><th>Use Case</th><th>Backend</th><th>Crate</th></tr>
 </thead>
 <tbody>
-<tr><td>Testing</td><td><code>MemoryBackend</code></td></tr>
-<tr><td>Production (portable)</td><td><code>SqliteBackend</code></td></tr>
-<tr><td>Host filesystem (with containment)</td><td><code>VRootFsBackend</code></td></tr>
-<tr><td>Host filesystem (direct access)</td><td><code>StdFsBackend</code></td></tr>
+<tr><td>Testing</td><td><code>MemoryBackend</code></td><td><code>anyfs</code></td></tr>
+<tr><td>Production (portable)</td><td><code>SqliteBackend</code></td><td><code>anyfs-sqlite</code></td></tr>
+<tr><td>Host filesystem (with containment)</td><td><code>VRootFsBackend</code></td><td><code>anyfs</code></td></tr>
+<tr><td>Host filesystem (direct access)</td><td><code>StdFsBackend</code></td><td><code>anyfs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -452,8 +458,9 @@ let fs = FileStorage::new(
 );
 
 // Sandboxed (layer-based)
+let temp_dir = tempfile::tempdir()?;
 let fs = FileStorage::new(
-    SqliteBackend::open("data.db")?
+    VRootFsBackend::new(temp_dir.path())?
         .layer(QuotaLayer::builder()
             .max_total_size(100 * 1024 * 1024)
             .build())
@@ -490,10 +497,11 @@ let fs = FileStorage::new(
 │                         │        └──────────────┘           │
 └─────────────────────────────────────────────────────────────┘
 </code></pre>
-<p><strong>SQLite Example (API sketch, planned):</strong></p>
+<p><strong>SQLite Example (using ecosystem crate - API sketch, planned):</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer, MountHandle};
+</span>use anyfs::{QuotaLayer, TracingLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 
 // Mount the drive
 let backend = SqliteBackend::open("tenant.db")?

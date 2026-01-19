@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -391,7 +391,8 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <ul>
 <li>Walks path component by component using <code>metadata()</code> and <code>read_link()</code></li>
 <li>Handles <code>..</code> correctly after symlink resolution (symlink-aware, not lexical)</li>
-<li>Follows symlinks for non-<code>SelfResolving</code> backends that implement <code>FsLink</code> (no toggle)</li>
+<li>Default <code>IterativeResolver</code> follows symlinks for backends that implement <code>FsLink</code></li>
+<li>Custom resolvers can implement different behaviors (e.g., no symlink following)</li>
 <li>Detects circular symlinks (max depth or visited set)</li>
 <li>Returns canonical resolved path to the backend</li>
 </ul>
@@ -405,25 +406,6 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li>Implements: <code>Fs</code> + <code>FsLink</code> + <code>FsPermissions</code> + <code>FsSync</code> + <code>FsStats</code> + <code>FsInode</code> = <code>FsFuse</code></li>
 <li>FileStorage handles path resolution (symlink-aware)</li>
 <li>Inode source: internal node IDs (incrementing counter)</li>
-</ul>
-</li>
-<li><code>sqlite</code> (optional): <code>SqliteBackend</code>
-<ul>
-<li>Implements: <code>FsFuse</code> (all traits through Layer 3)</li>
-<li>FileStorage handles path resolution (symlink-aware)</li>
-<li>Inode source: SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</li>
-</ul>
-</li>
-<li><code>sqlite-cipher</code> (optional): <code>SqliteCipherBackend</code>
-<ul>
-<li>Implements: <code>FsFuse</code> (same as SqliteBackend)</li>
-<li>Full AES-256 encryption via <a href="https://www.zetetic.net/sqlcipher/">SQLCipher</a></li>
-<li>Password-protected: <code>.db</code> file is random bytes without password</li>
-<li>Uses <code>rusqlite</code> with <code>bundled-sqlcipher</code> feature</li>
-<li><code>open(path, password)</code> - derive key from password (PBKDF2)</li>
-<li><code>open_with_key(path, key)</code> - use raw 256-bit key</li>
-<li><code>change_password(new_password)</code> - re-key database</li>
-<li><strong>Mutually exclusive with <code>sqlite</code> feature</strong> (different SQLite builds)</li>
 </ul>
 </li>
 <li><code>stdfs</code> (optional): <code>StdFsBackend</code> - direct <code>std::fs</code> delegation
@@ -901,7 +883,8 @@ impl&lt;B: Fs&gt; vfs::FileSystem for AnyFsCompat&lt;B&gt; { ... }
 <p>Expose any <code>Fs</code> backend as an S3-compatible API. Users access your storage with standard AWS SDKs.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Your storage backend with quotas and audit logging
@@ -983,7 +966,8 @@ let fs = FileStorage::new(backend);
 <h4 id="multi-tenant-cloud-storage-example"><a class="header" href="#multi-tenant-cloud-storage-example">Multi-Tenant Cloud Storage Example</a></h4>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, PathFilterLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, PathFilterLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_s3_server::S3Server;
 
 // Per-tenant backend factory
@@ -1036,7 +1020,8 @@ S3Server::new_multi_tenant(|request| {
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, QuotaLayer, TracingLayer};
+</span>use anyfs::{QuotaLayer, TracingLayer};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_sftp_server::SftpServer;
 
 // Per-user isolated backend factory
@@ -1080,7 +1065,8 @@ sftp&gt; rm old_file.txt
 <p><strong>Server implementation:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{SqliteBackend, Quota, MountHandle};
+</span>use anyfs::{QuotaLayer, MountHandle};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
 use anyfs_ssh_shell::SshShellServer;
 
 // On user login, mount their isolated storage as $HOME

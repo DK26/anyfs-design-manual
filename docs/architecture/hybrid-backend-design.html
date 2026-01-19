@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-f619f94e.js";
+            window.path_to_searchindex_js = "../searchindex-ab0abb75.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1628b8da.js"></script>
+        <script src="../toc-4ff2705e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,7 @@
 <p><strong>SQLite Metadata + Content-Addressed Blob Storage</strong></p>
 <p>This document describes the IndexedBackend architecture pattern: separating filesystem metadata (stored in SQLite) from file content (stored as blobs). This enables efficient queries, large file support, and flexible storage backends.</p>
 <blockquote>
-<p><strong>Built-in Implementation:</strong> AnyFS ships <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="../guides/backends-guide.html#indexedbackend">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
+<p><strong>Ecosystem Implementation:</strong> The <code>anyfs-indexed</code> crate provides <code>IndexedBackend</code> as a production-ready implementation using local disk blobs. See the <a href="../guides/backends-guide.html#indexedbackend">Backends Guide</a> for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).</p>
 </blockquote>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
