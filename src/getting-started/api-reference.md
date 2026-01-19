@@ -11,10 +11,11 @@
 anyfs = "0.1"
 ```
 
-With backends and optional features:
+With optional features and ecosystem crates:
 
 ```toml
-anyfs = { version = "0.1", features = ["sqlite", "vrootfs", "bytes"] }
+anyfs = { version = "0.1", features = ["vrootfs", "bytes"] }
+anyfs-sqlite = "0.1"  # SQLite backend (ecosystem crate)
 ```
 
 ---

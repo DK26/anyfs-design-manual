@@ -256,7 +256,8 @@ Based on review feedback, the following naming concerns were raised:
 **Decision:** Sync-first, async-ready (see ADR-010).
 
 **Rationale:**
-- All built-in backends are naturally synchronous (rusqlite, std::fs, memory)
+- Built-in backends are naturally synchronous (std::fs, memory)
+- Ecosystem backends are also sync (e.g., rusqlite is sync)
 - No runtime dependency (tokio/async-std) required
 - Rust 1.75+ has native async traits, so adding later is low-cost
 

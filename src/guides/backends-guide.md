@@ -1,6 +1,6 @@
-# Built-in Backends Guide
+# Backends Guide
 
-This guide explains each built-in backend in AnyFS, how it works internally, when to use it, and the trade-offs involved.
+This guide explains each backend available for AnyFS—both built-in (in `anyfs`) and ecosystem crates (`anyfs-sqlite`, `anyfs-indexed`)—how they work internally, when to use them, and the trade-offs involved.
 
 ---
 

@@ -17,12 +17,18 @@ For additional backends:
 
 ```toml
 [dependencies]
-anyfs = { version = "0.1", features = ["sqlite", "stdfs", "vrootfs"] }
+anyfs = { version = "0.1", features = ["stdfs", "vrootfs"] }
+
+# SQLite storage (ecosystem crate)
+anyfs-sqlite = "0.1"
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
+
+# Hybrid backend: SQLite metadata + disk blobs (ecosystem crate)
+anyfs-indexed = "0.1"
 ```
 
-Available features:
+Available `anyfs` features:
 - `memory` — In-memory storage (default)
-- `sqlite` — SQLite-backed persistent storage
 - `stdfs` — Direct `std::fs` delegation (no containment)
 - `vrootfs` — Host filesystem backend with path containment
 

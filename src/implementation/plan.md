@@ -225,7 +225,8 @@ FileStorage handles path resolution for ALL backends (unless they implement `Sel
 
 - Walks path component by component using `metadata()` and `read_link()`
 - Handles `..` correctly after symlink resolution (symlink-aware, not lexical)
-- Follows symlinks for non-`SelfResolving` backends that implement `FsLink` (no toggle)
+- Default `IterativeResolver` follows symlinks for backends that implement `FsLink`
+- Custom resolvers can implement different behaviors (e.g., no symlink following)
 - Detects circular symlinks (max depth or visited set)
 - Returns canonical resolved path to the backend
 
@@ -241,15 +242,6 @@ Each backend implements the traits it supports:
   - Implements: `Fs` + `FsLink` + `FsPermissions` + `FsSync` + `FsStats` + `FsInode` = `FsFuse`
   - FileStorage handles path resolution (symlink-aware)
   - Inode source: internal node IDs (incrementing counter)
-- `sqlite` (optional): `SqliteBackend`
-  - Implements: `FsFuse` (all traits through Layer 3)
-  - FileStorage handles path resolution (symlink-aware)
-  - Inode source: SQLite row IDs (`INTEGER PRIMARY KEY`)
-  - Optional encryption via SQLCipher with `encryption` feature:
-    - `open_encrypted(path, password)` - derive key from password (PBKDF2)
-    - `open_with_key(path, key)` - use raw 256-bit key
-    - `change_password(new_password)` - re-key database
-    - Uses `rusqlite` with `bundled-sqlcipher` feature when encryption enabled
 - `stdfs` (optional): `StdFsBackend` - direct `std::fs` delegation
   - Implements: `FsPosix` (all traits including Layer 4) + `SelfResolving`
   - Implements `SelfResolving` (OS handles resolution)

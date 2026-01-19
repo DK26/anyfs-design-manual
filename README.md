@@ -75,6 +75,9 @@ Instead of burdening your application code with policy logic (*"encrypt this, th
 ### Backend Agnostic
 
 ```rust
+use anyfs::{MemoryBackend, VRootFsBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // Today: SQLite for portability
 let backend = SqliteBackend::open("data.db")?;
 
@@ -127,12 +130,15 @@ FsRead + FsWrite + FsDir  ← Core traits
 Users who need type-safe domain separation can create wrapper types:
 
 ```rust
+use anyfs::{MemoryBackend, FileStorage};
+use anyfs_sqlite::SqliteBackend;  // Ecosystem crate
+
 // User-defined wrapper types
 struct SandboxFs(FileStorage<MemoryBackend>);
 struct UserDataFs(FileStorage<SqliteBackend>);
 
 let sandbox = SandboxFs(FileStorage::new(MemoryBackend::new()));
-let userdata = UserDataFs(FileStorage::new(SqliteBackend::open("data.db")?));
+let userdata = UserDataFs(FileStorage::new(SqliteBackend::open("data.db")?));;
 
 fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 
@@ -424,18 +430,24 @@ let content = fs.read_to_string("/docs/hello.txt")?;
 
 ## Crate Structure
 
-| Crate           | Purpose                                                                                       |
-| --------------- | --------------------------------------------------------------------------------------------- |
-| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors               |
-| `anyfs`         | Built-in backends, middleware, `FileStorage<B>` wrapper, mounting (`fuse`, `winfsp` features) |
+| Crate           | Purpose                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------- |
+| `anyfs-backend` | Core traits (`Fs`, `FsFull`, `FsFuse`, `FsPosix`), `Layer` trait, types, errors                                |
+| `anyfs`         | Built-in backends (Memory, StdFs, VRootFs), middleware, `FileStorage<B>`, mounting (`fuse`, `winfsp` features) |
+| `anyfs-sqlite`  | SQLite backend (ecosystem crate) with optional `encryption` feature                                            |
+| `anyfs-indexed` | Hybrid backend: SQLite metadata + disk blobs (ecosystem crate)                                                 |
 
 ```toml
 [dependencies]
-anyfs = { version = "0.1", features = ["sqlite"] }
+anyfs = "0.1"
+
+# For SQLite storage:
+anyfs-sqlite = "0.1"
+anyfs-sqlite = { version = "0.1", features = ["encryption"] }  # With SQLCipher
 
 # For mounting as virtual drive:
-anyfs = { version = "0.1", features = ["sqlite", "fuse"] }  # Linux/macOS
-anyfs = { version = "0.1", features = ["sqlite", "winfsp"] } # Windows
+anyfs = { version = "0.1", features = ["fuse"] }    # Linux/macOS
+anyfs = { version = "0.1", features = ["winfsp"] }  # Windows
 ```
 
 ---

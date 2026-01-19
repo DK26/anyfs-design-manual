@@ -493,7 +493,7 @@ let sandbox = MemoryBackend::new()
 | Where does logging go?            | `Tracing<B>` middleware                             |
 | Where does path filtering go?     | `PathFilter<B>` middleware                          |
 | Where does path resolution go?    | `PathResolver` strategy (pluggable via FileStorage) |
-| What does FileStorage do?         | Thin std::fs-aligned wrapper + type-safe marker     |
+| What does FileStorage do?         | Thin std::fs-aligned ergonomic wrapper              |
 | How to snapshot MemoryBackend?    | `.clone()` or `.save_to()`                          |
 | Sync or async?                    | Sync for now, async-ready for future                |
 

@@ -271,15 +271,24 @@ fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 
 ---
 
-## ADR-009: Built-in backends are feature-gated
+## ADR-009: Simple backends in anyfs, complex backends as ecosystem crates
 
-**Decision:** `anyfs` uses Cargo features so users only pull the dependencies they need.
+**Decision:** Simple backends (`MemoryBackend`, `StdFsBackend`, `VRootFsBackend`) are built into `anyfs` with feature flags. Complex backends (`SqliteBackend`, `IndexedBackend`) live in separate ecosystem crates.
 
+**Built-in backends (anyfs features):**
 - `memory` (default)
-- `sqlite` (optional)
+- `stdfs` (optional)
 - `vrootfs` (optional)
 
-**Why:** Minimizes binary size and compile time for users who don't need all backends.
+**Ecosystem crates:**
+- `anyfs-sqlite` — `SqliteBackend` with optional `encryption` feature
+- `anyfs-indexed` — `IndexedBackend` (SQLite metadata + disk blobs)
+
+**Why:**
+- Simple backends have minimal dependencies (just `std`)
+- Complex backends need internal runtimes (connection pools, sharding, chunking)
+- Follows Tower/Axum pattern: framework is minimal, complex implementations in their own crates
+- Reduces compile time and binary size for users who don't need complex backends
 
 ---
 
@@ -288,10 +297,10 @@ fn process_sandbox(fs: &SandboxFs) { /* only accepts SandboxFs */ }
 **Decision:** `Fs` traits are synchronous. The API is designed to allow adding `AsyncFs` later without breaking changes.
 
 **Rationale:**
-- All built-in backends are naturally synchronous:
+- Built-in backends are naturally synchronous:
   - `MemoryBackend` - in-memory, instant
-  - `SqliteBackend` - rusqlite is sync
-  - `VRootFsBackend` - std::fs is sync
+  - `StdFsBackend` / `VRootFsBackend` - std::fs is sync
+- Ecosystem backends are also sync (e.g., `SqliteBackend` uses rusqlite which is sync)
 - Sync is simpler - no runtime dependency (tokio/async-std)
 - Users can wrap sync backends in `spawn_blocking` if needed
 
@@ -614,7 +623,6 @@ CacheLayer::builder()
 - Do NOT cache `open_read()` - streams are for large files that shouldn't be cached.
 - Invalidate cache entry on any write to that path.
 - Use `lru` crate or similar for LRU eviction.
-- Check TTL on cache hits; evict expired entries.
 
 ---
 

@@ -4,13 +4,14 @@
 
 ## Decision Guide
 
-| You want to...                                    | Use                  |
-| ------------------------------------------------- | -------------------- |
-| Build an application                              | `anyfs`              |
-| Use built-in backends (Memory, SQLite, VRootFs)   | `anyfs`              |
-| Use built-in middleware (Quota, PathFilter, etc.) | `anyfs`              |
-| Implement a custom backend                        | `anyfs-backend` only |
-| Implement custom middleware                       | `anyfs-backend` only |
+| You want to...                                    | Use                              |
+| ------------------------------------------------- | -------------------------------- |
+| Build an application                              | `anyfs`                          |
+| Use built-in backends (Memory, StdFs, VRootFs)    | `anyfs`                          |
+| Use built-in middleware (Quota, PathFilter, etc.) | `anyfs`                          |
+| Use SQLite or IndexedBackend                      | `anyfs-sqlite` / `anyfs-indexed` |
+| Implement a custom backend                        | `anyfs-backend` only             |
+| Implement custom middleware                       | `anyfs-backend` only             |
 
 ---
 

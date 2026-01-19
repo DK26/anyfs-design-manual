@@ -4,7 +4,7 @@
 
 This document describes the IndexedBackend architecture pattern: separating filesystem metadata (stored in SQLite) from file content (stored as blobs). This enables efficient queries, large file support, and flexible storage backends.
 
-> **Built-in Implementation:** AnyFS ships `IndexedBackend` as a production-ready implementation using local disk blobs. See the [Backends Guide](../guides/backends-guide.md#indexedbackend) for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).
+> **Ecosystem Implementation:** The `anyfs-indexed` crate provides `IndexedBackend` as a production-ready implementation using local disk blobs. See the [Backends Guide](../guides/backends-guide.md#indexedbackend) for usage. This document covers the underlying design pattern for those building custom implementations (e.g., with S3, cloud storage, or custom blob stores).
 
 ---
 

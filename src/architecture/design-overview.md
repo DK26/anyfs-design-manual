@@ -1296,7 +1296,7 @@ pub struct IterativeResolver {
 
 **Resolution behavior depends on the resolver used.** The default `IterativeResolver` follows symlinks when the backend implements `FsLink`. For backends without `FsLink`, it traverses directories but treats symlinks as regular files. Users can provide custom resolvers for case-insensitive matching, caching, or other behaviors.
 
-**Note:** All built-in virtual backends (MemoryBackend, SqliteBackend) implement `FsLink`, so symlink-aware resolution works out of the box.
+**Note:** Built-in virtual backends (`MemoryBackend`) and ecosystem backends (`SqliteBackend`) implement `FsLink`, so symlink-aware resolution works out of the box.
 
 ### When Resolution Is Needed
 
@@ -1308,7 +1308,7 @@ pub struct IterativeResolver {
 
 ### Opt-out Mechanism
 
-Virtual backends need resolution by default. Real filesystem backends opt out via a marker trait or associated constant:
+Virtual backends need resolution by default. Real filesystem backends opt out via a marker trait:
 
 ```rust
 /// Marker trait for backends that handle their own path resolution.
@@ -1459,7 +1459,9 @@ Virtual backends have no platform differences - paths are just strings.
 
 See ADR-028 for the decision rationale.
 
-### Default Behavior (Built-in Backends)
+### Default Behavior (Virtual Backends)
+
+Virtual backends (`MemoryBackend`, `SqliteBackend`) use Linux-like semantics:
 
 | Aspect           | Behavior           | Rationale                           |
 | ---------------- | ------------------ | ----------------------------------- |
@@ -1469,6 +1471,8 @@ See ADR-028 for the decision rationale.
 | Max path length  | **No limit**       | Virtual, no OS constraints          |
 | ADS (`:stream`)  | **Not supported**  | Security risk, complexity           |
 
+**Real filesystem backends** (`StdFsBackend`, `VRootFsBackend`) follow OS semantics—case-insensitive on Windows/macOS, case-sensitive on Linux.
+
 ### Trait is Agnostic
 
 The `Fs` trait doesn't enforce filesystem semantics - backends decide their behavior:
@@ -1477,7 +1481,7 @@ The `Fs` trait doesn't enforce filesystem semantics - backends decide their beha
 use anyfs::{FileStorage, MemoryBackend};
 use std::path::Path;
 
-// Built-in backends: Linux-like (case-sensitive)
+// Virtual backends: Linux-like (case-sensitive)
 let linux_fs = FileStorage::new(MemoryBackend::new());
 assert!(linux_fs.exists("/Foo.txt")? != linux_fs.exists("/foo.txt")?);
 
