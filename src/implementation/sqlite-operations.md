@@ -510,12 +510,16 @@ impl SqliteBackend {
 ### Essential PRAGMAs
 
 ```sql
--- Performance-critical settings
+-- Safe defaults
 PRAGMA journal_mode = WAL;           -- Required for concurrent access
-PRAGMA synchronous = NORMAL;         -- Good balance of safety/speed
-PRAGMA cache_size = -64000;          -- 64MB cache (negative = KB)
+PRAGMA synchronous = FULL;           -- Data integrity on power loss (default)
+PRAGMA cache_size = -32000;          -- 32MB cache (tune based on dataset)
 PRAGMA temp_store = MEMORY;          -- Temp tables in memory
-PRAGMA mmap_size = 268435456;        -- 256MB memory-mapped I/O
+
+-- Performance opt-in (when you have battery-backed storage)
+-- PRAGMA synchronous = NORMAL;      -- Faster, risk of data loss on power failure
+-- PRAGMA cache_size = -128000;      -- Larger cache for big datasets
+-- PRAGMA mmap_size = 268435456;     -- 256MB memory-mapped I/O
 
 -- For read-heavy workloads
 PRAGMA read_uncommitted = ON;        -- Allow dirty reads (faster, use carefully)
@@ -773,7 +777,7 @@ fn open_encrypted(path: &Path, key: &str) -> Result<Connection, rusqlite::Error>
     // Now configure as normal
     conn.execute_batch("
         PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
+        PRAGMA synchronous = FULL;
     ")?;
 
     Ok(conn)

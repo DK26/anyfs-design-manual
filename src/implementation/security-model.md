@@ -88,7 +88,7 @@ impl EncryptedSqliteBackend {
         // Configure after key is set
         conn.execute_batch("
             PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
+            PRAGMA synchronous = FULL;
         ")?;
 
         Ok(Self { conn })
