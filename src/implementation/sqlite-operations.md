@@ -16,6 +16,19 @@ SQLite is an excellent choice for filesystem backends:
 
 But it has specific requirements for concurrent access that you must understand.
 
+### Real-World Performance Reference
+
+A single SQLite database on modern hardware can scale remarkably well ([source](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d)):
+
+| Metric | Typical (8 vCPU, NVMe, 32GB RAM) |
+|--------|----------------------------------|
+| Read P95 | 8-12 ms |
+| Write P95 (batched) | 25-40 ms |
+| Peak throughput | ~25k requests/min |
+| Database size | 18 GB |
+
+**Key insight:** "Our breakthrough was not faster hardware. It was deciding that writes were expensive."
+
 ---
 
 ## The Golden Rule: Single Writer
@@ -68,11 +81,52 @@ async fn writer_loop(conn: Connection, mut rx: mpsc::UnboundedReceiver<WriteCmd>
 - Natural batching opportunity (combine multiple ops per transaction)
 - Clean audit logging (all writes go through one place)
 
+### Write Batching: The Key to Performance
+
+> "One transaction per event is a tax. One transaction per batch is a different economy."
+
+Batch writes into single transactions for dramatic performance improvement:
+
+```rust
+impl SqliteBackend {
+    fn flush_writes(&self) -> Result<(), FsError> {
+        let ops = self.write_queue.drain();
+        if ops.is_empty() { return Ok(()); }
+        
+        let tx = self.conn.transaction()?;
+        for op in ops {
+            op.execute(&tx)?;
+        }
+        tx.commit()?;  // One commit for many operations
+        Ok(())
+    }
+}
+```
+
+**Flush triggers:**
+- Batch size reached (e.g., 100 operations)
+- Timeout elapsed (e.g., 50ms since first queued write)
+- Explicit `sync()` call
+- Read-after-write on same path (for consistency)
+
 ---
 
 ## WAL Mode (Required)
 
 **Always enable WAL (Write-Ahead Logging) mode for concurrent access.**
+
+### Recommended Pragma Defaults
+
+Based on [real-world SQLite scaling patterns](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d):
+
+| Pragma | Value | Purpose |
+|--------|-------|---------|
+| `journal_mode` | `WAL` | Concurrent reads during writes |
+| `synchronous` | `NORMAL` | Safe on modern disks, good performance |
+| `temp_store` | `MEMORY` | Faster temp operations |
+| `cache_size` | `-200000` | 200MB page cache (negative = KB) |
+| `busy_timeout` | `5000` | Wait 5s on lock contention |
+| `foreign_keys` | `ON` | Enforce referential integrity |
 
 ```rust
 fn open_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
@@ -82,8 +136,10 @@ fn open_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
     conn.execute_batch("
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
-        PRAGMA cache_size = -64000;  -- 64MB cache
         PRAGMA temp_store = MEMORY;
+        PRAGMA cache_size = -200000;
+        PRAGMA busy_timeout = 5000;
+        PRAGMA foreign_keys = ON;
     ")?;
 
     Ok(conn)

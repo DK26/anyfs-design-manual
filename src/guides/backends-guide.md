@@ -151,7 +151,11 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 - Symlinks stored as rows with target path in content
 - Hard links share the same `inode` (row ID)
 - Uses WAL mode for concurrent read access
+- Connection pooling: multiple readers, single writer with batching
+- Write batching: groups operations into transactions for efficiency
 - Transactions ensure atomic operations
+
+**Key insight:** "Writes are expensive." SqliteBackend batches writes internally because one transaction per batch is far more efficient than one transaction per operation.
 
 #### Performance
 
@@ -161,6 +165,8 @@ fs.write("/documents/report.txt", b"Annual Report")?;
 | Path Resolution | 🐢 **Slower** | Database lookups per component |
 | Transactions    | ✅ **Atomic** | ACID guarantees                |
 | Large Files     | ✅ **Good**   | Streams to disk, not RAM       |
+
+**Real-world reference:** A single SQLite database on NVMe can handle ~25k requests/min with P95 read latency of 8-12ms and batched write latency of 25-40ms ([source](https://medium.com/@maahisoft20/we-scaled-to-1-million-users-with-a-single-sqlite-database-here-is-how-c57e965d580d)).
 
 #### Advantages
 
