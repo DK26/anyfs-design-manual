@@ -165,14 +165,24 @@ Unlike logging-only solutions, AnyFS middleware can **transform and control**:
 ### Snapshots & Persistence
 
 ```rust
+use anyfs::MemoryBackend;
+
+let mut fs = MemoryBackend::new();
+fs.write("/data.txt", b"important")?;
+
 // MemoryBackend implements Clone - that's the snapshot
 let checkpoint = fs.clone();
 
-// Rollback
+// Make more changes...
+fs.write("/other.txt", b"stuff")?;
+
+// Rollback by replacing with checkpoint
 fs = checkpoint;
 
 // Persist to disk
 fs.save_to("state.bin")?;
+
+// Load from disk
 let fs = MemoryBackend::load_from("state.bin")?;
 ```
 

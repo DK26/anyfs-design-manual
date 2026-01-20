@@ -26,7 +26,7 @@ See ADR-030 for the design rationale.
         │
         ├──────┬───────┬───────┬──────┐
         │      │       │       │      │
-   FsLink  FsPerms  FsSync  FsStats   │
+   FsLink   FsPerm  FsSync  FsStats   │
         │      │       │       │      │
         └──────┴───────┴───────┴──────┘
                        │

@@ -798,10 +798,11 @@ That's it. That's the entire pattern.
 
 ### Adding a Layer (for .layer() syntax)
 
-To enable the fluent `.layer()` syntax, add a Layer struct:
+To enable the fluent `.layer()` syntax, add a Layer struct. The `.layer()` method
+comes from the `LayerExt` trait which has a blanket impl for all `Fs` types:
 
 ```rust
-use anyfs_backend::Layer;
+use anyfs_backend::{Layer, LayerExt};  // LayerExt provides .layer() method
 
 pub struct CounterLayer;
 
@@ -817,6 +818,7 @@ impl<B: Fs> Layer<B> for CounterLayer {
 **Usage with .layer():**
 
 ```rust
+// LayerExt is in prelude, so .layer() just works
 let backend = MemoryBackend::new()
     .layer(CounterLayer);
 ```

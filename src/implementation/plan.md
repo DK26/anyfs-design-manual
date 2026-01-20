@@ -137,19 +137,20 @@ Every backend and middleware must document:
         │              │              │
    FsHandles      FsLock       FsXattr
         │              │              │
-        └──────────────┼──────────────┘
+        └──────────────┴──────────────┘
                        │
-                    FsFuse
+                    FsFuse ← FsFull + FsInode
                        │
-                   FsInode
-                       │
-                    FsFull
-                       │
-        ┌──────┬───────┼───────┬──────┐
+        ┌──────────────┴──────────────┐
+        │                             │
+     FsFull                       FsInode
+        │
+        │
+        ├──────┬───────┬───────┬──────┐
         │      │       │       │      │
    FsLink  FsPerm  FsSync FsStats │
         │      │       │       │      │
-        └──────┴───────┼───────┴──────┘
+        └──────┴───────┴───────┴──────┘
                        │
                        Fs  ← Most users only need this
                        │

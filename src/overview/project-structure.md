@@ -71,6 +71,19 @@ anyfs-s3/                   # Third-party: S3 backend
 anyfs-redis/                # Third-party: Redis backend
 ```
 
+### Testing Crate
+
+```
+anyfs-test/                 # Conformance test suite for backend implementers
+  src/
+    lib.rs
+    conformance/            # Test generators for each trait level
+      fs_tests.rs           # Fs-level tests
+      fs_full_tests.rs      # FsFull-level tests
+      fs_fuse_tests.rs      # FsFuse-level tests
+    prelude.rs              # Re-exports for test files
+```
+
 ---
 
 ## Dependency Model
@@ -122,7 +135,14 @@ Following the **Tower/Axum** pattern, feature flags keep the core lightweight:
 - `restrictions` — Permission control (default)
 - `read-only` — Write blocking (default)
 - `rate-limit` — Fixed-window rate limiting (default)
+- `cache` — LRU read caching (default)
+- `dry-run` — Operation logging without execution (default)
+- `overlay` — Union filesystem layers (default)
 - `tracing` — Detailed audit logging (requires `tracing` crate)
+
+### Mounting (Platform Features)
+- `fuse` — Mount as filesystem on Linux/macOS (requires `fuser` crate)
+- `winfsp` — Mount as filesystem on Windows (requires `winfsp` crate)
 
 Use `default-features = false` to cherry-pick exactly what you need.
 

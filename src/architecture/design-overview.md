@@ -525,19 +525,20 @@ See ADR-030 for the rationale behind the layered hierarchy.
             │              │              │
        FsHandles      FsLock       FsXattr
             │              │              │
-            └──────────────┼──────────────┘
+            └──────────────┴──────────────┘
                            │
-                        FsFuse
+                        FsFuse ← FsFull + FsInode
                            │
-                       FsInode
-                           │
-                        FsFull
-                           │
-            ┌──────┬───────┼───────┬──────┐
+            ┌──────────────┴──────────────┐
+            │                             │
+         FsFull                       FsInode
+            │
+            │
+            ├──────┬───────┬───────┬──────┐
             │      │       │       │      │
        FsLink  FsPerm  FsSync FsStats │
             │      │       │       │      │
-            └──────┴───────┼───────┴──────┘
+            └──────┴───────┴───────┴──────┘
                            │
                            Fs  ← Most users only need this
                            │
@@ -1031,11 +1032,11 @@ LRU cache for read operations. Essential for slow backends (S3, network).
 ```rust
 use anyfs::{MemoryBackend, CacheLayer, FileStorage};
 
-let backend = CacheLayer::builder()
-    .max_size(100 * 1024 * 1024)      // 100 MB cache
-    .max_entries(10_000)              // Max 10K entries
-    .build()
-    .layer(MemoryBackend::new());
+let backend = MemoryBackend::new()
+    .layer(CacheLayer::builder()
+        .max_entries(10_000)              // Max 10K entries in cache
+        .max_entry_size(10 * 1024 * 1024) // 10 MB max per entry
+        .build());
 let fs = FileStorage::new(backend);
 
 // First read: hits backend, caches result
@@ -1185,18 +1186,32 @@ pub trait Layer<B: Fs> {
     type Backend: Fs;
     fn layer(self, backend: B) -> Self::Backend;
 }
+
+/// Extension trait enabling fluent `.layer()` method on any Fs.
+/// This is how `backend.layer(QuotaLayer::builder()...build())` works.
+pub trait LayerExt: Fs + Sized {
+    fn layer<L: Layer<Self>>(self, layer: L) -> L::Backend {
+        layer.layer(self)
+    }
+}
+
+// Blanket impl: any Fs gets .layer() for free
+impl<B: Fs> LayerExt for B {}
 ```
 
 Each middleware provides a corresponding `Layer` implementation:
 
 ```rust
-// QuotaLayer, TracingLayer, RestrictionsLayer, etc.
-pub struct QuotaLayer { limits: QuotaLimits }
+// QuotaLayer wraps QuotaConfig (not a separate QuotaLimits type)
+pub struct QuotaLayer {
+    config: QuotaConfig,
+}
 
 impl<B: Fs> Layer<B> for QuotaLayer {
     type Backend = Quota<B>;
     fn layer(self, backend: B) -> Self::Backend {
-        Quota::from_limits(self.limits).layer(backend)
+        Quota::with_config(backend, self.config)
+            .expect("quota initialization failed")
     }
 }
 ```

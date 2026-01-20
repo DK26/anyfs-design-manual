@@ -773,6 +773,12 @@ struct QuotaUsage {
     dir_count: u64,
 }
 
+impl Default for QuotaUsage {
+    fn default() -> Self {
+        Self { total_size: 0, file_count: 0, dir_count: 0 }
+    }
+}
+
 impl<B> Quota<B> {
     /// Get current usage statistics.
     pub fn usage(&self) -> Usage {
@@ -833,10 +839,10 @@ impl<B: Fs> Quota<B> {
             let entry = entry?;
             let meta = backend.metadata(&entry.path)?;
 
-            if meta.is_file {
+            if meta.is_file() {
                 usage.file_count += 1;
                 usage.total_size += meta.size;
-            } else if meta.is_dir {
+            } else if meta.is_dir() {
                 usage.dir_count += 1;
                 Self::scan_dir(backend, &entry.path, usage)?;
             }
