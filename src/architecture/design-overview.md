@@ -1348,7 +1348,13 @@ pub trait SelfResolving {}
 impl SelfResolving for VRootFsBackend {}
 ```
 
-`FileStorage` applies resolution via its boxed `PathResolver` for backends that don't implement `SelfResolving`. The default `IterativeResolver` follows symlinks when `FsLink` is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).
+> **Important:** `FileStorage` does NOT auto-detect `SelfResolving`. You must explicitly use `NoOpResolver`:
+> ```rust
+> // For SelfResolving backends, use NoOpResolver explicitly
+> let fs = FileStorage::with_resolver(VRootFsBackend::new("/data")?, NoOpResolver);
+> ```
+
+The default `IterativeResolver` follows symlinks when `FsLink` is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).
 
 ```rust
 impl<B: Fs> FileStorage<B> {

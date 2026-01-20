@@ -182,10 +182,13 @@ impl<T: FsRead + FsLink> FsPath for T {}
 
 ### SelfResolving (Marker)
 
-Marker trait for backends that handle their own path resolution (e.g., `VRootFsBackend`, `StdFsBackend`). `FileStorage` will NOT perform virtual path resolution for these backends.
+Marker trait for backends that handle their own path resolution (e.g., `VRootFsBackend`, `StdFsBackend`). When using these backends, use `NoOpResolver` explicitly:
 
 ```rust
 pub trait SelfResolving {}
+
+// Usage:
+let fs = FileStorage::with_resolver(VRootFsBackend::new("/data")?, NoOpResolver);
 ```
 
 ---
@@ -193,6 +196,10 @@ pub trait SelfResolving {}
 ## Layer 3: Inode Trait (For FUSE)
 
 ### FsInode
+
+Required for FUSE mounting (FUSE operates on inodes, not paths). Also enables correct hardlink reporting (same inode = same file, proper nlink count).
+
+> **Note:** `FsLink` defines hardlink *creation* (`hard_link()`). `FsInode` enables FUSE to *track* hardlinks via inode identity.
 
 ```rust
 pub trait FsInode: Send + Sync {

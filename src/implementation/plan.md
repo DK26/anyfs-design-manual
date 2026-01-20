@@ -176,7 +176,9 @@ Every backend and middleware must document:
 
 - **`FsInode`**: `path_to_inode`, `inode_to_path`, `lookup`, `metadata_by_inode`
   - **No blanket/default implementation** - must be explicitly implemented
-  - Required for FUSE mounting and proper hardlink support
+  - Required for FUSE mounting (FUSE operates on inodes, not paths)
+  - Enables correct hardlink reporting (same inode = same file, nlink count)
+  - Note: FsLink defines hardlink creation; FsInode enables FUSE to track them
   - `inode_to_path` requires backend to maintain path mappings
 
 ### POSIX Traits (Layer 4 - Full POSIX)

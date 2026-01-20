@@ -412,11 +412,12 @@ loop {
 
 **Works with any database backend:**
 
-| Backend                    | Direct Query Method                     |
-| -------------------------- | --------------------------------------- |
-| `SqliteBackend`            | `rusqlite` with `SQLITE_OPEN_READ_ONLY` |
-| `PostgresBackend` (future) | Standard `postgres` crate connection    |
-| `MySqlBackend` (future)    | Standard `mysql` crate connection       |
+| Backend                   | Direct Query Method                     |
+| ------------------------- | --------------------------------------- |
+| `SqliteBackend`           | `rusqlite` with `SQLITE_OPEN_READ_ONLY` |
+| Custom (user-implemented) | Direct database driver connection       |
+
+> Third-party crates can implement additional database backends (PostgreSQL, MySQL, etc.) following the same pattern.
 
 **What you can visualize:**
 - Real-time storage usage (gauges, bar charts)
