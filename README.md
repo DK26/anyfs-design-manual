@@ -228,7 +228,7 @@ Because AnyFS sits *between* the OS and the storage:
 | `StdFsBackend`   |    ✅    |   ✅   |   ✅   |   ❌   |
 | `VRootFsBackend` |    ✅    |   ✅   |   ✅   |   ❌   |
 
-*SQLiteBackend on WASM requires bundled SQLite. Encryption feature not available on WASM.
+*SqliteBackend on WASM requires bundled SQLite. Encryption feature not available on WASM.
 
 ---
 

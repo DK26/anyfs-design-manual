@@ -323,7 +323,7 @@ See [anyfs-indexed#9](https://github.com/DK26/anyfs-indexed/issues/9) for detail
 - Content must be hidden from host filesystem (use anyfs-sqlite: SqliteBackend with encryption)
 - Need WASM/browser support (use MemoryBackend)
 
-> 🔒 **Encryption Tip:** If you need large file performance but content confidentiality matters, wrap IndexedBackend with `Encryption<B>` middleware to encrypt blob contents at rest. This protects data while preserving native I/O streaming.
+> 🔒 **Encryption Tip:** If you need large file performance but content confidentiality matters, you can implement an `Encryption<B>` middleware wrapper to encrypt blob contents at rest. This is a user-defined middleware pattern (not built-in) - see the [middleware implementation guide](../implementation/middleware-implementation.md) for how to create custom middleware. Alternatively, use `SqliteBackend` with SQLCipher encryption for simpler encrypted storage.
 
 ---
 
@@ -481,7 +481,7 @@ Virtual Path          Validation              Real Path
 - Cross-platform symlink consistency is critical (Windows differs)
 - Want complete isolation from host (use SqliteBackend)
 
-> 🔒 **Encryption Tip:** For sensitive data in sandboxed directories (user uploads, plugin workspaces, AI agent data), wrap VRootFsBackend with `Encryption<B>` middleware. This ensures files written to the host filesystem are encrypted at rest, protecting against host-level access.
+> 🔒 **Encryption Tip:** For sensitive data in sandboxed directories (user uploads, plugin workspaces, AI agent data), consider implementing an `Encryption<B>` middleware wrapper. This is a user-defined middleware pattern - you would create a custom Layer that encrypts data before delegating to the inner backend. See the [middleware implementation guide](../implementation/middleware-implementation.md) for the pattern.
 
 ---
 

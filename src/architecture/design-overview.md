@@ -362,11 +362,20 @@ pub struct Metrics<B> {
 }
 
 impl<B> Metrics<B> {
+    /// Creates a new Metrics middleware.
+    ///
+    /// # Panics
+    /// Panics if metric registration fails (indicates duplicate metric names - programmer error).
+    /// This is acceptable at initialization time; runtime operations never panic.
     pub fn new(inner: B, registry: &Registry) -> Self {
-        let reads = Counter::new("anyfs_reads_total", "Total read operations").unwrap();
-        let writes = Counter::new("anyfs_writes_total", "Total write operations").unwrap();
-        registry.register(Box::new(reads.clone())).unwrap();
-        registry.register(Box::new(writes.clone())).unwrap();
+        let reads = Counter::new("anyfs_reads_total", "Total read operations")
+            .expect("metric creation failed");
+        let writes = Counter::new("anyfs_writes_total", "Total write operations")
+            .expect("metric creation failed");
+        registry.register(Box::new(reads.clone()))
+            .expect("metric registration failed");
+        registry.register(Box::new(writes.clone()))
+            .expect("metric registration failed");
         // ... register all metrics
         Self { inner, reads, writes, /* ... */ }
     }
@@ -389,7 +398,8 @@ impl<B: FsRead> FsRead for Metrics<B> {
 async fn metrics_handler(registry: web::Data<Registry>) -> impl Responder {
     let encoder = TextEncoder::new();
     let metrics = registry.gather();
-    encoder.encode_to_string(&metrics).unwrap()
+    encoder.encode_to_string(&metrics)
+        .unwrap_or_else(|e| format!("# Encoding error: {}", e))
 }
 ```
 

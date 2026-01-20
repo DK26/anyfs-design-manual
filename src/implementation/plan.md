@@ -518,11 +518,11 @@ impl MountHandle {
 | `MemoryBackend`                         | RAM drive                           |
 | `MemoryBackend` + `Quota`               | RAM drive with size limit           |
 | `SqliteBackend`                         | Single-file portable drive          |
+| `SqliteBackend` (with SQLCipher)        | Encrypted portable drive            |
 | `Overlay<SqliteBackend, MemoryBackend>` | Persistent base + RAM scratch layer |
 | `Cache<SqliteBackend>`                  | SQLite with RAM read cache          |
 | `Tracing<MemoryBackend>`                | RAM drive with full audit log       |
 | `ReadOnly<SqliteBackend>`               | Immutable snapshot mount            |
-| `Encryption<SqliteBackend>`             | Encrypted portable drive            |
 
 **Example: AI Agent Sandbox**
 

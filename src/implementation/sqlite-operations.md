@@ -39,9 +39,12 @@ Even in WAL mode, concurrent writes will block. This isn't a bug - it's a design
 
 ### The Write Queue Pattern
 
+> **Note:** This pattern shows an async implementation using tokio for reference. The AnyFS API is synchronous - if you need async, wrap calls with `spawn_blocking`. See also the sync alternative using `std::sync::mpsc` below.
+
 For filesystem backends, use a single-writer queue:
 
 ```rust
+// Async variant (optional - requires tokio runtime)
 use tokio::sync::mpsc;
 use rusqlite::Connection;
 
@@ -80,6 +83,31 @@ async fn writer_loop(conn: Connection, mut rx: mpsc::UnboundedReceiver<WriteCmd>
 - Predictable latency (queue depth = backpressure)
 - Natural batching opportunity (combine multiple ops per transaction)
 - Clean audit logging (all writes go through one place)
+
+**Sync Alternative (no tokio required):**
+
+```rust
+// Sync variant using std channels
+use std::sync::mpsc;
+
+pub struct SqliteBackend {
+    read_pool: Pool<Connection>,
+    write_tx: mpsc::Sender<WriteCmd>,
+}
+
+// Writer runs in a dedicated thread
+fn writer_thread(conn: Connection, rx: mpsc::Receiver<WriteCmd>) {
+    while let Ok(cmd) = rx.recv() {
+        match cmd {
+            WriteCmd::Write { path, data, reply } => {
+                let r = execute_write(&conn, &path, &data);
+                let _ = reply.send(r);
+            }
+            // ... handle other commands
+        }
+    }
+}
+```
 
 > **"One Door" Principle:** Once there is one door to the database, nobody can sneak in a surprise write on the request path. This architectural discipline—not just code—is what makes SQLite reliable at scale.
 
@@ -579,18 +607,18 @@ fn get_children_with_metadata(parent: i64) -> Vec<Node> {
 
 ```rust
 impl SqliteBackend {
-    fn prepare_statements(conn: &Connection) -> Statements {
-        Statements {
+    fn prepare_statements(conn: &Connection) -> Result<Statements, FsError> {
+        Ok(Statements {
             read_file: conn.prepare_cached(
                 "SELECT content FROM nodes WHERE parent_inode = ? AND name = ?"
-            ).unwrap(),
+            )?,
 
             list_dir: conn.prepare_cached(
                 "SELECT name, node_type, size FROM nodes WHERE parent_inode = ?"
-            ).unwrap(),
+            )?,
 
             // ... other common queries
-        }
+        })
     }
 }
 ```
@@ -603,10 +631,10 @@ impl SqliteBackend {
 
 ```rust
 impl SqliteBackend {
-    pub fn stats(&self) -> DbStats {
-        let conn = self.read_pool.get().unwrap();
+    pub fn stats(&self) -> Result<DbStats, FsError> {
+        let conn = self.read_pool.get()?;
 
-        DbStats {
+        Ok(DbStats {
             // Database size
             page_count: pragma_i64(&conn, "page_count"),
             page_size: pragma_i64(&conn, "page_size"),
@@ -620,7 +648,7 @@ impl SqliteBackend {
 
             // Fragmentation
             freelist_count: pragma_i64(&conn, "freelist_count"),
-        }
+        })
     }
 }
 
@@ -880,12 +908,12 @@ CREATE INDEX idx_nodes_parent_path ON nodes(parent_path);
 
 ### Recommendation
 
-| Workload | Best Approach |
-|----------|---------------|
-| Read-heavy, shallow paths | Parent/name + basic index |
-| Read-heavy, deep paths | Parent/name + CachingResolver |
-| Write-heavy with renames | Parent/name (rename is O(1)) |
-| Read-dominated, few renames | Full-path index |
+| Workload                    | Best Approach                 |
+| --------------------------- | ----------------------------- |
+| Read-heavy, shallow paths   | Parent/name + basic index     |
+| Read-heavy, deep paths      | Parent/name + CachingResolver |
+| Write-heavy with renames    | Parent/name (rename is O(1))  |
+| Read-dominated, few renames | Full-path index               |
 
 ---
 
@@ -933,11 +961,11 @@ CREATE INDEX idx_nodes_parent_name ON nodes(parent, name);
 
 All content stored in `nodes.content` column:
 
-| Pros | Cons |
-|------|------|
-| Single-file portability | Memory pressure for large files |
-| Atomic operations | SQLite page overhead for small files |
-| Simple backup/restore | WAL growth during large writes |
+| Pros                    | Cons                                 |
+| ----------------------- | ------------------------------------ |
+| Single-file portability | Memory pressure for large files      |
+| Atomic operations       | SQLite page overhead for small files |
+| Simple backup/restore   | WAL growth during large writes       |
 
 **Best for:** Files <10MB, portability-focused use cases.
 
@@ -945,10 +973,10 @@ All content stored in `nodes.content` column:
 
 Content stored as files, SQLite holds only metadata:
 
-| Pros | Cons |
-|------|------|
-| Native streaming I/O | Two-component backup |
-| No memory pressure | Blob/index consistency risk |
+| Pros                      | Cons                        |
+| ------------------------- | --------------------------- |
+| Native streaming I/O      | Two-component backup        |
+| No memory pressure        | Blob/index consistency risk |
 | Efficient for large files | More complex implementation |
 
 **Best for:** Large files, media libraries, streaming workloads.
@@ -990,12 +1018,12 @@ From real-world experience:
 
 ### Consider Migration When
 
-| Signal | What It Means |
-|--------|---------------|
-| Write contention dominates | Queue depth grows, latency spikes |
-| Multi-process writes needed | SQLite's single-writer limit |
-| Horizontal scaling required | SQLite can't distribute |
-| Real-time sync across nodes | No built-in replication |
+| Signal                      | What It Means                     |
+| --------------------------- | --------------------------------- |
+| Write contention dominates  | Queue depth grows, latency spikes |
+| Multi-process writes needed | SQLite's single-writer limit      |
+| Horizontal scaling required | SQLite can't distribute           |
+| Real-time sync across nodes | No built-in replication           |
 
 ### Migration Path
 

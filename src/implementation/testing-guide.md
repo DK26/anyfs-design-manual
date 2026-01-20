@@ -86,7 +86,8 @@ fn test_create_dir_and_list() {
     backend.create_dir(std::path::Path::new("/mydir")).unwrap();
     backend.write(std::path::Path::new("/mydir/file.txt"), b"data").unwrap();
 
-    let entries = backend.read_dir(std::path::Path::new("/mydir")).unwrap();
+    let entries: Vec<_> = backend.read_dir(std::path::Path::new("/mydir")).unwrap()
+        .collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].name, "file.txt");
 }
@@ -422,7 +423,8 @@ fn test_pathfilter_read_dir_filters() {
             .build());
     let fs = FileStorage::new(backend);
 
-    let entries = fs.read_dir("/workspace").unwrap();
+    let entries: Vec<_> = fs.read_dir("/workspace").unwrap()
+        .collect::<Result<Vec<_>, _>>().unwrap();
 
     // .env should be filtered out
     assert_eq!(entries.len(), 1);
