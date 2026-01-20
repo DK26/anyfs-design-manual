@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -214,10 +214,14 @@
 <p><strong>SQLite supports many readers but only ONE writer at a time.</strong></p>
 <p>Even in WAL mode, concurrent writes will block. This isn’t a bug - it’s a design choice that enables SQLite’s reliability.</p>
 <h3 id="the-write-queue-pattern"><a class="header" href="#the-write-queue-pattern">The Write Queue Pattern</a></h3>
+<blockquote>
+<p><strong>Note:</strong> This pattern shows an async implementation using tokio for reference. The AnyFS API is synchronous - if you need async, wrap calls with <code>spawn_blocking</code>. See also the sync alternative using <code>std::sync::mpsc</code> below.</p>
+</blockquote>
 <p>For filesystem backends, use a single-writer queue:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use tokio::sync::mpsc;
+</span>// Async variant (optional - requires tokio runtime)
+use tokio::sync::mpsc;
 use rusqlite::Connection;
 
 pub struct SqliteBackend {
@@ -256,6 +260,30 @@ async fn writer_loop(conn: Connection, mut rx: mpsc::UnboundedReceiver&lt;WriteC
 <li>Natural batching opportunity (combine multiple ops per transaction)</li>
 <li>Clean audit logging (all writes go through one place)</li>
 </ul>
+<p><strong>Sync Alternative (no tokio required):</strong></p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Sync variant using std channels
+use std::sync::mpsc;
+
+pub struct SqliteBackend {
+    read_pool: Pool&lt;Connection&gt;,
+    write_tx: mpsc::Sender&lt;WriteCmd&gt;,
+}
+
+// Writer runs in a dedicated thread
+fn writer_thread(conn: Connection, rx: mpsc::Receiver&lt;WriteCmd&gt;) {
+    while let Ok(cmd) = rx.recv() {
+        match cmd {
+            WriteCmd::Write { path, data, reply } =&gt; {
+                let r = execute_write(&amp;conn, &amp;path, &amp;data);
+                let _ = reply.send(r);
+            }
+            // ... handle other commands
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
 <blockquote>
 <p><strong>“One Door” Principle:</strong> Once there is one door to the database, nobody can sneak in a surprise write on the request path. This architectural discipline—not just code—is what makes SQLite reliable at scale.</p>
 </blockquote>
@@ -739,18 +767,18 @@ fn get_children_with_metadata(parent: i64) -&gt; Vec&lt;Node&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl SqliteBackend {
-    fn prepare_statements(conn: &amp;Connection) -&gt; Statements {
-        Statements {
+    fn prepare_statements(conn: &amp;Connection) -&gt; Result&lt;Statements, FsError&gt; {
+        Ok(Statements {
             read_file: conn.prepare_cached(
                 "SELECT content FROM nodes WHERE parent_inode = ? AND name = ?"
-            ).unwrap(),
+            )?,
 
             list_dir: conn.prepare_cached(
                 "SELECT name, node_type, size FROM nodes WHERE parent_inode = ?"
-            ).unwrap(),
+            )?,
 
             // ... other common queries
-        }
+        })
     }
 }
 <span class="boring">}</span></code></pre>
@@ -760,10 +788,10 @@ fn get_children_with_metadata(parent: i64) -&gt; Vec&lt;Node&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl SqliteBackend {
-    pub fn stats(&amp;self) -&gt; DbStats {
-        let conn = self.read_pool.get().unwrap();
+    pub fn stats(&amp;self) -&gt; Result&lt;DbStats, FsError&gt; {
+        let conn = self.read_pool.get()?;
 
-        DbStats {
+        Ok(DbStats {
             // Database size
             page_count: pragma_i64(&amp;conn, "page_count"),
             page_size: pragma_i64(&amp;conn, "page_size"),
@@ -777,7 +805,7 @@ fn get_children_with_metadata(parent: i64) -&gt; Vec&lt;Node&gt; {
 
             // Fragmentation
             freelist_count: pragma_i64(&amp;conn, "freelist_count"),
-        }
+        })
     }
 }
 

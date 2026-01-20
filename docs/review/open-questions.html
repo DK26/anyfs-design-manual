@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -200,8 +200,8 @@
 </ul>
 <h3 id="implications"><a class="header" href="#implications">Implications</a></h3>
 <ul>
-<li>If you need symlink-free semantics, use a backend that does not implement <code>FsLink</code> or block symlink creation and ensure no preexisting symlinks exist.</li>
-<li><code>Restrictions</code> only controls creation, not resolution.</li>
+<li>If you need symlink-free semantics, use a backend that does not implement <code>FsLink</code>, or if using a backend that does implement <code>FsLink</code>, ensure no preexisting symlinks exist in the data (the <code>FsLink</code> trait provides creation capability, but you can choose not to call those methods).</li>
+<li><code>Restrictions</code> middleware controls permission-related operations only, not symlink creation (which is a trait-level capability).</li>
 </ul>
 <h3 id="why"><a class="header" href="#why">Why</a></h3>
 <ul>

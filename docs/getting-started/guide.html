@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -546,11 +546,13 @@ loop {
 </thead>
 <tbody>
 <tr><td><code>SqliteBackend</code></td><td><code>rusqlite</code> with <code>SQLITE_OPEN_READ_ONLY</code></td></tr>
-<tr><td><code>PostgresBackend</code> (future)</td><td>Standard <code>postgres</code> crate connection</td></tr>
-<tr><td><code>MySqlBackend</code> (future)</td><td>Standard <code>mysql</code> crate connection</td></tr>
+<tr><td>Custom (user-implemented)</td><td>Direct database driver connection</td></tr>
 </tbody>
 </table>
 </div>
+<blockquote>
+<p>Third-party crates can implement additional database backends (PostgreSQL, MySQL, etc.) following the same pattern.</p>
+</blockquote>
 <p><strong>What you can visualize:</strong></p>
 <ul>
 <li>Real-time storage usage (gauges, bar charts)</li>

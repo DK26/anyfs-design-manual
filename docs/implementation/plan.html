@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -307,19 +307,20 @@ pub enum FsError {
         │              │              │
    FsHandles      FsLock       FsXattr
         │              │              │
-        └──────────────┼──────────────┘
+        └──────────────┴──────────────┘
                        │
-                    FsFuse
+                    FsFuse ← FsFull + FsInode
                        │
-                   FsInode
-                       │
-                    FsFull
-                       │
-        ┌──────┬───────┼───────┬──────┐
+        ┌──────────────┴──────────────┐
+        │                             │
+     FsFull                       FsInode
+        │
+        │
+        ├──────┬───────┬───────┬──────┐
         │      │       │       │      │
    FsLink  FsPerm  FsSync FsStats │
         │      │       │       │      │
-        └──────┴───────┼───────┴──────┘
+        └──────┴───────┴───────┴──────┘
                        │
                        Fs  ← Most users only need this
                        │
@@ -345,7 +346,9 @@ pub enum FsError {
 <li><strong><code>FsInode</code></strong>: <code>path_to_inode</code>, <code>inode_to_path</code>, <code>lookup</code>, <code>metadata_by_inode</code>
 <ul>
 <li><strong>No blanket/default implementation</strong> - must be explicitly implemented</li>
-<li>Required for FUSE mounting and proper hardlink support</li>
+<li>Required for FUSE mounting (FUSE operates on inodes, not paths)</li>
+<li>Enables correct hardlink reporting (same inode = same file, nlink count)</li>
+<li>Note: FsLink defines hardlink creation; FsInode enables FUSE to track them</li>
 <li><code>inode_to_path</code> requires backend to maintain path mappings</li>
 </ul>
 </li>
@@ -702,11 +705,11 @@ let mount = MountHandle::mount(backend, "/mnt/ramdisk")?;
 <tr><td><code>MemoryBackend</code></td><td>RAM drive</td></tr>
 <tr><td><code>MemoryBackend</code> + <code>Quota</code></td><td>RAM drive with size limit</td></tr>
 <tr><td><code>SqliteBackend</code></td><td>Single-file portable drive</td></tr>
+<tr><td><code>SqliteBackend</code> (with SQLCipher)</td><td>Encrypted portable drive</td></tr>
 <tr><td><code>Overlay&lt;SqliteBackend, MemoryBackend&gt;</code></td><td>Persistent base + RAM scratch layer</td></tr>
 <tr><td><code>Cache&lt;SqliteBackend&gt;</code></td><td>SQLite with RAM read cache</td></tr>
 <tr><td><code>Tracing&lt;MemoryBackend&gt;</code></td><td>RAM drive with full audit log</td></tr>
 <tr><td><code>ReadOnly&lt;SqliteBackend&gt;</code></td><td>Immutable snapshot mount</td></tr>
-<tr><td><code>Encryption&lt;SqliteBackend&gt;</code></td><td>Encrypted portable drive</td></tr>
 </tbody>
 </table>
 </div>

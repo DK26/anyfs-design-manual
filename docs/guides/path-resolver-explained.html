@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -367,9 +367,21 @@ Output: /users/administrator/config.txt
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// The trait (the "job description")
+// Only canonicalize() is required - soft_canonicalize has a default implementation
 pub trait PathResolver: Send + Sync {
     fn canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt;;
-    fn soft_canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt;;
+    
+    // Default: canonicalize parent, append final component
+    fn soft_canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt; {
+        let canonical_parent = self.canonicalize(path.parent().unwrap(), fs)?;
+        Ok(canonical_parent.join(path.file_name().unwrap()))
+    }
+}
+
+// For symlink-aware resolution (when backend implements FsLink):
+pub trait PathResolverWithLinks: PathResolver {
+    fn canonicalize_following_links(&amp;self, path: &amp;Path, fs: &amp;dyn FsLink) -&gt; Result&lt;PathBuf, FsError&gt;;
+    // soft_canonicalize_following_links also has a default that delegates
 }
 
 // FileStorage uses it (boxed for flexibility)
@@ -379,6 +391,7 @@ pub struct FileStorage&lt;B&gt; {
 }
 <span class="boring">}</span></code></pre>
 <p>That’s it! <strong>PathResolver answers one question: “What’s the real, simple path?”</strong></p>
+<p>The <code>soft_canonicalize</code> variant is just a convenience - it reuses <code>canonicalize</code> internally but allows creating new files.</p>
 <p>Everything else—reading files, writing files, listing directories—is the backend’s job.</p>
 
                     </main>

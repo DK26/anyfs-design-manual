@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -931,10 +931,11 @@ println!("Operations: {}", backend.operations());  // 3
 <span class="boring">}</span></code></pre>
 <p>That’s it. That’s the entire pattern.</p>
 <h3 id="adding-a-layer-for-layer-syntax"><a class="header" href="#adding-a-layer-for-layer-syntax">Adding a Layer (for .layer() syntax)</a></h3>
-<p>To enable the fluent <code>.layer()</code> syntax, add a Layer struct:</p>
+<p>To enable the fluent <code>.layer()</code> syntax, add a Layer struct. The <code>.layer()</code> method
+comes from the <code>LayerExt</code> trait which has a blanket impl for all <code>Fs</code> types:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_backend::Layer;
+</span>use anyfs_backend::{Layer, LayerExt};  // LayerExt provides .layer() method
 
 pub struct CounterLayer;
 
@@ -949,7 +950,8 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for CounterLayer {
 <p><strong>Usage with .layer():</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let backend = MemoryBackend::new()
+</span>// LayerExt is in prelude, so .layer() just works
+let backend = MemoryBackend::new()
     .layer(CounterLayer);
 <span class="boring">}</span></code></pre>
 <h3 id="real-example-readonly-middleware"><a class="header" href="#real-example-readonly-middleware">Real Example: ReadOnly Middleware</a></h3>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -249,32 +249,32 @@ impl&lt;B: FsRead&gt; FsRead for ReadOnly&lt;B&gt; {
 }
 
 impl&lt;B: FsWrite&gt; FsWrite for ReadOnly&lt;B&gt; {
-    fn write(&amp;self, _path: &amp;Path, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "write" })
+    fn write(&amp;self, path: &amp;Path, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "write" })
     }
 
-    fn append(&amp;self, _path: &amp;Path, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "append" })
+    fn append(&amp;self, path: &amp;Path, _data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "append" })
     }
 
-    fn remove_file(&amp;self, _path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "remove_file" })
+    fn remove_file(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "remove_file" })
     }
 
-    fn rename(&amp;self, _from: &amp;Path, _to: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "rename" })
+    fn rename(&amp;self, from: &amp;Path, _to: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: from.to_path_buf(), operation: "rename" })
     }
 
-    fn copy(&amp;self, _from: &amp;Path, _to: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "copy" })
+    fn copy(&amp;self, from: &amp;Path, _to: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: from.to_path_buf(), operation: "copy" })
     }
 
-    fn truncate(&amp;self, _path: &amp;Path, _size: u64) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "truncate" })
+    fn truncate(&amp;self, path: &amp;Path, _size: u64) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "truncate" })
     }
 
-    fn open_write(&amp;self, _path: &amp;Path) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
-        Err(FsError::ReadOnly { operation: "open_write" })
+    fn open_write(&amp;self, path: &amp;Path) -&gt; Result&lt;Box&lt;dyn Write + Send&gt;, FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "open_write" })
     }
 }
 
@@ -283,20 +283,20 @@ impl&lt;B: FsDir&gt; FsDir for ReadOnly&lt;B&gt; {
         self.inner.read_dir(path)  // Pass through (reading)
     }
 
-    fn create_dir(&amp;self, _path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "create_dir" })
+    fn create_dir(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "create_dir" })
     }
 
-    fn create_dir_all(&amp;self, _path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "create_dir_all" })
+    fn create_dir_all(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "create_dir_all" })
     }
 
-    fn remove_dir(&amp;self, _path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "remove_dir" })
+    fn remove_dir(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "remove_dir" })
     }
 
-    fn remove_dir_all(&amp;self, _path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
-        Err(FsError::ReadOnly { operation: "remove_dir_all" })
+    fn remove_dir_all(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+        Err(FsError::ReadOnly { path: path.to_path_buf(), operation: "remove_dir_all" })
     }
 }
 <span class="boring">}</span></code></pre>
@@ -361,6 +361,7 @@ impl&lt;B: FsPermissions&gt; FsPermissions for Restrictions&lt;B&gt; {
     fn set_permissions(&amp;self, path: &amp;Path, perm: Permissions) -&gt; Result&lt;(), FsError&gt; {
         if self.deny_permissions {
             return Err(FsError::FeatureNotEnabled {
+                path: path.to_path_buf(),
                 feature: "permissions",
                 operation: "set_permissions",
             });
@@ -446,7 +447,7 @@ struct RateLimitState {
 }
 
 impl&lt;B&gt; RateLimit&lt;B&gt; {
-    fn check_rate_limit(&amp;self) -&gt; Result&lt;(), FsError&gt; {
+    fn check_rate_limit(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
         let mut state = self.state.write().unwrap();
 
         let now = Instant::now();
@@ -459,6 +460,7 @@ impl&lt;B&gt; RateLimit&lt;B&gt; {
 
         if state.count &gt;= self.max_ops {
             return Err(FsError::RateLimitExceeded {
+                path: path.to_path_buf(),
                 limit: self.max_ops,
                 window_secs: self.window.as_secs(),
             });
@@ -471,16 +473,16 @@ impl&lt;B&gt; RateLimit&lt;B&gt; {
 
 impl&lt;B: FsRead&gt; FsRead for RateLimit&lt;B&gt; {
     fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
-        self.check_rate_limit()?;
+        self.check_rate_limit(path)?;
         self.inner.read(path)
     }
 
     fn exists(&amp;self, path: &amp;Path) -&gt; Result&lt;bool, FsError&gt; {
-        self.check_rate_limit()?;
+        self.check_rate_limit(path)?;
         self.inner.exists(path)
     }
 
-    // ... all methods call check_rate_limit() first
+    // ... all methods call check_rate_limit(path) first
 }
 <span class="boring">}</span></code></pre>
 <h3 id="considerations"><a class="header" href="#considerations">Considerations</a></h3>
@@ -902,6 +904,12 @@ struct QuotaUsage {
     dir_count: u64,
 }
 
+impl Default for QuotaUsage {
+    fn default() -&gt; Self {
+        Self { total_size: 0, file_count: 0, dir_count: 0 }
+    }
+}
+
 impl&lt;B&gt; Quota&lt;B&gt; {
     /// Get current usage statistics.
     pub fn usage(&amp;self) -&gt; Usage {
@@ -936,8 +944,11 @@ impl&lt;B&gt; Quota&lt;B&gt; {
         }
     }
 }
-```impl&lt;B: Fs&gt; Quota&lt;B&gt; {
-    pub fn new(inner: B, config: QuotaConfig) -&gt; Result&lt;Self, FsError&gt; {
+
+impl&lt;B: Fs&gt; Quota&lt;B&gt; {
+    /// Create Quota middleware with explicit config.
+    /// Prefer `QuotaLayer::builder()` for the Layer pattern.
+    pub fn with_config(inner: B, config: QuotaConfig) -&gt; Result&lt;Self, FsError&gt; {
         // IMPORTANT: Scan backend to initialize usage counters
         let usage = Self::scan_usage(&amp;inner)?;
 
@@ -959,10 +970,10 @@ impl&lt;B&gt; Quota&lt;B&gt; {
             let entry = entry?;
             let meta = backend.metadata(&amp;entry.path)?;
 
-            if meta.is_file {
+            if meta.is_file() {
                 usage.file_count += 1;
                 usage.total_size += meta.size;
-            } else if meta.is_dir {
+            } else if meta.is_dir() {
                 usage.dir_count += 1;
                 Self::scan_dir(backend, &amp;entry.path, usage)?;
             }
@@ -970,12 +981,13 @@ impl&lt;B&gt; Quota&lt;B&gt; {
         Ok(())
     }
 
-    fn check_size_limit(&amp;self, additional_bytes: u64) -&gt; Result&lt;(), FsError&gt; {
+    fn check_size_limit(&amp;self, path: &amp;Path, additional_bytes: u64) -&gt; Result&lt;(), FsError&gt; {
         let usage = self.usage.read().unwrap();
 
         if let Some(max) = self.config.max_total_size {
             if usage.total_size + additional_bytes &gt; max {
                 return Err(FsError::QuotaExceeded {
+                    path: path.to_path_buf(),
                     limit: max,
                     requested: additional_bytes,
                     usage: usage.total_size,
@@ -986,11 +998,12 @@ impl&lt;B&gt; Quota&lt;B&gt; {
         Ok(())
     }
 
-    fn check_node_limit(&amp;self) -&gt; Result&lt;(), FsError&gt; {
+    fn check_node_limit(&amp;self, path: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
         if let Some(max) = self.config.max_node_count {
             let usage = self.usage.read().unwrap();
             if usage.file_count + usage.dir_count &gt;= max {
                 return Err(FsError::QuotaExceeded {
+                    path: path.to_path_buf(),
                     limit: max,
                     requested: 1,
                     usage: usage.file_count + usage.dir_count,
@@ -1009,6 +1022,7 @@ impl&lt;B&gt; Quota&lt;B&gt; {
                 .count() as u64;
             if count &gt;= max {
                 return Err(FsError::QuotaExceeded {
+                    path: parent.to_path_buf(),
                     limit: max,
                     requested: 1,
                     usage: count,
@@ -1023,6 +1037,7 @@ impl&lt;B&gt; Quota&lt;B&gt; {
             let depth = path.components().count();
             if depth &gt; max {
                 return Err(FsError::QuotaExceeded {
+                    path: path.to_path_buf(),
                     limit: max as u64,
                     requested: depth as u64,
                     usage: depth as u64,
@@ -1060,7 +1075,7 @@ impl&lt;B: FsWrite + FsRead + FsDir&gt; FsWrite for Quota&lt;B&gt; {
         // If creating a new file, check node count and dir entries
         let is_new_file = old_size == 0;
         if is_new_file {
-            self.check_node_limit()?;
+            self.check_node_limit(path)?;
             if let Some(parent) = path.parent() {
                 self.check_dir_entries(parent)?;
             }
@@ -1069,7 +1084,7 @@ impl&lt;B: FsWrite + FsRead + FsDir&gt; FsWrite for Quota&lt;B&gt; {
         let size_delta = new_size as i64 - old_size as i64;
 
         if size_delta &gt; 0 {
-            self.check_size_limit(size_delta as u64)?;
+            self.check_size_limit(path, size_delta as u64)?;
         }
 
         // Perform write
@@ -1167,7 +1182,7 @@ impl&lt;B: FsDir + FsRead&gt; FsDir for Quota&lt;B&gt; {
         self.check_path_depth(path)?;
 
         // Check node count
-        self.check_node_limit()?;
+        self.check_node_limit(path)?;
 
         // Check parent directory entries
         if let Some(parent) = path.parent() {
@@ -1506,9 +1521,7 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
     type Backend = Quota&lt;B&gt;;
 
     fn layer(self, backend: B) -&gt; Self::Backend {
-        Quota::new(backend, self.config).expect("quota initialization failed")
-    }
-}
+        Quota::with_config(backend, self.config).expect(\"quota initialization failed\")\n    }\n}
 
 // Usage:
 let fs = MemoryBackend::new()

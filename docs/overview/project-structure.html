@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -242,6 +242,16 @@ anyfs-indexed/              # Hybrid backend (SQLite index + disk blobs)
 anyfs-s3/                   # Third-party: S3 backend
 anyfs-redis/                # Third-party: Redis backend
 </code></pre>
+<h3 id="testing-crate"><a class="header" href="#testing-crate">Testing Crate</a></h3>
+<pre><code>anyfs-test/                 # Conformance test suite for backend implementers
+  src/
+    lib.rs
+    conformance/            # Test generators for each trait level
+      fs_tests.rs           # Fs-level tests
+      fs_full_tests.rs      # FsFull-level tests
+      fs_fuse_tests.rs      # FsFuse-level tests
+    prelude.rs              # Re-exports for test files
+</code></pre>
 <hr>
 <h2 id="dependency-model"><a class="header" href="#dependency-model">Dependency Model</a></h2>
 <pre><code>anyfs-backend (trait + types)
@@ -285,7 +295,15 @@ anyfs-redis/                # Third-party: Redis backend
 <li><code>restrictions</code> — Permission control (default)</li>
 <li><code>read-only</code> — Write blocking (default)</li>
 <li><code>rate-limit</code> — Fixed-window rate limiting (default)</li>
+<li><code>cache</code> — LRU read caching (default)</li>
+<li><code>dry-run</code> — Operation logging without execution (default)</li>
+<li><code>overlay</code> — Union filesystem layers (default)</li>
 <li><code>tracing</code> — Detailed audit logging (requires <code>tracing</code> crate)</li>
+</ul>
+<h3 id="mounting-platform-features"><a class="header" href="#mounting-platform-features">Mounting (Platform Features)</a></h3>
+<ul>
+<li><code>fuse</code> — Mount as filesystem on Linux/macOS (requires <code>fuser</code> crate)</li>
+<li><code>winfsp</code> — Mount as filesystem on Windows (requires <code>winfsp</code> crate)</li>
 </ul>
 <p>Use <code>default-features = false</code> to cherry-pick exactly what you need.</p>
 <h3 id="middleware-future-scope"><a class="header" href="#middleware-future-scope">Middleware (Future Scope)</a></h3>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -262,7 +262,8 @@ fn test_create_dir_and_list() {
     backend.create_dir(std::path::Path::new("/mydir")).unwrap();
     backend.write(std::path::Path::new("/mydir/file.txt"), b"data").unwrap();
 
-    let entries = backend.read_dir(std::path::Path::new("/mydir")).unwrap();
+    let entries: Vec&lt;_&gt; = backend.read_dir(std::path::Path::new("/mydir")).unwrap()
+        .collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].name, "file.txt");
 }
@@ -537,7 +538,7 @@ fn test_restrictions_blocks_permissions() {
     fs.write("/file.txt", b"data").unwrap();
     let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o777));
 
-    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+    assert!(matches!(result, Err(FsError::FeatureNotEnabled { .. })));
 }
 <span class="boring">}</span></code></pre>
 <h3 id="pathfilter-tests"><a class="header" href="#pathfilter-tests">PathFilter Tests</a></h3>
@@ -591,7 +592,8 @@ fn test_pathfilter_read_dir_filters() {
             .build());
     let fs = FileStorage::new(backend);
 
-    let entries = fs.read_dir("/workspace").unwrap();
+    let entries: Vec&lt;_&gt; = fs.read_dir("/workspace").unwrap()
+        .collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;().unwrap();
 
     // .env should be filtered out
     assert_eq!(entries.len(), 1);

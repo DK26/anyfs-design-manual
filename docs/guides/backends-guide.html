@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -531,7 +531,7 @@ index.db contains:
 <li>Need WASM/browser support (use MemoryBackend)</li>
 </ul>
 <blockquote>
-<p>🔒 <strong>Encryption Tip:</strong> If you need large file performance but content confidentiality matters, wrap IndexedBackend with <code>Encryption&lt;B&gt;</code> middleware to encrypt blob contents at rest. This protects data while preserving native I/O streaming.</p>
+<p>🔒 <strong>Encryption Tip:</strong> If you need large file performance but content confidentiality matters, you can implement an <code>Encryption&lt;B&gt;</code> middleware wrapper to encrypt blob contents at rest. This is a user-defined middleware pattern (not built-in) - see the <a href="../implementation/middleware-implementation.html">middleware implementation guide</a> for how to create custom middleware. Alternatively, use <code>SqliteBackend</code> with SQLCipher encryption for simpler encrypted storage.</p>
 </blockquote>
 <hr>
 <h2 id="type-2-real-filesystem-backends-1"><a class="header" href="#type-2-real-filesystem-backends-1">Type 2: Real Filesystem Backends</a></h2>
@@ -707,7 +707,7 @@ fs.read("/../../../etc/passwd")?;
 <li>Want complete isolation from host (use SqliteBackend)</li>
 </ul>
 <blockquote>
-<p>🔒 <strong>Encryption Tip:</strong> For sensitive data in sandboxed directories (user uploads, plugin workspaces, AI agent data), wrap VRootFsBackend with <code>Encryption&lt;B&gt;</code> middleware. This ensures files written to the host filesystem are encrypted at rest, protecting against host-level access.</p>
+<p>🔒 <strong>Encryption Tip:</strong> For sensitive data in sandboxed directories (user uploads, plugin workspaces, AI agent data), consider implementing an <code>Encryption&lt;B&gt;</code> middleware wrapper. This is a user-defined middleware pattern - you would create a custom Layer that encrypts data before delegating to the inner backend. See the <a href="../implementation/middleware-implementation.html">middleware implementation guide</a> for the pattern.</p>
 </blockquote>
 <hr>
 <h2 id="composition-middleware"><a class="header" href="#composition-middleware">Composition Middleware</a></h2>

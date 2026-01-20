@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -335,6 +335,7 @@ dry_run.clear();  // Clear the log
 CacheLayer::builder()
     .max_entries(1000)                          // LRU cache size
     .max_entry_size(1024 * 1024)               // 1MB max per entry
+    .ttl(Duration::from_secs(300))             // Optional: entry lifetime (default: no expiry)
     .build()
     .layer(backend)
 <span class="boring">}</span></code></pre>
@@ -543,22 +544,9 @@ match result {
     Err(FsError::NotADirectory { path }) =&gt; ...
     Err(FsError::NotAFile { path }) =&gt; ...
     Err(FsError::DirectoryNotEmpty { path }) =&gt; ...
+    Err(FsError::SymlinkLoop { path }) =&gt; ...  // Circular symlink detected
 
-    // Quota middleware errors
-    Err(FsError::QuotaExceeded { limit, requested, usage }) =&gt; ...
-    Err(FsError::FileSizeExceeded { path, size, limit }) =&gt; ...
-
-    // Restrictions middleware errors
-    Err(FsError::FeatureNotEnabled { feature, operation }) =&gt; ...
-
-    // PathFilter middleware errors
-    Err(FsError::AccessDenied { path, reason }) =&gt; ...
-
-    // ReadOnly middleware errors
-    Err(FsError::ReadOnly { operation }) =&gt; ...
-
-    // RateLimit middleware errors
-    Err(FsError::RateLimitExceeded { limit, window_secs }) =&gt; ...
+    // Quota middleware errors\n    Err(FsError::QuotaExceeded { path, limit, requested, usage }) =&gt; ...\n    Err(FsError::FileSizeExceeded { path, size, limit }) =&gt; ...\n\n    // Restrictions middleware errors\n    Err(FsError::FeatureNotEnabled { path, feature, operation }) =&gt; ...\n\n    // PathFilter middleware errors\n    Err(FsError::AccessDenied { path, reason }) =&gt; ...\n\n    // ReadOnly middleware errors\n    Err(FsError::ReadOnly { path, operation }) =&gt; ...\n\n    // RateLimit middleware errors\n    Err(FsError::RateLimitExceeded { path, limit, window_secs }) =&gt; ...
 
     // FsExt errors
     Err(FsError::Serialization(msg)) =&gt; ...

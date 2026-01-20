@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-67f3d6fc.js";
+            window.path_to_searchindex_js = "../searchindex-325ea731.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -444,7 +444,12 @@ let fs: Tracing&lt;Quota&lt;MemoryBackend&gt;&gt; = MemoryBackend::new()
     let mut backend: Box&lt;dyn Fs&gt; = Box::new(MemoryBackend::new());
 
     if config.enable_quota {
-        backend = Box::new(Quota::new(backend, config.quota_limit));
+        let quota_config = QuotaConfig {
+            max_total_size: Some(config.quota_limit),
+            ..Default::default()
+        };
+        backend = Box::new(Quota::with_config(backend, quota_config)
+            .expect("quota initialization failed"));
     }
 
     if config.enable_antivirus {
@@ -476,7 +481,7 @@ impl&lt;B: FsWrite&gt; FsWrite for Antivirus&lt;B&gt; {
         if let Some(threat) = self.scanner.scan(data) {
             return Err(FsError::ThreatDetected { 
                 path: path.to_path_buf(), 
-                threat_name: threat,
+                reason: threat,
             });
         }
         self.inner.write(path, data)
@@ -536,11 +541,20 @@ pub struct Metrics&lt;B&gt; {
 }
 
 impl&lt;B&gt; Metrics&lt;B&gt; {
+    /// Creates a new Metrics middleware.
+    ///
+    /// # Panics
+    /// Panics if metric registration fails (indicates duplicate metric names - programmer error).
+    /// This is acceptable at initialization time; runtime operations never panic.
     pub fn new(inner: B, registry: &amp;Registry) -&gt; Self {
-        let reads = Counter::new("anyfs_reads_total", "Total read operations").unwrap();
-        let writes = Counter::new("anyfs_writes_total", "Total write operations").unwrap();
-        registry.register(Box::new(reads.clone())).unwrap();
-        registry.register(Box::new(writes.clone())).unwrap();
+        let reads = Counter::new("anyfs_reads_total", "Total read operations")
+            .expect("metric creation failed");
+        let writes = Counter::new("anyfs_writes_total", "Total write operations")
+            .expect("metric creation failed");
+        registry.register(Box::new(reads.clone()))
+            .expect("metric registration failed");
+        registry.register(Box::new(writes.clone()))
+            .expect("metric registration failed");
         // ... register all metrics
         Self { inner, reads, writes, /* ... */ }
     }
@@ -563,7 +577,8 @@ impl&lt;B: FsRead&gt; FsRead for Metrics&lt;B&gt; {
 async fn metrics_handler(registry: web::Data&lt;Registry&gt;) -&gt; impl Responder {
     let encoder = TextEncoder::new();
     let metrics = registry.gather();
-    encoder.encode_to_string(&amp;metrics).unwrap()
+    encoder.encode_to_string(&amp;metrics)
+        .unwrap_or_else(|e| format!("# Encoding error: {}", e))
 }
 <span class="boring">}</span></code></pre>
 <p><strong>Indexing Middleware with Remote Database:</strong></p>
@@ -602,7 +617,7 @@ impl&lt;B: FsWrite, I: IndexBackend&gt; FsWrite for Indexing&lt;B, I&gt; {
 // Usage with PostgreSQL
 let index = PostgresIndex::connect("postgres://user:pass@db.example.com/files").await?;
 let backend = MemoryBackend::new()
-    .layer(IndexingLayer::new(index));
+    .layer(IndexLayer::new(index));
 <span class="boring">}</span></code></pre>
 <p><strong>Configurable Tracing with Multiple Sinks:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -679,19 +694,20 @@ pub struct Tracing&lt;B, S: TraceSink&gt; {
             │              │              │
        FsHandles      FsLock       FsXattr
             │              │              │
-            └──────────────┼──────────────┘
+            └──────────────┴──────────────┘
                            │
-                        FsFuse
+                        FsFuse ← FsFull + FsInode
                            │
-                       FsInode
-                           │
-                        FsFull
-                           │
-            ┌──────┬───────┼───────┬──────┐
+            ┌──────────────┴──────────────┐
+            │                             │
+         FsFull                       FsInode
+            │
+            │
+            ├──────┬───────┬───────┬──────┐
             │      │       │       │      │
        FsLink  FsPerm  FsSync FsStats │
             │      │       │       │      │
-            └──────┴───────┼───────┴──────┘
+            └──────┴───────┴───────┴──────┘
                            │
                            Fs  ← Most users only need this
                            │
@@ -1138,11 +1154,11 @@ let _ = fs.read("/test.txt");       // Error: file doesn't exist
 </span><span class="boring">fn main() {
 </span>use anyfs::{MemoryBackend, CacheLayer, FileStorage};
 
-let backend = CacheLayer::builder()
-    .max_size(100 * 1024 * 1024)      // 100 MB cache
-    .max_entries(10_000)              // Max 10K entries
-    .build()
-    .layer(MemoryBackend::new());
+let backend = MemoryBackend::new()
+    .layer(CacheLayer::builder()
+        .max_entries(10_000)              // Max 10K entries in cache
+        .max_entry_size(10 * 1024 * 1024) // 10 MB max per entry
+        .build());
 let fs = FileStorage::new(backend);
 
 // First read: hits backend, caches result
@@ -1279,17 +1295,31 @@ pub trait Layer&lt;B: Fs&gt; {
     type Backend: Fs;
     fn layer(self, backend: B) -&gt; Self::Backend;
 }
+
+/// Extension trait enabling fluent `.layer()` method on any Fs.
+/// This is how `backend.layer(QuotaLayer::builder()...build())` works.
+pub trait LayerExt: Fs + Sized {
+    fn layer&lt;L: Layer&lt;Self&gt;&gt;(self, layer: L) -&gt; L::Backend {
+        layer.layer(self)
+    }
+}
+
+// Blanket impl: any Fs gets .layer() for free
+impl&lt;B: Fs&gt; LayerExt for B {}
 <span class="boring">}</span></code></pre>
 <p>Each middleware provides a corresponding <code>Layer</code> implementation:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// QuotaLayer, TracingLayer, RestrictionsLayer, etc.
-pub struct QuotaLayer { limits: QuotaLimits }
+</span>// QuotaLayer wraps QuotaConfig (not a separate QuotaLimits type)
+pub struct QuotaLayer {
+    config: QuotaConfig,
+}
 
 impl&lt;B: Fs&gt; Layer&lt;B&gt; for QuotaLayer {
     type Backend = Quota&lt;B&gt;;
     fn layer(self, backend: B) -&gt; Self::Backend {
-        Quota::from_limits(self.limits).layer(backend)
+        Quota::with_config(backend, self.config)
+            .expect("quota initialization failed")
     }
 }
 <span class="boring">}</span></code></pre>
@@ -1415,7 +1445,15 @@ pub trait SelfResolving {}
 
 impl SelfResolving for VRootFsBackend {}
 <span class="boring">}</span></code></pre>
-<p><code>FileStorage</code> applies resolution via its boxed <code>PathResolver</code> for backends that don’t implement <code>SelfResolving</code>. The default <code>IterativeResolver</code> follows symlinks when <code>FsLink</code> is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).</p>
+<blockquote>
+<p><strong>Important:</strong> <code>FileStorage</code> does NOT auto-detect <code>SelfResolving</code>. You must explicitly use <code>NoOpResolver</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// For SelfResolving backends, use NoOpResolver explicitly
+let fs = FileStorage::with_resolver(VRootFsBackend::new("/data")?, NoOpResolver);
+<span class="boring">}</span></code></pre>
+</blockquote>
+<p>The default <code>IterativeResolver</code> follows symlinks when <code>FsLink</code> is available. Custom resolvers can implement different behaviors (e.g., no symlink following, caching, case-insensitivity).</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
@@ -1805,6 +1843,7 @@ pub enum FsError {
 
     /// Read-only filesystem (from ReadOnly middleware).
     ReadOnly {
+        path: PathBuf,
         operation: &amp;'static str,
     },
 
@@ -1812,6 +1851,7 @@ pub enum FsError {
     /// Note: Symlink/hard-link capability is determined by trait bounds (FsLink),
     /// not middleware. Restrictions only controls "permissions".
     FeatureNotEnabled {
+        path: PathBuf,
         feature: &amp;'static str,  // "permissions"
         operation: &amp;'static str,
     },
@@ -1822,6 +1862,7 @@ pub enum FsError {
 
     /// Quota exceeded (total storage).
     QuotaExceeded {
+        path: PathBuf,
         limit: u64,
         requested: u64,
         usage: u64,
@@ -1836,6 +1877,7 @@ pub enum FsError {
 
     /// Rate limit exceeded (from RateLimit middleware).
     RateLimitExceeded {
+        path: PathBuf,
         limit: u32,
         window_secs: u64,
     },
