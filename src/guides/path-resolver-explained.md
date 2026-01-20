@@ -215,15 +215,21 @@ This is useful for creating new files—you need to know WHERE to create them, b
 
 ```rust
 // The trait (the "job description")
+// Only canonicalize() is required - soft_canonicalize has a default implementation
 pub trait PathResolver: Send + Sync {
     fn canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
-    fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
+    
+    // Default: canonicalize parent, append final component
+    fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError> {
+        let canonical_parent = self.canonicalize(path.parent().unwrap(), fs)?;
+        Ok(canonical_parent.join(path.file_name().unwrap()))
+    }
 }
 
 // For symlink-aware resolution (when backend implements FsLink):
 pub trait PathResolverWithLinks: PathResolver {
     fn canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
-    fn soft_canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
+    // soft_canonicalize_following_links also has a default that delegates
 }
 
 // FileStorage uses it (boxed for flexibility)
@@ -234,5 +240,7 @@ pub struct FileStorage<B> {
 ```
 
 That's it! **PathResolver answers one question: "What's the real, simple path?"**
+
+The `soft_canonicalize` variant is just a convenience - it reuses `canonicalize` internally but allows creating new files.
 
 Everything else—reading files, writing files, listing directories—is the backend's job.
