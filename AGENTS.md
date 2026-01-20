@@ -635,6 +635,7 @@ When receiving feedback, reviews, or suggestions (from humans or AI reviewers):
    - Does the feedback align with AGENTS.md principles?
    - Is the reviewer's understanding of the architecture correct?
    - Does the suggestion make sense for THIS project, or is it generic advice?
+   - Is this a real problem or a stylistic preference?
 
 **2. Push back on invalid feedback:**
    - If a review contradicts AGENTS.md, **AGENTS.md wins**
@@ -649,14 +650,33 @@ When receiving feedback, reviews, or suggestions (from humans or AI reviewers):
    - "Add documentation explaining why you didn't do X" → Wrong: We document what IS, not what ISN'T.
    - Generic best practices that don't fit our architecture → Explain why they don't apply here.
 
-**4. When feedback IS valid:**
+**4. Design docs vs implementation code:**
+   - **Design docs show intent, not compilable code.** Conceptual clarity > syntactic precision.
+   - "This example doesn't compile" is often NOT a valid criticism of a design doc.
+   - Placeholder names like `QuotaLimits` vs `QuotaConfig` are fine if the concept is clear.
+   - ASCII diagram abbreviations (e.g., `FsPerm`) are acceptable for space constraints.
+   - Only fix examples if they would **mislead** an implementer, not for pedantic correctness.
+
+**5. Severity triage - not all findings are equal:**
+   - **Actually breaks understanding?** → Fix it
+   - **Technically imprecise but conceptually clear?** → Probably leave it
+   - **Stylistic or pedantic?** → Reject or note for later
+   - **Adds complexity without clear user benefit?** → Reject
+
+**6. When feedback IS valid:**
    - Acknowledge it and implement the improvement
    - If it reveals a gap in AGENTS.md, update AGENTS.md first
    - Ensure the fix is consistent with the rest of the design
 
-**5. Never blindly satisfy reviewers:**
+**7. Never blindly satisfy reviewers:**
    - Your job is to produce correct, consistent work—not to make reviewers happy
    - A review that breaks architectural consistency is worse than no review
    - If you're unsure, ask for clarification rather than guessing what the reviewer wants
    - Quality > compliance
+
+**8. After processing a review, self-check:**
+   - Did I accept every finding without questioning it? (Bad sign)
+   - Did I add complexity to satisfy the reviewer? (Justify it)
+   - Did any change make the docs harder to understand? (Revert it)
+   - Would I make this change if there was no review? (Honest answer)
 
