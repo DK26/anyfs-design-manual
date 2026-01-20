@@ -22,8 +22,8 @@ This document captures previously open questions and design considerations. Unle
 - `SelfResolving` backends delegate to the OS. `strict-path` prevents escapes.
 
 ### Implications
-- If you need symlink-free semantics, use a backend that does not implement `FsLink` or block symlink creation and ensure no preexisting symlinks exist.
-- `Restrictions` only controls creation, not resolution.
+- If you need symlink-free semantics, use a backend that does not implement `FsLink`, or if using a backend that does implement `FsLink`, ensure no preexisting symlinks exist in the data (the `FsLink` trait provides creation capability, but you can choose not to call those methods).
+- `Restrictions` middleware controls permission-related operations only, not symlink creation (which is a trait-level capability).
 
 ### Why
 - Virtual backends have no host filesystem to escape to; symlink resolution stays inside the virtual structure.

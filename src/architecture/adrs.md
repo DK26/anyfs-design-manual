@@ -1421,29 +1421,53 @@ This works, but the resolution **algorithm** is not a first-class, testable unit
 /// Strategy trait for path resolution algorithms.
 ///
 /// Encapsulates path normalization, `..`/`.` resolution, and optionally symlink following.
-/// Symlink resolution requires the backend to implement `FsLink`. If the backend only
-/// implements `Fs`, the resolver will normalize paths and resolve `.`/`..` but cannot
-/// follow symlinks (they are treated as regular files/directories).
+///
+/// **Symlink handling:** The base trait works with `&dyn Fs` (no symlink awareness).
+/// For symlink-aware resolution, use `PathResolverWithLinks` which accepts `&dyn FsLink`.
+/// `IterativeResolver` implements both traits - call the appropriate method based on
+/// what your backend supports.
 pub trait PathResolver: Send + Sync {
-    /// Resolve path to canonical form.
-    /// If backend implements `FsLink`, symlinks are followed up to max depth.
-    /// If backend only implements `Fs`, symlinks are not followed.
+    /// Resolve path to canonical form (no symlink following).
+    /// Normalizes `.` and `..` components only.
     fn canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
     
     /// Like canonicalize, but allows non-existent final component.
     fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
 }
-```
 
-**Note on symlink handling:** The trait accepts `&dyn Fs` for object safety, but implementations can attempt to downcast to `&dyn FsLink` when symlink awareness is needed. All built-in virtual backends implement `FsLink`, so this works seamlessly. For backends without `FsLink`, resolution still works but treats all entries as non-symlinks.
+/// Extension trait for symlink-aware resolution.
+/// Backends implementing FsLink can use this for full resolution.
+pub trait PathResolverWithLinks: PathResolver {
+    /// Resolve path following symlinks (requires FsLink backend).
+    fn canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
+    
+    fn soft_canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
+}
+```
 
 **Built-in Implementations (in `anyfs` crate):**
 
 ```rust
 /// Default iterative resolver - walks path component by component.
-/// Follows symlinks if the backend implements FsLink.
+/// Implements both PathResolver and PathResolverWithLinks.
 pub struct IterativeResolver {
     max_symlink_depth: usize,  // Default: 40
+}
+
+impl PathResolver for IterativeResolver {
+    fn canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError> {
+        // Normalize `.` and `..` only - no symlink following
+        self.normalize_path(path, fs)
+    }
+    // ...
+}
+
+impl PathResolverWithLinks for IterativeResolver {
+    fn canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError> {
+        // Full resolution with symlink following
+        self.resolve_with_symlinks(path, fs, self.max_symlink_depth)
+    }
+    // ...
 }
 
 /// No-op resolver for SelfResolving backends (OS handles resolution).

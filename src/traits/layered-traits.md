@@ -15,19 +15,20 @@ See ADR-030 for the design rationale.
         │              │              │
    FsHandles       FsLock        FsXattr
         │              │              │
-        └──────────────┼──────────────┘
+        └──────────────┴──────────────┘
                        │
-                    FsFuse
+                    FsFuse ← FsFull + FsInode
                        │
-                   FsInode
-                       │
-                    FsFull
-                       │
-        ┌──────┬───────┼───────┬──────┐
+        ┌──────────────┴──────────────┐
+        │                             │
+     FsFull                       FsInode
+        │
+        │
+        ├──────┬───────┬───────┬──────┐
         │      │       │       │      │
-   FsLink   FsPerm  FsSync  FsStats   │
+   FsLink  FsPerms  FsSync  FsStats   │
         │      │       │       │      │
-        └──────┴───────┼───────┴──────┘
+        └──────┴───────┴───────┴──────┘
                        │
                       Fs   ← Most users only need this
                        │
@@ -43,7 +44,7 @@ See ADR-030 for the design rationale.
 
 **Simple rule:** Import `Fs` for basic use. Add traits as needed for advanced features.
 
-**Note:** `FsPath` is a derived trait with a blanket impl. Any type implementing `FsRead + FsLink` automatically gets `FsPath`. `SelfResolving` is a marker trait that opts out of `FileStorage` path resolution. `PathResolver` is a strategy trait for pluggable path resolution (see ADR-033).
+**Note:** `FsPath` is a derived trait with a blanket impl. Any type implementing `FsRead + FsLink` automatically gets `FsPath`. `SelfResolving` is a marker trait - backends that implement it should be used with `NoOpResolver` in `FileStorage` (there is no automatic detection; use `FileStorage::with_resolver(backend, NoOpResolver)` explicitly). `PathResolver` is a strategy trait for pluggable path resolution (see ADR-033).
 
 ---
 

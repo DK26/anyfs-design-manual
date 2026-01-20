@@ -267,7 +267,12 @@ fn build_from_config(config: &Config) -> FileStorage<Box<dyn Fs>> {
     let mut backend: Box<dyn Fs> = Box::new(MemoryBackend::new());
 
     if config.enable_quota {
-        backend = Box::new(Quota::new(backend, config.quota_limit));
+        let quota_config = QuotaConfig {
+            max_total_size: Some(config.quota_limit),
+            ..Default::default()
+        };
+        backend = Box::new(Quota::with_config(backend, quota_config)
+            .expect("quota initialization failed"));
     }
 
     if config.enable_antivirus {
@@ -1751,6 +1756,7 @@ pub enum FsError {
 
     /// Read-only filesystem (from ReadOnly middleware).
     ReadOnly {
+        path: PathBuf,
         operation: &'static str,
     },
 
@@ -1758,6 +1764,7 @@ pub enum FsError {
     /// Note: Symlink/hard-link capability is determined by trait bounds (FsLink),
     /// not middleware. Restrictions only controls "permissions".
     FeatureNotEnabled {
+        path: PathBuf,
         feature: &'static str,  // "permissions"
         operation: &'static str,
     },
@@ -1768,6 +1775,7 @@ pub enum FsError {
 
     /// Quota exceeded (total storage).
     QuotaExceeded {
+        path: PathBuf,
         limit: u64,
         requested: u64,
         usage: u64,
@@ -1782,6 +1790,7 @@ pub enum FsError {
 
     /// Rate limit exceeded (from RateLimit middleware).
     RateLimitExceeded {
+        path: PathBuf,
         limit: u32,
         window_secs: u64,
     },

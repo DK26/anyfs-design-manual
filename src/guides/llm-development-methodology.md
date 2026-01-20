@@ -74,7 +74,9 @@ mod tests {
     #[test]
     fn quota_rejects_oversized_write() {
         let mock = MockFs::new();
-        let quota = Quota::new(mock).max_file_size(100);
+        let quota = mock.layer(QuotaLayer::builder()
+            .max_file_size(100)
+            .build());
         
         let result = quota.write(Path::new("/big.txt"), &[0u8; 200]);
         assert!(matches!(result, Err(FsError::FileSizeExceeded { .. })));
@@ -241,8 +243,10 @@ Contract: Reject operations that would create paths deeper than the limit.
 
 Example:
 ```rust
-let quota = Quota::new(backend).max_path_depth(5);
-quota.create_dir_all("/a/b/c/d/e/f")?; // Err: depth 6 > limit 5
+let fs = backend.layer(QuotaLayer::builder()
+    .max_path_depth(5)
+    .build());
+fs.create_dir_all("/a/b/c/d/e/f")?; // Err: depth 6 > limit 5
 ```
 ```
 
