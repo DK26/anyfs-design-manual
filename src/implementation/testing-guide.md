@@ -367,7 +367,7 @@ fn test_restrictions_blocks_permissions() {
     fs.write("/file.txt", b"data").unwrap();
     let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o777));
 
-    assert!(matches!(result, Err(FsError::OperationDenied { .. })));
+    assert!(matches!(result, Err(FsError::FeatureNotEnabled { .. })));
 }
 ```
 

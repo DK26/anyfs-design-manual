@@ -301,7 +301,7 @@ impl<B: FsWrite> FsWrite for Antivirus<B> {
         if let Some(threat) = self.scanner.scan(data) {
             return Err(FsError::ThreatDetected { 
                 path: path.to_path_buf(), 
-                threat_name: threat,
+                reason: threat,
             });
         }
         self.inner.write(path, data)
