@@ -179,6 +179,7 @@ dry_run.clear();  // Clear the log
 CacheLayer::builder()
     .max_entries(1000)                          // LRU cache size
     .max_entry_size(1024 * 1024)               // 1MB max per entry
+    .ttl(Duration::from_secs(300))             // Optional: entry lifetime (default: no expiry)
     .build()
     .layer(backend)
 ```

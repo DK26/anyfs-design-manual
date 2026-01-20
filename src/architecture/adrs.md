@@ -350,6 +350,8 @@ pub trait Layer<B: Fs> {
 }
 ```
 
+> **Note:** For async compatibility, the trait is unbounded: `Layer<B>` without `B: Fs`. This allows the same layer types to implement both sync (`impl<B: Fs> Layer<B>`) and async (`impl<B: AsyncFs> Layer<B>`). See ADR-027.
+
 **Why:**
 - Standardized composition pattern familiar to Tower/Axum users.
 - IDE autocomplete for available layers.

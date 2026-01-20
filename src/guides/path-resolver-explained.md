@@ -220,6 +220,12 @@ pub trait PathResolver: Send + Sync {
     fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
 }
 
+// For symlink-aware resolution (when backend implements FsLink):
+pub trait PathResolverWithLinks: PathResolver {
+    fn canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
+    fn soft_canonicalize_following_links(&self, path: &Path, fs: &dyn FsLink) -> Result<PathBuf, FsError>;
+}
+
 // FileStorage uses it (boxed for flexibility)
 pub struct FileStorage<B> {
     backend: B,                        // Where files live

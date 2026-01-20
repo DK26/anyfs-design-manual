@@ -153,7 +153,7 @@ Unlike logging-only solutions, AnyFS middleware can **transform and control**:
 | Middleware     | What It Does                                         |
 | -------------- | ---------------------------------------------------- |
 | `Quota`        | Enforce storage limits, reject writes over quota     |
-| `PathFilter`   | Sandbox to allowed paths, block sensitive files      |
+| `PathFilter`   | Sandbox to allowed paths, block sensitive files*     |
 | `Restrictions` | Block permission changes (symlinks via trait bounds) |
 | `RateLimit`    | Throttle operations per second                       |
 | `ReadOnly`     | Block all writes                                     |
@@ -161,6 +161,8 @@ Unlike logging-only solutions, AnyFS middleware can **transform and control**:
 | `Overlay`      | Union filesystem (Docker-like layers)                |
 | `DryRun`       | Log what would happen without executing              |
 | Custom         | Implement encryption, compression, deduplication...  |
+
+*`PathFilter` sandboxes virtual backends securely. For real-FS sandboxing, use `VRootFsBackend`.
 
 ### Snapshots & Persistence
 
