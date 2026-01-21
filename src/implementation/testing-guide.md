@@ -518,12 +518,24 @@ fn test_filestorage_wrapper_types() {
     only_sandbox(&sandbox);  // Compiles
     // only_sandbox(&prod);  // Would not compile - different type
 }
+```
 
+---
+
+## 4. Integration Tests (Real Filesystem)
+
+Tests that use real filesystem backends (`VRootFsBackend`, `tempfile`) are integration tests, not unit tests.
+
+```rust
 #[test]
-fn test_filestorage_boxed() {
+fn test_filestorage_boxed_with_real_fs() {
+    // This is an INTEGRATION test - uses real filesystem via tempfile
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
     let temp = tempfile::tempdir().unwrap();
-    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
+    let fs2 = FileStorage::with_resolver(
+        VRootFsBackend::new(temp.path()).unwrap(),
+        NoOpResolver
+    ).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec<FileStorage<Box<dyn Fs>>> = vec![fs1, fs2];
@@ -532,7 +544,7 @@ fn test_filestorage_boxed() {
 
 ---
 
-## 4. Error Handling Tests
+## 5. Error Handling Tests
 
 ```rust
 #[test]

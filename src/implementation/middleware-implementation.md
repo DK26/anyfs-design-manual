@@ -363,6 +363,10 @@ impl<B> DryRun<B> {
         self.operations.read().unwrap().clone()
     }
 
+    pub fn clear(&self) {
+        self.operations.write().unwrap().clear();
+    }
+
     fn log(&self, op: String) {
         self.operations.write().unwrap().push(op);
     }

@@ -334,9 +334,10 @@ See [anyfs-indexed#9](https://github.com/DK26/anyfs-indexed/issues/9) for detail
 Direct delegation to `std::fs`. Every call maps 1:1 to the standard library.
 
 ```rust
-use anyfs::{StdFsBackend, FileStorage};
+use anyfs::{StdFsBackend, FileStorage, NoOpResolver};
 
-let fs = FileStorage::new(StdFsBackend::new());
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(StdFsBackend::new(), NoOpResolver);
 fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 ```
 
@@ -345,7 +346,7 @@ fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 - Every method directly calls the equivalent `std::fs` function
 - Paths passed through unchanged
 - OS handles all resolution, symlinks, permissions
-- Implements `SelfResolving` marker (FileStorage skips virtual resolution)
+- Implements `SelfResolving` marker (use `NoOpResolver` to skip virtual resolution)
 
 #### Performance
 
@@ -405,10 +406,14 @@ Sets a directory as a virtual root. All operations are contained within it.
 > **Feature:** `vrootfs`
 
 ```rust
-use anyfs::{VRootFsBackend, FileStorage};
+use anyfs::{VRootFsBackend, FileStorage, NoOpResolver};
 
 // /home/user/sandbox becomes the virtual "/"
-let fs = FileStorage::new(VRootFsBackend::new("/home/user/sandbox")?);
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(
+    VRootFsBackend::new("/home/user/sandbox")?,
+    NoOpResolver
+);
 
 fs.write("/data.txt", b"Hello")?; 
 // Actually writes to: /home/user/sandbox/data.txt

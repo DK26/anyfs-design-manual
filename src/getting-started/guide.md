@@ -31,6 +31,7 @@ Available `anyfs` features:
 - `memory` — In-memory storage (default)
 - `stdfs` — Direct `std::fs` delegation (no containment)
 - `vrootfs` — Host filesystem backend with path containment
+- `bytes` — Zero-copy `Bytes` support (adds `read_bytes()` method)
 
 ---
 

@@ -224,7 +224,7 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 
 ### Path Resolution (FileStorage's Responsibility)
 
-FileStorage handles path resolution for ALL backends (unless they implement `SelfResolving`):
+FileStorage handles path resolution using its configured `PathResolver`:
 
 - Walks path component by component using `metadata()` and `read_link()`
 - Handles `..` correctly after symlink resolution (symlink-aware, not lexical)
@@ -233,7 +233,7 @@ FileStorage handles path resolution for ALL backends (unless they implement `Sel
 - Detects circular symlinks (max depth or visited set)
 - Returns canonical resolved path to the backend
 
-**Backends that don't implement `FsLink`:** FileStorage cannot resolve symlinks for these backends. Path resolution will traverse directories using `metadata()` and handle `..` based on directory structure, but symlinks are treated as regular files. These backends effectively have no symlink support.
+**SelfResolving backends** (StdFsBackend, VRootFsBackend) handle their own resolution. Use `FileStorage::with_resolver(backend, NoOpResolver)` explicitly.
 
 **Backends receive already-resolved paths** - they just store/retrieve bytes.
 
