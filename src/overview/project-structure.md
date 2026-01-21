@@ -128,16 +128,10 @@ Complex backends live in their own crates:
 - `anyfs-indexed` — SQLite index + disk blobs for large file performance
 
 ### Middleware (MVP Scope)
-Following the **Tower/Axum** pattern, feature flags keep the core lightweight:
+Core middleware is always available (no feature flags needed):
+- Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay
 
-- `quota` — Storage limits (default)
-- `path-filter` — Glob-based access control (default)
-- `restrictions` — Permission control (default)
-- `read-only` — Write blocking (default)
-- `rate-limit` — Fixed-window rate limiting (default)
-- `cache` — LRU read caching (default)
-- `dry-run` — Operation logging without execution (default)
-- `overlay` — Union filesystem layers (default)
+Optional middleware with external dependencies:
 - `tracing` — Detailed audit logging (requires `tracing` crate)
 
 ### Mounting (Platform Features)

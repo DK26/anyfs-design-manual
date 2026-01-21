@@ -740,10 +740,10 @@ fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
 ### Full POSIX Application
 
 ```rust
-use anyfs::{FileStorage, FsPosix, FsError};
+use anyfs::{FileStorage, FsPosix, FsError, OpenFlags, LockType, Handle};
 
-fn database_app<B: FsPosix>(fs: &FileStorage<B>) -> Result<(), FsError> {
-    let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
+fn database_app<B: FsPosix>(fs: &FileStorage<B>, data: &[u8], offset: u64) -> Result<(), FsError> {
+    let handle: Handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
     fs.unlock(handle)?;
@@ -1868,7 +1868,9 @@ pub enum FsError {
     },
 
     /// Backend-specific error (catch-all for custom backends).
-    Backend(String),
+    Backend {
+        message: String,
+    },
 
     /// I/O error wrapper.
     Io {

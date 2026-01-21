@@ -321,6 +321,8 @@ impl<B: FsFuse> FileSystem for WinFspAdapter<B> {
             .map_err(to_ntstatus)?;
 
         for entry in entries {
+            // ReadDirIter yields Result<DirEntry, FsError>
+            let entry = entry.map_err(to_ntstatus)?;
             callback(to_dir_info(&entry));
         }
         Ok(())

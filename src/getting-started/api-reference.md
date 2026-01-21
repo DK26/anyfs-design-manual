@@ -224,7 +224,7 @@ Extension methods available on all backends:
 ```rust
 use anyfs_backend::FsExt;
 
-// JSON support
+// JSON support (requires `serde` feature on anyfs-backend)
 let config: Config = fs.read_json("/config.json")?;
 fs.write_json("/config.json", &config)?;
 
@@ -232,6 +232,8 @@ fs.write_json("/config.json", &config)?;
 if fs.is_file("/path")? { ... }
 if fs.is_dir("/path")? { ... }
 ```
+
+> **Note:** JSON methods require `anyfs-backend = { version = "0.1", features = ["serde"] }`
 
 ---
 

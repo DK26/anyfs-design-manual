@@ -32,6 +32,11 @@ Available `anyfs` features:
 - `stdfs` — Direct `std::fs` delegation (no containment)
 - `vrootfs` — Host filesystem backend with path containment
 - `bytes` — Zero-copy `Bytes` support (adds `read_bytes()` method)
+- `tracing` — Detailed audit logging (requires `tracing` crate)
+- `fuse` — Mount as filesystem on Linux/macOS
+- `winfsp` — Mount as filesystem on Windows
+
+Core middleware (Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay) is always available.
 
 ---
 
