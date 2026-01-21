@@ -147,6 +147,8 @@ RateLimitLayer::builder()
     .per_second()            // Window: 1 second
     // or
     .per_minute()            // Window: 60 seconds
+    // or
+    .per(Duration::from_millis(500))  // Custom window
     .build()
     .layer(backend)
 ```

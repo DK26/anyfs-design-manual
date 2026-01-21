@@ -433,27 +433,21 @@ anyfs = { version = "0.1", features = ["bytes"] }
 - `Bytes` provides O(1) slicing via reference counting.
 - Beneficial for large file handling, network backends, streaming.
 - Optional - users who don't need it avoid the dependency.
-- Default remains `Vec<u8>` for simplicity.
+- Core traits remain `Vec<u8>` for simplicity and `Send + Sync` compliance.
 
-**Implementation:** Use a type alias to avoid breaking API:
+**Implementation:** The `bytes` feature adds a convenience method to `FileStorage`, not a core trait change:
 
 ```rust
-// In anyfs-backend/src/types.rs
-
-#[cfg(feature = "bytes")]
-pub type FileContent = bytes::Bytes;
-
-#[cfg(not(feature = "bytes"))]
-pub type FileContent = Vec<u8>;
-
-// In trait definition
-pub trait FsRead: Send {
-    fn read(&self, path: &Path) -> Result<FileContent, FsError>;
-    // ...
+// In anyfs/src/container.rs (behind `bytes` feature)
+impl<B: Fs> FileStorage<B> {
+    #[cfg(feature = "bytes")]
+    pub fn read_bytes(&self, path: impl AsRef<Path>) -> Result<bytes::Bytes, FsError> {
+        Ok(bytes::Bytes::from(self.read(path)?))
+    }
 }
 ```
 
-**Middleware compatibility:** Middleware passes `FileContent` through unchanged. No special handling needed - both `Vec<u8>` and `Bytes` implement `AsRef<[u8]>` and `Deref<Target=[u8]>`.
+**Core traits unchanged:** `FsRead::read()` returns `Vec<u8>`. The `bytes` feature only adds ergonomic wrappers.
 
 ---
 
@@ -496,7 +490,9 @@ PathFilterLayer::builder()
 ```
 
 **Semantics:**
-- Rules are evaluated in order; first match wins.
+- Deny rules are evaluated first and take precedence over allow rules.
+- If path matches any deny rule, access is denied.
+- If path matches an allow rule (and no deny), access is granted.
 - If no rules match, access is denied (deny by default).
 - Uses glob patterns (e.g., `**` for recursive, `*` for single segment).
 - Returns `FsError::AccessDenied` for denied paths.

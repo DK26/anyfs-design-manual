@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### With Restrictions
 
 ```rust
-use anyfs::{MemoryBackend, Restrictions, FileStorage};
+use anyfs::{MemoryBackend, RestrictionsLayer, FileStorage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Block permission changes for untrusted code
@@ -213,7 +213,7 @@ if !remaining.can_write {
 ### Restrictions — Block Permission Changes
 
 ```rust
-use anyfs::{MemoryBackend, Restrictions};
+use anyfs::{MemoryBackend, RestrictionsLayer};
 
 // Restrictions controls permission-related operations.
 // Symlink/hard-link capability is determined by trait bounds (FsLink).

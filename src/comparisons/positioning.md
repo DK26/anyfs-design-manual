@@ -175,11 +175,11 @@ If you want quotas in `vfs`, you'd have to build it INTO each backend. Then buil
 ```rust
 let fs = MemoryBackend::new()
     .layer(QuotaLayer::builder()
-        .max_total_size(100_MB)
-        .max_file_count(1000)
+        .max_total_size(100 * 1024 * 1024)  // 100 MB
         .build())
     .layer(RateLimitLayer::builder()
-        .max_ops_per_second(100)
+        .max_ops(100)
+        .per_second()
         .build())
     .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
@@ -259,7 +259,7 @@ fs.create_file("test.txt")?.write_all(b"hello")?;
 
 // AnyFS: More setup if you use middleware
 let fs = MemoryBackend::new()
-    .layer(QuotaLayer::builder().max_total_size(1_MB).build());
+    .layer(QuotaLayer::builder().max_total_size(1024 * 1024).build());  // 1 MB
 fs.write("/test.txt", b"hello")?;
 ```
 
