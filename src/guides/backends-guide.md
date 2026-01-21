@@ -634,7 +634,9 @@ Do you need persistence?
 | IndexedBackend | 🟢 Fast      | ✅ Complete | ✅ Directory   | ✅ Native I/O  | ❌      |
 | StdFsBackend   | 🟢 Normal    | ❌ None     | ✅ Native      | ✅ Native      | ❌      |
 | VRootFsBackend | 🟡 Moderate  | ✅ Strong   | ✅ Native      | ✅ Native      | ❌      |
-| Overlay        | Varies      | Varies     | Varies        | Varies        | Varies |
+| Overlay†       | Varies      | Varies     | Varies        | Varies        | Varies |
+
+†Overlay is middleware that composes two backends; characteristics depend on the backends used.
 
 ### By Use Case
 
@@ -663,10 +665,11 @@ Do you need persistence?
 | IndexedBackend |    ✅    |   ✅   |   ✅   |   ❌    |
 | StdFsBackend   |    ✅    |   ✅   |   ✅   |   ❌    |
 | VRootFsBackend |   ✅**   |   ✅   |   ✅   |   ❌    |
-| Overlay        |    ✅    |   ✅   |   ✅   | Varies |
+| Overlay†       |    ✅    |   ✅   |   ✅   | Varies |
 
 \* Requires wasm32-compatible SQLite build  
-\** Windows symlinks require elevated privileges or Developer Mode
+\** Windows symlinks require elevated privileges or Developer Mode  
+†Overlay is middleware; platform support depends on the backends composed
 
 ---
 

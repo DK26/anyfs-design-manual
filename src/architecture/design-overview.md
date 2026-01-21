@@ -703,22 +703,24 @@ fn process_files() -> Result<(), Box<dyn std::error::Error>> {
 ### Generic Code over Core Traits
 
 ```rust
-use anyfs::{FileStorage, Fs};
+use anyfs::{FileStorage, Fs, FsError};
 
-fn process_files<B: Fs>(fs: &FileStorage<B>) {
+fn process_files<B: Fs>(fs: &FileStorage<B>) -> Result<(), FsError> {
     let data = fs.read("/input.txt")?;
     fs.write("/output.txt", &processed(data))?;
+    Ok(())
 }
 ```
 
 ### Need Links? Add the Trait
 
 ```rust
-use anyfs::{FileStorage, Fs, FsLink};
+use anyfs::{FileStorage, Fs, FsLink, FsError};
 
-fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) {
+fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) -> Result<(), FsError> {
     fs.write("/target.txt", b"content")?;
     fs.symlink("/target.txt", "/link.txt")?;
+    Ok(())
 }
 ```
 
@@ -727,25 +729,28 @@ fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) {
 Mounting is part of `anyfs` crate with `fuse` and `winfsp` feature flags; see `src/guides/mounting.md`.
 
 ```rust
-use anyfs::{FsFuse, MountHandle};
+use anyfs::{FsFuse, MountHandle, FsError};
 
-fn mount_filesystem(fs: impl FsFuse) {
+fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
     MountHandle::mount(fs, "/mnt/myfs")?;
+    Ok(())
 }
 ```
 
 ### Full POSIX Application
 
 ```rust
-use anyfs::{FileStorage, FsPosix};
+use anyfs::{FileStorage, FsPosix, FsError};
 
-fn database_app<B: FsPosix>(fs: &FileStorage<B>) {
+fn database_app<B: FsPosix>(fs: &FileStorage<B>) -> Result<(), FsError> {
     let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
     fs.unlock(handle)?;
     fs.close(handle)?;
+    Ok(())
 }
+```
 
 ---
 
@@ -1737,6 +1742,8 @@ pub enum FsError {
     },
 
     /// Security threat detected (e.g., virus).
+    /// Note: This variant supports the Antivirus middleware example.
+    /// Custom middleware can use this or define domain-specific error types.
     #[error("threat detected: {reason} in {path}")]
     ThreatDetected {
         path: PathBuf,

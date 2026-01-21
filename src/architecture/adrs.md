@@ -549,9 +549,9 @@ RateLimitLayer::builder()
 ```
 
 **Semantics:**
-- Tracks operation count in sliding time window.
+- Tracks operation count in fixed time window (simpler than sliding window, sufficient for most use cases).
 - Returns `FsError::RateLimitExceeded` when limit exceeded.
-- Counter resets after window expires.
+- Counter resets when window expires.
 
 **Why:**
 - Protects against runaway processes consuming resources.

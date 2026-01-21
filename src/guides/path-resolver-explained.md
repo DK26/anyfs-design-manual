@@ -220,9 +220,18 @@ pub trait PathResolver: Send + Sync {
     fn canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError>;
     
     // Default: canonicalize parent, append final component
+    // Handles edge cases (root path, empty parent)
     fn soft_canonicalize(&self, path: &Path, fs: &dyn Fs) -> Result<PathBuf, FsError> {
-        let canonical_parent = self.canonicalize(path.parent().unwrap(), fs)?;
-        Ok(canonical_parent.join(path.file_name().unwrap()))
+        match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                let canonical_parent = self.canonicalize(parent, fs)?;
+                match path.file_name() {
+                    Some(name) => Ok(canonical_parent.join(name)),
+                    None => Ok(canonical_parent),
+                }
+            }
+            _ => self.canonicalize(path, fs),  // Root or single component
+        }
     }
 }
 
