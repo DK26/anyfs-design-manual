@@ -371,7 +371,8 @@ impl<B> Metrics<B> {
     ///
     /// # Panics
     /// Panics if metric registration fails (indicates duplicate metric names - programmer error).
-    /// This is acceptable at initialization time; runtime operations never panic.
+    /// This is acceptable at initialization time per the No Panic Policy, which applies to
+    /// runtime operations. Initialization failures are configuration errors that should fail fast.
     pub fn new(inner: B, registry: &Registry) -> Self {
         let reads = Counter::new("anyfs_reads_total", "Total read operations")
             .expect("metric creation failed");
@@ -1636,12 +1637,12 @@ The `FsExt` trait provides convenience methods for any `Fs` backend:
 pub trait FsExt: Fs {
     /// Check if path is a file.
     fn is_file(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
-        self.metadata(path).map(|m| m.file_type == FileType::File)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::File)
     }
 
     /// Check if path is a directory.
     fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, FsError> {
-        self.metadata(path).map(|m| m.file_type == FileType::Directory)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::Directory)
     }
 
     // JSON methods require `serde` feature (see below)
@@ -1669,13 +1670,13 @@ use serde::{Serialize, de::DeserializeOwned};
 #[cfg(feature = "serde")]
 impl<B: Fs> FsExt for B {
     fn read_json<T: DeserializeOwned>(&self, path: impl AsRef<Path>) -> Result<T, FsError> {
-        let bytes = self.read(path)?;
+        let bytes = self.read(path.as_ref())?;
         serde_json::from_slice(&bytes).map_err(|e| FsError::Deserialization(e.to_string()))
     }
 
     fn write_json<T: Serialize>(&self, path: impl AsRef<Path>, value: &T) -> Result<(), FsError> {
         let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
-        self.write(path, &bytes)
+        self.write(path.as_ref(), &bytes)
     }
 }
 ```

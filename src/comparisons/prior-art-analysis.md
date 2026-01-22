@@ -101,7 +101,7 @@ This document analyzes filesystem abstraction libraries in other languages to le
 **Lessons for AnyFS:**
 - ⚠️ **Symlink handling is complex** - we must handle loops, non-existent targets, and escaping
 - ✅ **URL-based opening is convenient** - consider for future
-- ✅ **Consistent path format** - we already do this (forward slashes always)
+- ✅ **Consistent path format** - virtual backends use forward slashes internally; OS-backed backends follow OS semantics
 
 ---
 
