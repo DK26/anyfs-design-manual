@@ -968,7 +968,7 @@ tracing_subscriber::fmt::init();
 Restricts access to specific paths. Essential for sandboxing.
 
 ```rust
-use anyfs::{MemoryBackend, PathFilter};
+use anyfs::{MemoryBackend, PathFilterLayer};
 
 let backend = PathFilterLayer::builder()
     .allow("/workspace/**")           // Allow all under /workspace

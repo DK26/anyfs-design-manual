@@ -61,6 +61,39 @@ let fs = BackendStack::new(MemoryBackend::new())
 
 ---
 
+## BackendStack Methods
+
+`BackendStack` provides a fluent API for building middleware stacks:
+
+```rust
+use anyfs::BackendStack;
+
+BackendStack::new(backend)           // Start with any backend
+    .limited(|l| l                   // -> Quota<B>
+        .max_total_size(bytes)
+        .max_file_size(bytes)
+        .max_node_count(count))
+    .restricted(|g| g                // -> Restrictions<B>
+        .deny_permissions())
+    .traced()                        // -> Tracing<B>
+    .cached(|c| c                    // -> Cache<B>
+        .max_size(bytes)
+        .ttl(duration))
+    .read_only()                     // -> ReadOnly<B>
+    .into_container()                // -> FileStorage<...>
+```
+
+| Method              | Creates           | Description                    |
+| ------------------- | ----------------- | ------------------------------ |
+| `.limited()`        | `Quota<B>`        | Add quota limits               |
+| `.restricted()`     | `Restrictions<B>` | Add operation restrictions     |
+| `.traced()`         | `Tracing<B>`      | Add tracing instrumentation    |
+| `.cached()`         | `Cache<B>`        | Add LRU caching                |
+| `.read_only()`      | `ReadOnly<B>`     | Make backend read-only         |
+| `.into_container()` | `FileStorage<B>`  | Finish and wrap in FileStorage |
+
+---
+
 ## Quota Methods
 
 ```rust

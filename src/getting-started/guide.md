@@ -362,7 +362,7 @@ Mount a database-backed filesystem and query it directly for real-time analytics
 │         ▼               │               ▼                   │
 │  /mnt/workspace         │    SELECT SUM(size) FROM nodes    │
 │  $ cp file.txt ./       │    SELECT COUNT(*) FROM nodes     │
-│  $ mkdir projects/      │    SELECT * FROM operations_log   │
+│  $ mkdir projects/      │    SELECT * FROM audit_log        │
 │                         │               │                   │
 │                         │               ▼                   │
 │                         │        ┌──────────────┐           │

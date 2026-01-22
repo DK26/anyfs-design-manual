@@ -507,13 +507,13 @@ impl<B: FsDir> FsDir for PathFilter<B> {
         // Filter the iterator to exclude denied entries
         Ok(ReadDirIter::new(FilteredDirIter {
             inner: inner_iter,
-            filter: self.clone(),  // Need access to rules
+            rules: self.rules.clone(),  // Copy rules for filtering
         }))
     }
 }
 
 // Custom iterator that filters denied entries
-struct FilteredDirIter<B> {
+struct FilteredDirIter {
     inner: ReadDirIter,
     rules: Vec<PathRule>,
 }

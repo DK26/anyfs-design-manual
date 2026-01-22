@@ -818,7 +818,9 @@ impl<B: Fs> Layer<B> for CounterLayer {
 **Usage with .layer():**
 
 ```rust
-// LayerExt is in prelude, so .layer() just works
+// LayerExt is re-exported from anyfs crate
+use anyfs::LayerExt;
+
 let backend = MemoryBackend::new()
     .layer(CounterLayer);
 ```
