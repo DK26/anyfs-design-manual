@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -272,7 +272,7 @@ impl EncryptedSqliteBackend {
 
         // Verify encryption is working
         conn.execute_batch("SELECT count(*) FROM sqlite_master;")
-            .map_err(|_| FsError::Backend("Invalid encryption key".into()))?;
+            .map_err(|_| FsError::InvalidPassword)?;
 
         // Configure after key is set
         conn.execute_batch("

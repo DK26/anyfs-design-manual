@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-325ea731.js";
+            window.path_to_searchindex_js = "searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4ff2705e.js"></script>
@@ -503,16 +503,12 @@ anyfs-redis/                # Third-party: Redis backend
 <li><code>anyfs-indexed</code> — SQLite index + disk blobs for large file performance</li>
 </ul>
 <h3 id="middleware-mvp-scope"><a class="header" href="#middleware-mvp-scope">Middleware (MVP Scope)</a></h3>
-<p>Following the <strong>Tower/Axum</strong> pattern, feature flags keep the core lightweight:</p>
+<p>Core middleware is always available (no feature flags needed):</p>
 <ul>
-<li><code>quota</code> — Storage limits (default)</li>
-<li><code>path-filter</code> — Glob-based access control (default)</li>
-<li><code>restrictions</code> — Permission control (default)</li>
-<li><code>read-only</code> — Write blocking (default)</li>
-<li><code>rate-limit</code> — Fixed-window rate limiting (default)</li>
-<li><code>cache</code> — LRU read caching (default)</li>
-<li><code>dry-run</code> — Operation logging without execution (default)</li>
-<li><code>overlay</code> — Union filesystem layers (default)</li>
+<li>Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay</li>
+</ul>
+<p>Optional middleware with external dependencies:</p>
+<ul>
 <li><code>tracing</code> — Detailed audit logging (requires <code>tracing</code> crate)</li>
 </ul>
 <h3 id="mounting-platform-features"><a class="header" href="#mounting-platform-features">Mounting (Platform Features)</a></h3>
@@ -558,7 +554,12 @@ anyfs-indexed = "0.1"
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment</li>
+<li><code>bytes</code> — Zero-copy <code>Bytes</code> support (adds <code>read_bytes()</code> method)</li>
+<li><code>tracing</code> — Detailed audit logging (requires <code>tracing</code> crate)</li>
+<li><code>fuse</code> — Mount as filesystem on Linux/macOS</li>
+<li><code>winfsp</code> — Mount as filesystem on Windows</li>
 </ul>
+<p>Core middleware (Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay) is always available.</p>
 <hr>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Examples below use <code>FileStorage</code>, so you can pass paths as <code>&amp;str</code>. If you call core trait methods directly, use <code>&amp;Path</code>.</p>
@@ -592,7 +593,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="with-restrictions"><a class="header" href="#with-restrictions">With Restrictions</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, Restrictions, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, RestrictionsLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Block permission changes for untrusted code
@@ -704,7 +705,7 @@ if !remaining.can_write {
 <h3 id="restrictions--block-permission-changes"><a class="header" href="#restrictions--block-permission-changes">Restrictions — Block Permission Changes</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Restrictions};
+</span>use anyfs::{MemoryBackend, RestrictionsLayer};
 
 // Restrictions controls permission-related operations.
 // Symlink/hard-link capability is determined by trait bounds (FsLink).
@@ -840,7 +841,7 @@ let fs = FileStorage::new(
 │         ▼               │               ▼                   │
 │  /mnt/workspace         │    SELECT SUM(size) FROM nodes    │
 │  $ cp file.txt ./       │    SELECT COUNT(*) FROM nodes     │
-│  $ mkdir projects/      │    SELECT * FROM operations_log   │
+│  $ mkdir projects/      │    SELECT * FROM audit_log        │
 │                         │               │                   │
 │                         │               ▼                   │
 │                         │        ┌──────────────┐           │
@@ -869,6 +870,8 @@ let mount = MountHandle::mount(backend, "/mnt/workspace")?;
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Meanwhile, in a monitoring dashboard...
+// Note: This queries SqliteBackend's internal schema (nodes, audit_log tables).
+// See anyfs-sqlite documentation for schema details.
 use rusqlite::{Connection, OpenFlags};
 
 let conn = Connection::open_with_flags(
@@ -1016,6 +1019,42 @@ let fs = BackendStack::new(MemoryBackend::new())
     .into_container();
 <span class="boring">}</span></code></pre>
 <hr>
+<h2 id="backendstack-methods"><a class="header" href="#backendstack-methods">BackendStack Methods</a></h2>
+<p><code>BackendStack</code> provides a fluent API for building middleware stacks:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::BackendStack;
+
+BackendStack::new(backend)           // Start with any backend
+    .limited(|l| l                   // -&gt; Quota&lt;B&gt;
+        .max_total_size(bytes)
+        .max_file_size(bytes)
+        .max_node_count(count))
+    .restricted(|g| g                // -&gt; Restrictions&lt;B&gt;
+        .deny_permissions())
+    .traced()                        // -&gt; Tracing&lt;B&gt;
+    .cached(|c| c                    // -&gt; Cache&lt;B&gt;
+        .max_size(bytes)
+        .ttl(duration))
+    .read_only()                     // -&gt; ReadOnly&lt;B&gt;
+    .into_container()                // -&gt; FileStorage&lt;...&gt;
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Creates</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>.limited()</code></td><td><code>Quota&lt;B&gt;</code></td><td>Add quota limits</td></tr>
+<tr><td><code>.restricted()</code></td><td><code>Restrictions&lt;B&gt;</code></td><td>Add operation restrictions</td></tr>
+<tr><td><code>.traced()</code></td><td><code>Tracing&lt;B&gt;</code></td><td>Add tracing instrumentation</td></tr>
+<tr><td><code>.cached()</code></td><td><code>Cache&lt;B&gt;</code></td><td>Add LRU caching</td></tr>
+<tr><td><code>.read_only()</code></td><td><code>ReadOnly&lt;B&gt;</code></td><td>Make backend read-only</td></tr>
+<tr><td><code>.into_container()</code></td><td><code>FileStorage&lt;B&gt;</code></td><td>Finish and wrap in FileStorage</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
 <h2 id="quota-methods"><a class="header" href="#quota-methods">Quota Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -1092,6 +1131,8 @@ RateLimitLayer::builder()
     .per_second()            // Window: 1 second
     // or
     .per_minute()            // Window: 60 seconds
+    // or
+    .per(Duration::from_millis(500))  // Custom window
     .build()
     .layer(backend)
 <span class="boring">}</span></code></pre>
@@ -1158,7 +1199,7 @@ let overlay = Overlay::new(base, upper);
 </span><span class="boring">fn main() {
 </span>use anyfs_backend::FsExt;
 
-// JSON support
+// JSON support (requires `serde` feature on anyfs-backend)
 let config: Config = fs.read_json("/config.json")?;
 fs.write_json("/config.json", &amp;config)?;
 
@@ -1166,6 +1207,9 @@ fs.write_json("/config.json", &amp;config)?;
 if fs.is_file("/path")? { ... }
 if fs.is_dir("/path")? { ... }
 <span class="boring">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> JSON methods require <code>anyfs-backend = { version = "0.1", features = ["serde"] }</code></p>
+</blockquote>
 <hr>
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <p>Examples below assume <code>FileStorage</code> (std::fs-style paths). If you call core trait methods directly, pass <code>&amp;Path</code>.</p>
@@ -1310,7 +1354,7 @@ assert_eq!(ino1, ino2);  // Same inode!
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>Internal node IDs (incrementing counter)</td></tr>
 <tr><td><code>anyfs-sqlite: SqliteBackend</code></td><td>SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td>OS inode numbers (<code>Metadata::ino()</code>)</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td>OS inode numbers (<code>metadata.inode</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1430,10 +1474,12 @@ backend.change_password("new-password")?;
 <tr><td><code>TracingLayer</code></td><td><code>Tracing&lt;B&gt;</code></td></tr>
 <tr><td><code>DryRunLayer</code></td><td><code>DryRun&lt;B&gt;</code></td></tr>
 <tr><td><code>CacheLayer</code></td><td><code>Cache&lt;B&gt;</code></td></tr>
-<tr><td><code>OverlayLayer</code></td><td><code>Overlay&lt;B1,B2&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
+<blockquote>
+<p><strong>Note:</strong> <code>Overlay&lt;B1, B2&gt;</code> is constructed directly via <code>Overlay::new(base, upper)</code> rather than using a Layer, because it takes two backends.</p>
+</blockquote>
 <hr>
 <h2 id="type-reference"><a class="header" href="#type-reference">Type Reference</a></h2>
 <h3 id="from-anyfs-backend"><a class="header" href="#from-anyfs-backend">From <code>anyfs-backend</code></a></h3>
@@ -1444,8 +1490,8 @@ backend.change_password("new-password")?;
 <tr><th>Trait</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FsRead</code></td><td>Read operations: <code>read</code>, <code>exists</code>, <code>metadata</code>, <code>open_read</code></td></tr>
-<tr><td><code>FsWrite</code></td><td>Write operations: <code>write</code>, <code>append</code>, <code>remove_file</code>, <code>rename</code>, <code>copy</code>, <code>truncate</code></td></tr>
+<tr><td><code>FsRead</code></td><td>Read operations: <code>read</code>, <code>read_to_string</code>, <code>read_range</code>, <code>exists</code>, <code>metadata</code>, <code>open_read</code></td></tr>
+<tr><td><code>FsWrite</code></td><td>Write operations: <code>write</code>, <code>append</code>, <code>remove_file</code>, <code>rename</code>, <code>copy</code>, <code>truncate</code>, <code>open_write</code></td></tr>
 <tr><td><code>FsDir</code></td><td>Directory operations: <code>read_dir</code>, <code>create_dir*</code>, <code>remove_dir*</code></td></tr>
 </tbody>
 </table>
@@ -1946,7 +1992,8 @@ impl&lt;B&gt; Metrics&lt;B&gt; {
     ///
     /// # Panics
     /// Panics if metric registration fails (indicates duplicate metric names - programmer error).
-    /// This is acceptable at initialization time; runtime operations never panic.
+    /// This is acceptable at initialization time per the No Panic Policy, which applies to
+    /// runtime operations. Initialization failures are configuration errors that should fail fast.
     pub fn new(inner: B, registry: &amp;Registry) -&gt; Self {
         let reads = Counter::new("anyfs_reads_total", "Total read operations")
             .expect("metric creation failed");
@@ -2018,7 +2065,9 @@ impl&lt;B: FsWrite, I: IndexBackend&gt; FsWrite for Indexing&lt;B, I&gt; {
 // Usage with PostgreSQL
 let index = PostgresIndex::connect("postgres://user:pass@db.example.com/files").await?;
 let backend = MemoryBackend::new()
-    .layer(IndexLayer::new(index));
+    .layer(IndexLayer::builder()
+        .index(index)
+        .build());
 <span class="boring">}</span></code></pre>
 <p><strong>Configurable Tracing with Multiple Sinks:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -2255,54 +2304,56 @@ fn process_files() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 <h3 id="generic-code-over-core-traits"><a class="header" href="#generic-code-over-core-traits">Generic Code over Core Traits</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, Fs};
+</span>use anyfs::{FileStorage, Fs, FsError};
 
-fn process_files&lt;B: Fs&gt;(fs: &amp;FileStorage&lt;B&gt;) {
+fn process_files&lt;B: Fs&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Result&lt;(), FsError&gt; {
     let data = fs.read("/input.txt")?;
     fs.write("/output.txt", &amp;processed(data))?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="need-links-add-the-trait"><a class="header" href="#need-links-add-the-trait">Need Links? Add the Trait</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, Fs, FsLink};
+</span>use anyfs::{FileStorage, Fs, FsLink, FsError};
 
-fn with_symlinks&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) {
+fn with_symlinks&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Result&lt;(), FsError&gt; {
     fs.write("/target.txt", b"content")?;
     fs.symlink("/target.txt", "/link.txt")?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fuse-mount"><a class="header" href="#fuse-mount">FUSE Mount</a></h3>
 <p>Mounting is part of <code>anyfs</code> crate with <code>fuse</code> and <code>winfsp</code> feature flags; see <code>src/guides/mounting.md</code>.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FsFuse, MountHandle};
+</span>use anyfs::{FsFuse, MountHandle, MountError};
 
-fn mount_filesystem(fs: impl FsFuse) {
+fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), MountError&gt; {
     MountHandle::mount(fs, "/mnt/myfs")?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="full-posix-application"><a class="header" href="#full-posix-application">Full POSIX Application</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, FsPosix};
+</span>use anyfs::{FileStorage, FsPosix, FsError, OpenFlags, LockType, Handle};
 
-fn database_app&lt;B: FsPosix&gt;(fs: &amp;FileStorage&lt;B&gt;) {
-    let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
+fn database_app&lt;B: FsPosix&gt;(fs: &amp;FileStorage&lt;B&gt;, data: &amp;[u8], offset: u64) -&gt; Result&lt;(), FsError&gt; {
+    let handle: Handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
     fs.unlock(handle)?;
     fs.close(handle)?;
+    Ok(())
 }
-
----
-
-# Core Types (in `anyfs-backend`)
-
-## Constants
-
-```rust
-/// Root directory inode. FUSE convention.
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="core-types-in-anyfs-backend"><a class="header" href="#core-types-in-anyfs-backend">Core Types (in <code>anyfs-backend</code>)</a></h2>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Root directory inode. FUSE convention.
 pub const ROOT_INODE: u64 = 1;
 <span class="boring">}</span></code></pre>
 <h3 id="metadata"><a class="header" href="#metadata">Metadata</a></h3>
@@ -2495,7 +2546,7 @@ tracing_subscriber::fmt::init();
 <p>Restricts access to specific paths. Essential for sandboxing.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, PathFilter};
+</span>use anyfs::{MemoryBackend, PathFilterLayer};
 
 let backend = PathFilterLayer::builder()
     .allow("/workspace/**")           // Allow all under /workspace
@@ -2523,13 +2574,11 @@ fs.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 <p>Limits operations per second. Prevents runaway agents.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, RateLimit};
-use std::time::Duration;
+</span>use anyfs::{MemoryBackend, RateLimitLayer};
 
 let backend = RateLimitLayer::builder()
-    .max_ops(100)                        // 100 ops per window
-    .window(Duration::from_secs(1))      // 1 second window
-    .max_burst(10)                       // Allow bursts up to 10
+    .max_ops(100)       // 100 ops per window
+    .per_second()       // 1 second window
     .build()
     .layer(MemoryBackend::new());
 
@@ -3113,12 +3162,12 @@ let sandbox = MemoryBackend::new()
 pub trait FsExt: Fs {
     /// Check if path is a file.
     fn is_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
-        self.metadata(path).map(|m| m.file_type == FileType::File)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::File)
     }
 
     /// Check if path is a directory.
     fn is_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
-        self.metadata(path).map(|m| m.file_type == FileType::Directory)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::Directory)
     }
 
     // JSON methods require `serde` feature (see below)
@@ -3142,13 +3191,13 @@ impl&lt;B: Fs&gt; FsExt for B {}
 #[cfg(feature = "serde")]
 impl&lt;B: Fs&gt; FsExt for B {
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt; {
-        let bytes = self.read(path)?;
+        let bytes = self.read(path.as_ref())?;
         serde_json::from_slice(&amp;bytes).map_err(|e| FsError::Deserialization(e.to_string()))
     }
 
     fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
         let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
-        self.write(path, &amp;bytes)
+        self.write(path.as_ref(), &amp;bytes)
     }
 }
 <span class="boring">}</span></code></pre>
@@ -3203,7 +3252,15 @@ pub enum FsError {
         path: PathBuf,
     },
 
+    /// Circular symlink detected during path resolution.
+    #[error("symlink loop detected: {path}")]
+    SymlinkLoop {
+        path: PathBuf,
+    },
+
     /// Security threat detected (e.g., virus).
+    /// Note: This variant supports the Antivirus middleware example.
+    /// Custom middleware can use this or define domain-specific error types.
     #[error("threat detected: {reason} in {path}")]
     ThreatDetected {
         path: PathBuf,
@@ -3328,7 +3385,9 @@ pub enum FsError {
     },
 
     /// Backend-specific error (catch-all for custom backends).
-    Backend(String),
+    Backend {
+        message: String,
+    },
 
     /// I/O error wrapper.
     Io {
@@ -3404,8 +3463,8 @@ impl From&lt;std::io::Error&gt; for FsError {
 </span><span class="boring">fn main() {
 </span>// This works identically on Windows, Linux, macOS, and WASM
 let fs = FileStorage::new(MemoryBackend::new());
-fs.symlink("/target", "/link")?;           // Just stores the link
-fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+fs.symlink("/target", "/link")?;                          // Just stores the link
+fs.set_permissions("/file", Permissions::from_mode(0o755))?; // Just stores metadata
 <span class="boring">}</span></code></pre>
 <h4 id="vrootfsbackend-real-filesystem"><a class="header" href="#vrootfsbackend-real-filesystem">VRootFsBackend (Real Filesystem)</a></h4>
 <p>Wraps the host filesystem. Platform differences apply:</p>
@@ -3542,7 +3601,8 @@ let fs = FileStorage::new(backend);
 <p>For <code>VRootFsBackend</code> (real filesystem), path containment uses <code>strict-path::VirtualRoot</code> internally:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>impl Fs for VRootFsBackend {
+</span>// VRootFsBackend implements FsRead, FsWrite, FsDir (and thus Fs via blanket impl)
+impl FsRead for VRootFsBackend {
     fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
         // VirtualRoot ensures paths can't escape
         let safe_path = self.root.join(path)?;
@@ -3998,26 +4058,20 @@ impl&lt;B: Fs&gt; FsExt for B {}
 <li><code>Bytes</code> provides O(1) slicing via reference counting.</li>
 <li>Beneficial for large file handling, network backends, streaming.</li>
 <li>Optional - users who don’t need it avoid the dependency.</li>
-<li>Default remains <code>Vec&lt;u8&gt;</code> for simplicity.</li>
+<li>Core traits remain <code>Vec&lt;u8&gt;</code> for simplicity and <code>Send + Sync</code> compliance.</li>
 </ul>
-<p><strong>Implementation:</strong> Use a type alias to avoid breaking API:</p>
+<p><strong>Implementation:</strong> The <code>bytes</code> feature adds a convenience method to <code>FileStorage</code>, not a core trait change:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// In anyfs-backend/src/types.rs
-
-#[cfg(feature = "bytes")]
-pub type FileContent = bytes::Bytes;
-
-#[cfg(not(feature = "bytes"))]
-pub type FileContent = Vec&lt;u8&gt;;
-
-// In trait definition
-pub trait FsRead: Send {
-    fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;FileContent, FsError&gt;;
-    // ...
+</span>// In anyfs/src/container.rs (behind `bytes` feature)
+impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
+    #[cfg(feature = "bytes")]
+    pub fn read_bytes(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bytes::Bytes, FsError&gt; {
+        Ok(bytes::Bytes::from(self.read(path)?))
+    }
 }
 <span class="boring">}</span></code></pre>
-<p><strong>Middleware compatibility:</strong> Middleware passes <code>FileContent</code> through unchanged. No special handling needed - both <code>Vec&lt;u8&gt;</code> and <code>Bytes</code> implement <code>AsRef&lt;[u8]&gt;</code> and <code>Deref&lt;Target=[u8]&gt;</code>.</p>
+<p><strong>Core traits unchanged:</strong> <code>FsRead::read()</code> returns <code>Vec&lt;u8&gt;</code>. The <code>bytes</code> feature only adds ergonomic wrappers.</p>
 <hr>
 <h2 id="adr-015-contextual-fserror"><a class="header" href="#adr-015-contextual-fserror">ADR-015: Contextual FsError</a></h2>
 <p><strong>Decision:</strong> <code>FsError</code> variants include context for better debugging.</p>
@@ -4055,7 +4109,9 @@ FsError::QuotaExceeded {
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
-<li>Rules are evaluated in order; first match wins.</li>
+<li>Deny rules are evaluated first and take precedence over allow rules.</li>
+<li>If path matches any deny rule, access is denied.</li>
+<li>If path matches an allow rule (and no deny), access is granted.</li>
 <li>If no rules match, access is denied (deny by default).</li>
 <li>Uses glob patterns (e.g., <code>**</code> for recursive, <code>*</code> for single segment).</li>
 <li>Returns <code>FsError::AccessDenied</code> for denied paths.</li>
@@ -4107,9 +4163,9 @@ FsError::QuotaExceeded {
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
-<li>Tracks operation count in sliding time window.</li>
+<li>Tracks operation count in fixed time window (simpler than sliding window, sufficient for most use cases).</li>
 <li>Returns <code>FsError::RateLimitExceeded</code> when limit exceeded.</li>
-<li>Counter resets after window expires.</li>
+<li>Counter resets when window expires.</li>
 </ul>
 <p><strong>Why:</strong></p>
 <ul>
@@ -6918,7 +6974,7 @@ fn create_backup&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Resu
 }
 
 // Requires FsFuse trait + fuse/winfsp feature
-fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), FsError&gt; {
+fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), MountError&gt; {
     anyfs::MountHandle::mount(fs, "/mnt/myfs")?;
     Ok(())
 }
@@ -7552,9 +7608,10 @@ index.db contains:
 <p>Direct delegation to <code>std::fs</code>. Every call maps 1:1 to the standard library.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{StdFsBackend, FileStorage};
+</span>use anyfs::{StdFsBackend, FileStorage, NoOpResolver};
 
-let fs = FileStorage::new(StdFsBackend::new());
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(StdFsBackend::new(), NoOpResolver);
 fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 <span class="boring">}</span></code></pre>
 <h4 id="how-it-works-3"><a class="header" href="#how-it-works-3">How It Works</a></h4>
@@ -7562,7 +7619,7 @@ fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 <li>Every method directly calls the equivalent <code>std::fs</code> function</li>
 <li>Paths passed through unchanged</li>
 <li>OS handles all resolution, symlinks, permissions</li>
-<li>Implements <code>SelfResolving</code> marker (FileStorage skips virtual resolution)</li>
+<li>Implements <code>SelfResolving</code> marker (use <code>NoOpResolver</code> to skip virtual resolution)</li>
 </ul>
 <h4 id="performance-3"><a class="header" href="#performance-3">Performance</a></h4>
 <div class="table-wrapper">
@@ -7634,10 +7691,14 @@ fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 </blockquote>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{VRootFsBackend, FileStorage};
+</span>use anyfs::{VRootFsBackend, FileStorage, NoOpResolver};
 
 // /home/user/sandbox becomes the virtual "/"
-let fs = FileStorage::new(VRootFsBackend::new("/home/user/sandbox")?);
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(
+    VRootFsBackend::new("/home/user/sandbox")?,
+    NoOpResolver
+);
 
 fs.write("/data.txt", b"Hello")?; 
 // Actually writes to: /home/user/sandbox/data.txt
@@ -7873,10 +7934,11 @@ fs.remove_file("/unwanted.txt")?;
 <tr><td>IndexedBackend</td><td>🟢 Fast</td><td>✅ Complete</td><td>✅ Directory</td><td>✅ Native I/O</td><td>❌</td></tr>
 <tr><td>StdFsBackend</td><td>🟢 Normal</td><td>❌ None</td><td>✅ Native</td><td>✅ Native</td><td>❌</td></tr>
 <tr><td>VRootFsBackend</td><td>🟡 Moderate</td><td>✅ Strong</td><td>✅ Native</td><td>✅ Native</td><td>❌</td></tr>
-<tr><td>Overlay</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td></tr>
+<tr><td>Overlay†</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td></tr>
 </tbody>
 </table>
 </div>
+<p>†Overlay is middleware that composes two backends; characteristics depend on the backends used.</p>
 <h3 id="by-use-case"><a class="header" href="#by-use-case">By Use Case</a></h3>
 <div class="table-wrapper">
 <table>
@@ -7911,11 +7973,11 @@ fs.remove_file("/unwanted.txt")?;
 <tr><td>IndexedBackend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td>StdFsBackend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td>VRootFsBackend</td><td style="text-align: center">✅**</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
-<tr><td>Overlay</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Varies</td></tr>
+<tr><td>Overlay†</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Varies</td></tr>
 </tbody>
 </table>
 </div>
-<p>* Requires wasm32-compatible SQLite build<br>** Windows symlinks require elevated privileges or Developer Mode</p>
+<p>* Requires wasm32-compatible SQLite build<br>** Windows symlinks require elevated privileges or Developer Mode<br>†Overlay is middleware; platform support depends on the backends composed</p>
 <hr>
 <h2 id="common-mistakes-to-avoid"><a class="header" href="#common-mistakes-to-avoid">Common Mistakes to Avoid</a></h2>
 <div class="table-wrapper">
@@ -8124,9 +8186,18 @@ pub trait PathResolver: Send + Sync {
     fn canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt;;
     
     // Default: canonicalize parent, append final component
+    // Handles edge cases (root path, empty parent)
     fn soft_canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt; {
-        let canonical_parent = self.canonicalize(path.parent().unwrap(), fs)?;
-        Ok(canonical_parent.join(path.file_name().unwrap()))
+        match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() =&gt; {
+                let canonical_parent = self.canonicalize(parent, fs)?;
+                match path.file_name() {
+                    Some(name) =&gt; Ok(canonical_parent.join(name)),
+                    None =&gt; Ok(canonical_parent),
+                }
+            }
+            _ =&gt; self.canonicalize(path, fs),  // Root or single component
+        }
     }
 }
 
@@ -8197,22 +8268,30 @@ let fs = FileStorage::new(stack);
 <h3 id="custom-backend-implementation"><a class="header" href="#custom-backend-implementation">Custom backend implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs_backend::{Fs, FsError, Metadata, DirEntry};
+</span>use anyfs_backend::{FsRead, FsWrite, FsDir, FsError, Metadata, DirEntry};
 use std::path::Path;
 
 pub struct MyBackend;
 
-impl Fs for MyBackend {
+// Implement the three core traits - Fs is auto-implemented via blanket impl
+impl FsRead for MyBackend {
     fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
         todo!()
     }
+    // ... 5 more FsRead methods
+}
 
+impl FsWrite for MyBackend {
     fn write(&amp;self, path: &amp;Path, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
         todo!()
     }
-
-    // ... implement all 25 methods
+    // ... 6 more FsWrite methods
 }
+
+impl FsDir for MyBackend {
+    // ... 5 FsDir methods
+}
+// Total: 18 methods across FsRead + FsWrite + FsDir
 <span class="boring">}</span></code></pre>
 <h3 id="custom-middleware-implementation"><a class="header" href="#custom-middleware-implementation">Custom middleware implementation</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -9147,6 +9226,8 @@ impl&lt;B: FsFuse&gt; FileSystem for WinFspAdapter&lt;B&gt; {
             .map_err(to_ntstatus)?;
 
         for entry in entries {
+            // ReadDirIter yields Result&lt;DirEntry, FsError&gt;
+            let entry = entry.map_err(to_ntstatus)?;
             callback(to_dir_info(&amp;entry));
         }
         Ok(())
@@ -9685,11 +9766,12 @@ impl FsRead for TxtBackend {
         Ok(Metadata {
             file_type: if entry.is_dir { FileType::Directory } else { FileType::File },
             size: entry.content.len() as u64,
-            created: None,  // We keep it simple - no timestamps
-            modified: None,
-            accessed: None,
-            permissions: Some(entry.mode),
-            inode: None,
+            permissions: Permissions::from_mode(entry.mode),
+            created: std::time::UNIX_EPOCH,   // TxtBackend doesn't track timestamps
+            modified: std::time::UNIX_EPOCH,
+            accessed: std::time::UNIX_EPOCH,
+            inode: 0,   // No inode support
+            nlink: 1,   // No hardlink support
         })
     }
 
@@ -9931,7 +10013,7 @@ impl FsDir for TxtBackend {
                             FileType::File
                         },
                         size: child_entry.size,
-                        inode: None,
+                        inode: 0,  // No inode support
                     });
                 }
             }
@@ -10941,7 +11023,9 @@ message MetadataResult {
   uint32 mode = 3;
   optional uint64 created_at = 4;
   optional uint64 modified_at = 5;
-  optional uint64 inode = 6;
+  optional uint64 accessed_at = 6;
+  optional uint64 inode = 7;
+  optional uint32 nlink = 8;
 }
 
 message ListDirResult {
@@ -10951,8 +11035,10 @@ message ListDirResult {
 
 message DirEntry {
   string name = 1;
-  string file_type = 2;
-  uint64 size = 3;
+  string path = 2;       // Full path to entry
+  string file_type = 3;
+  uint64 size = 4;
+  optional uint64 inode = 5;
 }
 </code></pre>
 <h3 id="protocol-choices"><a class="header" href="#protocol-choices">Protocol Choices</a></h3>
@@ -11985,11 +12071,11 @@ backend
 </span><span class="boring">fn main() {
 </span>let fs = MemoryBackend::new()
     .layer(QuotaLayer::builder()
-        .max_total_size(100_MB)
-        .max_file_count(1000)
+        .max_total_size(100 * 1024 * 1024)  // 100 MB
         .build())
     .layer(RateLimitLayer::builder()
-        .max_ops_per_second(100)
+        .max_ops(100)
+        .per_second()
         .build())
     .layer(PathFilterLayer::builder()
         .allow("/workspace/**")
@@ -12070,7 +12156,7 @@ fs.create_file("test.txt")?.write_all(b"hello")?;
 
 // AnyFS: More setup if you use middleware
 let fs = MemoryBackend::new()
-    .layer(QuotaLayer::builder().max_total_size(1_MB).build());
+    .layer(QuotaLayer::builder().max_total_size(1024 * 1024).build());  // 1 MB
 fs.write("/test.txt", b"hello")?;
 <span class="boring">}</span></code></pre>
 <p>If you don’t need middleware, AnyFS adds conceptual overhead.</p>
@@ -13707,7 +13793,7 @@ mem_fs = open_fs('mem://')
 <ul>
 <li>⚠️ <strong>Symlink handling is complex</strong> - we must handle loops, non-existent targets, and escaping</li>
 <li>✅ <strong>URL-based opening is convenient</strong> - consider for future</li>
-<li>✅ <strong>Consistent path format</strong> - we already do this (forward slashes always)</li>
+<li>✅ <strong>Consistent path format</strong> - virtual backends use forward slashes internally; OS-backed backends follow OS semantics</li>
 </ul>
 <hr>
 <h3 id="3-go-afero"><a class="header" href="#3-go-afero">3. Go: Afero</a></h3>
@@ -14691,7 +14777,7 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <h2 id="phase-2-anyfs-backends--middleware"><a class="header" href="#phase-2-anyfs-backends--middleware">Phase 2: <code>anyfs</code> (backends + middleware)</a></h2>
 <p><strong>Goal:</strong> Provide reference backends and core middleware.</p>
 <h3 id="path-resolution-filestorages-responsibility"><a class="header" href="#path-resolution-filestorages-responsibility">Path Resolution (FileStorage’s Responsibility)</a></h3>
-<p>FileStorage handles path resolution for ALL backends (unless they implement <code>SelfResolving</code>):</p>
+<p>FileStorage handles path resolution using its configured <code>PathResolver</code>:</p>
 <ul>
 <li>Walks path component by component using <code>metadata()</code> and <code>read_link()</code></li>
 <li>Handles <code>..</code> correctly after symlink resolution (symlink-aware, not lexical)</li>
@@ -14700,7 +14786,7 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li>Detects circular symlinks (max depth or visited set)</li>
 <li>Returns canonical resolved path to the backend</li>
 </ul>
-<p><strong>Backends that don’t implement <code>FsLink</code>:</strong> FileStorage cannot resolve symlinks for these backends. Path resolution will traverse directories using <code>metadata()</code> and handle <code>..</code> based on directory structure, but symlinks are treated as regular files. These backends effectively have no symlink support.</p>
+<p><strong>SelfResolving backends</strong> (StdFsBackend, VRootFsBackend) handle their own resolution. Use <code>FileStorage::with_resolver(backend, NoOpResolver)</code> explicitly.</p>
 <p><strong>Backends receive already-resolved paths</strong> - they just store/retrieve bytes.</p>
 <h3 id="backends-feature-gated"><a class="header" href="#backends-feature-gated">Backends (feature-gated)</a></h3>
 <p>Each backend implements the traits it supports:</p>
@@ -15754,7 +15840,7 @@ impl FsDir for MyBackend {
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="optional-layer-3---fsinode-for-fuse"><a class="header" href="#optional-layer-3---fsinode-for-fuse">Optional: Layer 3 - <code>FsInode</code> (For FUSE)</a></h2>
-<p>Implement <code>FsInode</code> if you need FUSE mounting or proper hardlink support:</p>
+<p>Implement <code>FsInode</code> if you need FUSE mounting or inode-based hardlink tracking:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsInode for MyBackend {
@@ -15767,10 +15853,10 @@ impl FsDir for MyBackend {
 <p><strong>No blanket/default implementation</strong> - you must implement this trait explicitly if you need:</p>
 <ul>
 <li><strong>FUSE mounting</strong>: FUSE operates on inodes, not paths</li>
-<li><strong>Hardlink support</strong>: Two paths must share the same inode</li>
+<li><strong>Inode tracking for hardlinks</strong>: Two paths share the same inode (note: <code>hard_link()</code> creation is in <code>FsLink</code>)</li>
 </ul>
 <p><strong>Level 1: Simple backend (no FsInode)</strong></p>
-<p>Don’t implement <code>FsInode</code>. The backend won’t support FUSE mounting or hardlinks.</p>
+<p>Don’t implement <code>FsInode</code>. The backend won’t support FUSE mounting. Hardlink creation via <code>FsLink::hard_link()</code> still works, but inode sharing won’t be tracked.</p>
 <p><strong>Level 2: Hardlink support</strong></p>
 <p>Override <code>path_to_inode</code> so hardlinked paths return the same inode:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -16241,7 +16327,9 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for CounterLayer {
 <p><strong>Usage with .layer():</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// LayerExt is in prelude, so .layer() just works
+</span>// LayerExt is re-exported from anyfs crate
+use anyfs::LayerExt;
+
 let backend = MemoryBackend::new()
     .layer(CounterLayer);
 <span class="boring">}</span></code></pre>
@@ -17955,7 +18043,7 @@ impl EncryptedSqliteBackend {
 
         // Verify encryption is working
         conn.execute_batch("SELECT count(*) FROM sqlite_master;")
-            .map_err(|_| FsError::Backend("Invalid encryption key".into()))?;
+            .map_err(|_| FsError::InvalidPassword)?;
 
         // Configure after key is set
         conn.execute_batch("
@@ -18942,7 +19030,7 @@ fn test_restrictions_blocks_permissions() {
     let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();
-    let result = fs.set_permissions("/file.txt", Permissions::new(0o644));
+    let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o644));
 
     assert!(matches!(result, Err(FsError::FeatureNotEnabled { .. })));
 }
@@ -19113,19 +19201,28 @@ fn test_filestorage_wrapper_types() {
     only_sandbox(&amp;sandbox);  // Compiles
     // only_sandbox(&amp;prod);  // Would not compile - different type
 }
-
-#[test]
-fn test_filestorage_boxed() {
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="4-integration-tests-real-filesystem"><a class="header" href="#4-integration-tests-real-filesystem">4. Integration Tests (Real Filesystem)</a></h2>
+<p>Tests that use real filesystem backends (<code>VRootFsBackend</code>, <code>tempfile</code>) are integration tests, not unit tests.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_filestorage_boxed_with_real_fs() {
+    // This is an INTEGRATION test - uses real filesystem via tempfile
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
     let temp = tempfile::tempdir().unwrap();
-    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
+    let fs2 = FileStorage::with_resolver(
+        VRootFsBackend::new(temp.path()).unwrap(),
+        NoOpResolver
+    ).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="4-error-handling-tests"><a class="header" href="#4-error-handling-tests">4. Error Handling Tests</a></h2>
+<h2 id="5-error-handling-tests"><a class="header" href="#5-error-handling-tests">5. Error Handling Tests</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[test]
@@ -22063,6 +22160,10 @@ impl&lt;B&gt; DryRun&lt;B&gt; {
         self.operations.read().unwrap().clone()
     }
 
+    pub fn clear(&amp;self) {
+        self.operations.write().unwrap().clear();
+    }
+
     fn log(&amp;self, op: String) {
         self.operations.write().unwrap().push(op);
     }
@@ -22195,13 +22296,13 @@ impl&lt;B: FsDir&gt; FsDir for PathFilter&lt;B&gt; {
         // Filter the iterator to exclude denied entries
         Ok(ReadDirIter::new(FilteredDirIter {
             inner: inner_iter,
-            filter: self.clone(),  // Need access to rules
+            rules: self.rules.clone(),  // Copy rules for filtering
         }))
     }
 }
 
 // Custom iterator that filters denied entries
-struct FilteredDirIter&lt;B&gt; {
+struct FilteredDirIter {
     inner: ReadDirIter,
     rules: Vec&lt;PathRule&gt;,
 }

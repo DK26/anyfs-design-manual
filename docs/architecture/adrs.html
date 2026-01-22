@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -609,26 +609,20 @@ impl&lt;B: Fs&gt; FsExt for B {}
 <li><code>Bytes</code> provides O(1) slicing via reference counting.</li>
 <li>Beneficial for large file handling, network backends, streaming.</li>
 <li>Optional - users who don’t need it avoid the dependency.</li>
-<li>Default remains <code>Vec&lt;u8&gt;</code> for simplicity.</li>
+<li>Core traits remain <code>Vec&lt;u8&gt;</code> for simplicity and <code>Send + Sync</code> compliance.</li>
 </ul>
-<p><strong>Implementation:</strong> Use a type alias to avoid breaking API:</p>
+<p><strong>Implementation:</strong> The <code>bytes</code> feature adds a convenience method to <code>FileStorage</code>, not a core trait change:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// In anyfs-backend/src/types.rs
-
-#[cfg(feature = "bytes")]
-pub type FileContent = bytes::Bytes;
-
-#[cfg(not(feature = "bytes"))]
-pub type FileContent = Vec&lt;u8&gt;;
-
-// In trait definition
-pub trait FsRead: Send {
-    fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;FileContent, FsError&gt;;
-    // ...
+</span>// In anyfs/src/container.rs (behind `bytes` feature)
+impl&lt;B: Fs&gt; FileStorage&lt;B&gt; {
+    #[cfg(feature = "bytes")]
+    pub fn read_bytes(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bytes::Bytes, FsError&gt; {
+        Ok(bytes::Bytes::from(self.read(path)?))
+    }
 }
 <span class="boring">}</span></code></pre>
-<p><strong>Middleware compatibility:</strong> Middleware passes <code>FileContent</code> through unchanged. No special handling needed - both <code>Vec&lt;u8&gt;</code> and <code>Bytes</code> implement <code>AsRef&lt;[u8]&gt;</code> and <code>Deref&lt;Target=[u8]&gt;</code>.</p>
+<p><strong>Core traits unchanged:</strong> <code>FsRead::read()</code> returns <code>Vec&lt;u8&gt;</code>. The <code>bytes</code> feature only adds ergonomic wrappers.</p>
 <hr>
 <h2 id="adr-015-contextual-fserror"><a class="header" href="#adr-015-contextual-fserror">ADR-015: Contextual FsError</a></h2>
 <p><strong>Decision:</strong> <code>FsError</code> variants include context for better debugging.</p>
@@ -666,7 +660,9 @@ FsError::QuotaExceeded {
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
-<li>Rules are evaluated in order; first match wins.</li>
+<li>Deny rules are evaluated first and take precedence over allow rules.</li>
+<li>If path matches any deny rule, access is denied.</li>
+<li>If path matches an allow rule (and no deny), access is granted.</li>
 <li>If no rules match, access is denied (deny by default).</li>
 <li>Uses glob patterns (e.g., <code>**</code> for recursive, <code>*</code> for single segment).</li>
 <li>Returns <code>FsError::AccessDenied</code> for denied paths.</li>
@@ -718,9 +714,9 @@ FsError::QuotaExceeded {
 <span class="boring">}</span></code></pre>
 <p><strong>Semantics:</strong></p>
 <ul>
-<li>Tracks operation count in sliding time window.</li>
+<li>Tracks operation count in fixed time window (simpler than sliding window, sufficient for most use cases).</li>
 <li>Returns <code>FsError::RateLimitExceeded</code> when limit exceeded.</li>
-<li>Counter resets after window expires.</li>
+<li>Counter resets when window expires.</li>
 </ul>
 <p><strong>Why:</strong></p>
 <ul>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -539,9 +539,10 @@ index.db contains:
 <p>Direct delegation to <code>std::fs</code>. Every call maps 1:1 to the standard library.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{StdFsBackend, FileStorage};
+</span>use anyfs::{StdFsBackend, FileStorage, NoOpResolver};
 
-let fs = FileStorage::new(StdFsBackend::new());
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(StdFsBackend::new(), NoOpResolver);
 fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 <span class="boring">}</span></code></pre>
 <h4 id="how-it-works-3"><a class="header" href="#how-it-works-3">How It Works</a></h4>
@@ -549,7 +550,7 @@ fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 <li>Every method directly calls the equivalent <code>std::fs</code> function</li>
 <li>Paths passed through unchanged</li>
 <li>OS handles all resolution, symlinks, permissions</li>
-<li>Implements <code>SelfResolving</code> marker (FileStorage skips virtual resolution)</li>
+<li>Implements <code>SelfResolving</code> marker (use <code>NoOpResolver</code> to skip virtual resolution)</li>
 </ul>
 <h4 id="performance-3"><a class="header" href="#performance-3">Performance</a></h4>
 <div class="table-wrapper">
@@ -621,10 +622,14 @@ fs.write("/tmp/data.txt", b"Hello")?; // Actually writes to /tmp/data.txt
 </blockquote>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{VRootFsBackend, FileStorage};
+</span>use anyfs::{VRootFsBackend, FileStorage, NoOpResolver};
 
 // /home/user/sandbox becomes the virtual "/"
-let fs = FileStorage::new(VRootFsBackend::new("/home/user/sandbox")?);
+// SelfResolving backends require explicit NoOpResolver
+let fs = FileStorage::with_resolver(
+    VRootFsBackend::new("/home/user/sandbox")?,
+    NoOpResolver
+);
 
 fs.write("/data.txt", b"Hello")?; 
 // Actually writes to: /home/user/sandbox/data.txt
@@ -860,10 +865,11 @@ fs.remove_file("/unwanted.txt")?;
 <tr><td>IndexedBackend</td><td>🟢 Fast</td><td>✅ Complete</td><td>✅ Directory</td><td>✅ Native I/O</td><td>❌</td></tr>
 <tr><td>StdFsBackend</td><td>🟢 Normal</td><td>❌ None</td><td>✅ Native</td><td>✅ Native</td><td>❌</td></tr>
 <tr><td>VRootFsBackend</td><td>🟡 Moderate</td><td>✅ Strong</td><td>✅ Native</td><td>✅ Native</td><td>❌</td></tr>
-<tr><td>Overlay</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td></tr>
+<tr><td>Overlay†</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td><td>Varies</td></tr>
 </tbody>
 </table>
 </div>
+<p>†Overlay is middleware that composes two backends; characteristics depend on the backends used.</p>
 <h3 id="by-use-case"><a class="header" href="#by-use-case">By Use Case</a></h3>
 <div class="table-wrapper">
 <table>
@@ -898,11 +904,11 @@ fs.remove_file("/unwanted.txt")?;
 <tr><td>IndexedBackend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td>StdFsBackend</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
 <tr><td>VRootFsBackend</td><td style="text-align: center">✅**</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td></tr>
-<tr><td>Overlay</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Varies</td></tr>
+<tr><td>Overlay†</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">Varies</td></tr>
 </tbody>
 </table>
 </div>
-<p>* Requires wasm32-compatible SQLite build<br>** Windows symlinks require elevated privileges or Developer Mode</p>
+<p>* Requires wasm32-compatible SQLite build<br>** Windows symlinks require elevated privileges or Developer Mode<br>†Overlay is middleware; platform support depends on the backends composed</p>
 <hr>
 <h2 id="common-mistakes-to-avoid"><a class="header" href="#common-mistakes-to-avoid">Common Mistakes to Avoid</a></h2>
 <div class="table-wrapper">

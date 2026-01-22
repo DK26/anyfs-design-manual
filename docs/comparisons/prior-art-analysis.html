@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -300,7 +300,7 @@ mem_fs = open_fs('mem://')
 <ul>
 <li>⚠️ <strong>Symlink handling is complex</strong> - we must handle loops, non-existent targets, and escaping</li>
 <li>✅ <strong>URL-based opening is convenient</strong> - consider for future</li>
-<li>✅ <strong>Consistent path format</strong> - we already do this (forward slashes always)</li>
+<li>✅ <strong>Consistent path format</strong> - virtual backends use forward slashes internally; OS-backed backends follow OS semantics</li>
 </ul>
 <hr>
 <h3 id="3-go-afero"><a class="header" href="#3-go-afero">3. Go: Afero</a></h3>

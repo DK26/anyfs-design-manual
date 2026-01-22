@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -483,6 +483,8 @@ impl&lt;B: FsFuse&gt; FileSystem for WinFspAdapter&lt;B&gt; {
             .map_err(to_ntstatus)?;
 
         for entry in entries {
+            // ReadDirIter yields Result&lt;DirEntry, FsError&gt;
+            let entry = entry.map_err(to_ntstatus)?;
             callback(to_dir_info(&amp;entry));
         }
         Ok(())

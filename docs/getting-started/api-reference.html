@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -231,6 +231,42 @@ let fs = BackendStack::new(MemoryBackend::new())
     .into_container();
 <span class="boring">}</span></code></pre>
 <hr>
+<h2 id="backendstack-methods"><a class="header" href="#backendstack-methods">BackendStack Methods</a></h2>
+<p><code>BackendStack</code> provides a fluent API for building middleware stacks:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use anyfs::BackendStack;
+
+BackendStack::new(backend)           // Start with any backend
+    .limited(|l| l                   // -&gt; Quota&lt;B&gt;
+        .max_total_size(bytes)
+        .max_file_size(bytes)
+        .max_node_count(count))
+    .restricted(|g| g                // -&gt; Restrictions&lt;B&gt;
+        .deny_permissions())
+    .traced()                        // -&gt; Tracing&lt;B&gt;
+    .cached(|c| c                    // -&gt; Cache&lt;B&gt;
+        .max_size(bytes)
+        .ttl(duration))
+    .read_only()                     // -&gt; ReadOnly&lt;B&gt;
+    .into_container()                // -&gt; FileStorage&lt;...&gt;
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Creates</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>.limited()</code></td><td><code>Quota&lt;B&gt;</code></td><td>Add quota limits</td></tr>
+<tr><td><code>.restricted()</code></td><td><code>Restrictions&lt;B&gt;</code></td><td>Add operation restrictions</td></tr>
+<tr><td><code>.traced()</code></td><td><code>Tracing&lt;B&gt;</code></td><td>Add tracing instrumentation</td></tr>
+<tr><td><code>.cached()</code></td><td><code>Cache&lt;B&gt;</code></td><td>Add LRU caching</td></tr>
+<tr><td><code>.read_only()</code></td><td><code>ReadOnly&lt;B&gt;</code></td><td>Make backend read-only</td></tr>
+<tr><td><code>.into_container()</code></td><td><code>FileStorage&lt;B&gt;</code></td><td>Finish and wrap in FileStorage</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
 <h2 id="quota-methods"><a class="header" href="#quota-methods">Quota Methods</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -307,6 +343,8 @@ RateLimitLayer::builder()
     .per_second()            // Window: 1 second
     // or
     .per_minute()            // Window: 60 seconds
+    // or
+    .per(Duration::from_millis(500))  // Custom window
     .build()
     .layer(backend)
 <span class="boring">}</span></code></pre>
@@ -373,7 +411,7 @@ let overlay = Overlay::new(base, upper);
 </span><span class="boring">fn main() {
 </span>use anyfs_backend::FsExt;
 
-// JSON support
+// JSON support (requires `serde` feature on anyfs-backend)
 let config: Config = fs.read_json("/config.json")?;
 fs.write_json("/config.json", &amp;config)?;
 
@@ -381,6 +419,9 @@ fs.write_json("/config.json", &amp;config)?;
 if fs.is_file("/path")? { ... }
 if fs.is_dir("/path")? { ... }
 <span class="boring">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> JSON methods require <code>anyfs-backend = { version = "0.1", features = ["serde"] }</code></p>
+</blockquote>
 <hr>
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <p>Examples below assume <code>FileStorage</code> (std::fs-style paths). If you call core trait methods directly, pass <code>&amp;Path</code>.</p>
@@ -525,7 +566,7 @@ assert_eq!(ino1, ino2);  // Same inode!
 <tbody>
 <tr><td><code>MemoryBackend</code></td><td>Internal node IDs (incrementing counter)</td></tr>
 <tr><td><code>anyfs-sqlite: SqliteBackend</code></td><td>SQLite row IDs (<code>INTEGER PRIMARY KEY</code>)</td></tr>
-<tr><td><code>VRootFsBackend</code></td><td>OS inode numbers (<code>Metadata::ino()</code>)</td></tr>
+<tr><td><code>VRootFsBackend</code></td><td>OS inode numbers (<code>metadata.inode</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -645,10 +686,12 @@ backend.change_password("new-password")?;
 <tr><td><code>TracingLayer</code></td><td><code>Tracing&lt;B&gt;</code></td></tr>
 <tr><td><code>DryRunLayer</code></td><td><code>DryRun&lt;B&gt;</code></td></tr>
 <tr><td><code>CacheLayer</code></td><td><code>Cache&lt;B&gt;</code></td></tr>
-<tr><td><code>OverlayLayer</code></td><td><code>Overlay&lt;B1,B2&gt;</code></td></tr>
 </tbody>
 </table>
 </div>
+<blockquote>
+<p><strong>Note:</strong> <code>Overlay&lt;B1, B2&gt;</code> is constructed directly via <code>Overlay::new(base, upper)</code> rather than using a Layer, because it takes two backends.</p>
+</blockquote>
 <hr>
 <h2 id="type-reference"><a class="header" href="#type-reference">Type Reference</a></h2>
 <h3 id="from-anyfs-backend"><a class="header" href="#from-anyfs-backend">From <code>anyfs-backend</code></a></h3>
@@ -659,8 +702,8 @@ backend.change_password("new-password")?;
 <tr><th>Trait</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FsRead</code></td><td>Read operations: <code>read</code>, <code>exists</code>, <code>metadata</code>, <code>open_read</code></td></tr>
-<tr><td><code>FsWrite</code></td><td>Write operations: <code>write</code>, <code>append</code>, <code>remove_file</code>, <code>rename</code>, <code>copy</code>, <code>truncate</code></td></tr>
+<tr><td><code>FsRead</code></td><td>Read operations: <code>read</code>, <code>read_to_string</code>, <code>read_range</code>, <code>exists</code>, <code>metadata</code>, <code>open_read</code></td></tr>
+<tr><td><code>FsWrite</code></td><td>Write operations: <code>write</code>, <code>append</code>, <code>remove_file</code>, <code>rename</code>, <code>copy</code>, <code>truncate</code>, <code>open_write</code></td></tr>
 <tr><td><code>FsDir</code></td><td>Directory operations: <code>read_dir</code>, <code>create_dir*</code>, <code>remove_dir*</code></td></tr>
 </tbody>
 </table>

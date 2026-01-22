@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -372,9 +372,18 @@ pub trait PathResolver: Send + Sync {
     fn canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt;;
     
     // Default: canonicalize parent, append final component
+    // Handles edge cases (root path, empty parent)
     fn soft_canonicalize(&amp;self, path: &amp;Path, fs: &amp;dyn Fs) -&gt; Result&lt;PathBuf, FsError&gt; {
-        let canonical_parent = self.canonicalize(path.parent().unwrap(), fs)?;
-        Ok(canonical_parent.join(path.file_name().unwrap()))
+        match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() =&gt; {
+                let canonical_parent = self.canonicalize(parent, fs)?;
+                match path.file_name() {
+                    Some(name) =&gt; Ok(canonical_parent.join(name)),
+                    None =&gt; Ok(canonical_parent),
+                }
+            }
+            _ =&gt; self.canonicalize(path, fs),  // Root or single component
+        }
     }
 }
 

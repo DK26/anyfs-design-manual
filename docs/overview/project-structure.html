@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -288,16 +288,12 @@ anyfs-redis/                # Third-party: Redis backend
 <li><code>anyfs-indexed</code> — SQLite index + disk blobs for large file performance</li>
 </ul>
 <h3 id="middleware-mvp-scope"><a class="header" href="#middleware-mvp-scope">Middleware (MVP Scope)</a></h3>
-<p>Following the <strong>Tower/Axum</strong> pattern, feature flags keep the core lightweight:</p>
+<p>Core middleware is always available (no feature flags needed):</p>
 <ul>
-<li><code>quota</code> — Storage limits (default)</li>
-<li><code>path-filter</code> — Glob-based access control (default)</li>
-<li><code>restrictions</code> — Permission control (default)</li>
-<li><code>read-only</code> — Write blocking (default)</li>
-<li><code>rate-limit</code> — Fixed-window rate limiting (default)</li>
-<li><code>cache</code> — LRU read caching (default)</li>
-<li><code>dry-run</code> — Operation logging without execution (default)</li>
-<li><code>overlay</code> — Union filesystem layers (default)</li>
+<li>Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay</li>
+</ul>
+<p>Optional middleware with external dependencies:</p>
+<ul>
 <li><code>tracing</code> — Detailed audit logging (requires <code>tracing</code> crate)</li>
 </ul>
 <h3 id="mounting-platform-features"><a class="header" href="#mounting-platform-features">Mounting (Platform Features)</a></h3>

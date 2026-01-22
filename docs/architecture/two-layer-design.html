@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -239,7 +239,8 @@ let fs = FileStorage::new(backend);
 <p>For <code>VRootFsBackend</code> (real filesystem), path containment uses <code>strict-path::VirtualRoot</code> internally:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>impl Fs for VRootFsBackend {
+</span>// VRootFsBackend implements FsRead, FsWrite, FsDir (and thus Fs via blanket impl)
+impl FsRead for VRootFsBackend {
     fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
         // VirtualRoot ensures paths can't escape
         let safe_path = self.root.join(path)?;

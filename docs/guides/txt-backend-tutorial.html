@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -487,11 +487,12 @@ impl FsRead for TxtBackend {
         Ok(Metadata {
             file_type: if entry.is_dir { FileType::Directory } else { FileType::File },
             size: entry.content.len() as u64,
-            created: None,  // We keep it simple - no timestamps
-            modified: None,
-            accessed: None,
-            permissions: Some(entry.mode),
-            inode: None,
+            permissions: Permissions::from_mode(entry.mode),
+            created: std::time::UNIX_EPOCH,   // TxtBackend doesn't track timestamps
+            modified: std::time::UNIX_EPOCH,
+            accessed: std::time::UNIX_EPOCH,
+            inode: 0,   // No inode support
+            nlink: 1,   // No hardlink support
         })
     }
 
@@ -733,7 +734,7 @@ impl FsDir for TxtBackend {
                             FileType::File
                         },
                         size: child_entry.size,
-                        inode: None,
+                        inode: 0,  // No inode support
                     });
                 }
             }

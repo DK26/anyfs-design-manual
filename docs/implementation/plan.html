@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -390,7 +390,7 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <h2 id="phase-2-anyfs-backends--middleware"><a class="header" href="#phase-2-anyfs-backends--middleware">Phase 2: <code>anyfs</code> (backends + middleware)</a></h2>
 <p><strong>Goal:</strong> Provide reference backends and core middleware.</p>
 <h3 id="path-resolution-filestorages-responsibility"><a class="header" href="#path-resolution-filestorages-responsibility">Path Resolution (FileStorage’s Responsibility)</a></h3>
-<p>FileStorage handles path resolution for ALL backends (unless they implement <code>SelfResolving</code>):</p>
+<p>FileStorage handles path resolution using its configured <code>PathResolver</code>:</p>
 <ul>
 <li>Walks path component by component using <code>metadata()</code> and <code>read_link()</code></li>
 <li>Handles <code>..</code> correctly after symlink resolution (symlink-aware, not lexical)</li>
@@ -399,7 +399,7 @@ pub trait FsPosix: FsFuse + FsHandles + FsLock + FsXattr {}
 <li>Detects circular symlinks (max depth or visited set)</li>
 <li>Returns canonical resolved path to the backend</li>
 </ul>
-<p><strong>Backends that don’t implement <code>FsLink</code>:</strong> FileStorage cannot resolve symlinks for these backends. Path resolution will traverse directories using <code>metadata()</code> and handle <code>..</code> based on directory structure, but symlinks are treated as regular files. These backends effectively have no symlink support.</p>
+<p><strong>SelfResolving backends</strong> (StdFsBackend, VRootFsBackend) handle their own resolution. Use <code>FileStorage::with_resolver(backend, NoOpResolver)</code> explicitly.</p>
 <p><strong>Backends receive already-resolved paths</strong> - they just store/retrieve bytes.</p>
 <h3 id="backends-feature-gated"><a class="header" href="#backends-feature-gated">Backends (feature-gated)</a></h3>
 <p>Each backend implements the traits it supports:</p>

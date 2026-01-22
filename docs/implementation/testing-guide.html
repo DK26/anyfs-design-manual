@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -512,7 +512,7 @@ fn test_restrictions_blocks_permissions() {
     let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();
-    let result = fs.set_permissions("/file.txt", Permissions::new(0o644));
+    let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o644));
 
     assert!(matches!(result, Err(FsError::FeatureNotEnabled { .. })));
 }
@@ -683,19 +683,28 @@ fn test_filestorage_wrapper_types() {
     only_sandbox(&amp;sandbox);  // Compiles
     // only_sandbox(&amp;prod);  // Would not compile - different type
 }
-
-#[test]
-fn test_filestorage_boxed() {
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="4-integration-tests-real-filesystem"><a class="header" href="#4-integration-tests-real-filesystem">4. Integration Tests (Real Filesystem)</a></h2>
+<p>Tests that use real filesystem backends (<code>VRootFsBackend</code>, <code>tempfile</code>) are integration tests, not unit tests.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_filestorage_boxed_with_real_fs() {
+    // This is an INTEGRATION test - uses real filesystem via tempfile
     let fs1 = FileStorage::new(MemoryBackend::new()).boxed();
     let temp = tempfile::tempdir().unwrap();
-    let fs2 = FileStorage::new(VRootFsBackend::new(temp.path()).unwrap()).boxed();
+    let fs2 = FileStorage::with_resolver(
+        VRootFsBackend::new(temp.path()).unwrap(),
+        NoOpResolver
+    ).boxed();
 
     // Both can be stored in same collection
     let _filesystems: Vec&lt;FileStorage&lt;Box&lt;dyn Fs&gt;&gt;&gt; = vec![fs1, fs2];
 }
 <span class="boring">}</span></code></pre>
 <hr>
-<h2 id="4-error-handling-tests"><a class="header" href="#4-error-handling-tests">4. Error Handling Tests</a></h2>
+<h2 id="5-error-handling-tests"><a class="header" href="#5-error-handling-tests">5. Error Handling Tests</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[test]

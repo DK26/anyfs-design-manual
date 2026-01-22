@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -545,7 +545,8 @@ impl&lt;B&gt; Metrics&lt;B&gt; {
     ///
     /// # Panics
     /// Panics if metric registration fails (indicates duplicate metric names - programmer error).
-    /// This is acceptable at initialization time; runtime operations never panic.
+    /// This is acceptable at initialization time per the No Panic Policy, which applies to
+    /// runtime operations. Initialization failures are configuration errors that should fail fast.
     pub fn new(inner: B, registry: &amp;Registry) -&gt; Self {
         let reads = Counter::new("anyfs_reads_total", "Total read operations")
             .expect("metric creation failed");
@@ -617,7 +618,9 @@ impl&lt;B: FsWrite, I: IndexBackend&gt; FsWrite for Indexing&lt;B, I&gt; {
 // Usage with PostgreSQL
 let index = PostgresIndex::connect("postgres://user:pass@db.example.com/files").await?;
 let backend = MemoryBackend::new()
-    .layer(IndexLayer::new(index));
+    .layer(IndexLayer::builder()
+        .index(index)
+        .build());
 <span class="boring">}</span></code></pre>
 <p><strong>Configurable Tracing with Multiple Sinks:</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -854,54 +857,56 @@ fn process_files() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 <h3 id="generic-code-over-core-traits"><a class="header" href="#generic-code-over-core-traits">Generic Code over Core Traits</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, Fs};
+</span>use anyfs::{FileStorage, Fs, FsError};
 
-fn process_files&lt;B: Fs&gt;(fs: &amp;FileStorage&lt;B&gt;) {
+fn process_files&lt;B: Fs&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Result&lt;(), FsError&gt; {
     let data = fs.read("/input.txt")?;
     fs.write("/output.txt", &amp;processed(data))?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="need-links-add-the-trait"><a class="header" href="#need-links-add-the-trait">Need Links? Add the Trait</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, Fs, FsLink};
+</span>use anyfs::{FileStorage, Fs, FsLink, FsError};
 
-fn with_symlinks&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) {
+fn with_symlinks&lt;B: Fs + FsLink&gt;(fs: &amp;FileStorage&lt;B&gt;) -&gt; Result&lt;(), FsError&gt; {
     fs.write("/target.txt", b"content")?;
     fs.symlink("/target.txt", "/link.txt")?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="fuse-mount"><a class="header" href="#fuse-mount">FUSE Mount</a></h3>
 <p>Mounting is part of <code>anyfs</code> crate with <code>fuse</code> and <code>winfsp</code> feature flags; see <code>src/guides/mounting.md</code>.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FsFuse, MountHandle};
+</span>use anyfs::{FsFuse, MountHandle, MountError};
 
-fn mount_filesystem(fs: impl FsFuse) {
+fn mount_filesystem(fs: impl FsFuse) -&gt; Result&lt;(), MountError&gt; {
     MountHandle::mount(fs, "/mnt/myfs")?;
+    Ok(())
 }
 <span class="boring">}</span></code></pre>
 <h3 id="full-posix-application"><a class="header" href="#full-posix-application">Full POSIX Application</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{FileStorage, FsPosix};
+</span>use anyfs::{FileStorage, FsPosix, FsError, OpenFlags, LockType, Handle};
 
-fn database_app&lt;B: FsPosix&gt;(fs: &amp;FileStorage&lt;B&gt;) {
-    let handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
+fn database_app&lt;B: FsPosix&gt;(fs: &amp;FileStorage&lt;B&gt;, data: &amp;[u8], offset: u64) -&gt; Result&lt;(), FsError&gt; {
+    let handle: Handle = fs.open("/data.db", OpenFlags::READ_WRITE)?;
     fs.lock(handle, LockType::Exclusive)?;
     fs.write_at(handle, data, offset)?;
     fs.unlock(handle)?;
     fs.close(handle)?;
+    Ok(())
 }
-
----
-
-# Core Types (in `anyfs-backend`)
-
-## Constants
-
-```rust
-/// Root directory inode. FUSE convention.
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="core-types-in-anyfs-backend"><a class="header" href="#core-types-in-anyfs-backend">Core Types (in <code>anyfs-backend</code>)</a></h2>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Root directory inode. FUSE convention.
 pub const ROOT_INODE: u64 = 1;
 <span class="boring">}</span></code></pre>
 <h3 id="metadata"><a class="header" href="#metadata">Metadata</a></h3>
@@ -1094,7 +1099,7 @@ tracing_subscriber::fmt::init();
 <p>Restricts access to specific paths. Essential for sandboxing.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, PathFilter};
+</span>use anyfs::{MemoryBackend, PathFilterLayer};
 
 let backend = PathFilterLayer::builder()
     .allow("/workspace/**")           // Allow all under /workspace
@@ -1122,13 +1127,11 @@ fs.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 <p>Limits operations per second. Prevents runaway agents.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, RateLimit};
-use std::time::Duration;
+</span>use anyfs::{MemoryBackend, RateLimitLayer};
 
 let backend = RateLimitLayer::builder()
-    .max_ops(100)                        // 100 ops per window
-    .window(Duration::from_secs(1))      // 1 second window
-    .max_burst(10)                       // Allow bursts up to 10
+    .max_ops(100)       // 100 ops per window
+    .per_second()       // 1 second window
     .build()
     .layer(MemoryBackend::new());
 
@@ -1712,12 +1715,12 @@ let sandbox = MemoryBackend::new()
 pub trait FsExt: Fs {
     /// Check if path is a file.
     fn is_file(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
-        self.metadata(path).map(|m| m.file_type == FileType::File)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::File)
     }
 
     /// Check if path is a directory.
     fn is_dir(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;bool, FsError&gt; {
-        self.metadata(path).map(|m| m.file_type == FileType::Directory)
+        self.metadata(path.as_ref()).map(|m| m.file_type == FileType::Directory)
     }
 
     // JSON methods require `serde` feature (see below)
@@ -1741,13 +1744,13 @@ impl&lt;B: Fs&gt; FsExt for B {}
 #[cfg(feature = "serde")]
 impl&lt;B: Fs&gt; FsExt for B {
     fn read_json&lt;T: DeserializeOwned&gt;(&amp;self, path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;T, FsError&gt; {
-        let bytes = self.read(path)?;
+        let bytes = self.read(path.as_ref())?;
         serde_json::from_slice(&amp;bytes).map_err(|e| FsError::Deserialization(e.to_string()))
     }
 
     fn write_json&lt;T: Serialize&gt;(&amp;self, path: impl AsRef&lt;Path&gt;, value: &amp;T) -&gt; Result&lt;(), FsError&gt; {
         let bytes = serde_json::to_vec(value).map_err(|e| FsError::Serialization(e.to_string()))?;
-        self.write(path, &amp;bytes)
+        self.write(path.as_ref(), &amp;bytes)
     }
 }
 <span class="boring">}</span></code></pre>
@@ -1802,7 +1805,15 @@ pub enum FsError {
         path: PathBuf,
     },
 
+    /// Circular symlink detected during path resolution.
+    #[error("symlink loop detected: {path}")]
+    SymlinkLoop {
+        path: PathBuf,
+    },
+
     /// Security threat detected (e.g., virus).
+    /// Note: This variant supports the Antivirus middleware example.
+    /// Custom middleware can use this or define domain-specific error types.
     #[error("threat detected: {reason} in {path}")]
     ThreatDetected {
         path: PathBuf,
@@ -1927,7 +1938,9 @@ pub enum FsError {
     },
 
     /// Backend-specific error (catch-all for custom backends).
-    Backend(String),
+    Backend {
+        message: String,
+    },
 
     /// I/O error wrapper.
     Io {
@@ -2003,8 +2016,8 @@ impl From&lt;std::io::Error&gt; for FsError {
 </span><span class="boring">fn main() {
 </span>// This works identically on Windows, Linux, macOS, and WASM
 let fs = FileStorage::new(MemoryBackend::new());
-fs.symlink("/target", "/link")?;           // Just stores the link
-fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+fs.symlink("/target", "/link")?;                          // Just stores the link
+fs.set_permissions("/file", Permissions::from_mode(0o755))?; // Just stores metadata
 <span class="boring">}</span></code></pre>
 <h4 id="vrootfsbackend-real-filesystem"><a class="header" href="#vrootfsbackend-real-filesystem">VRootFsBackend (Real Filesystem)</a></h4>
 <p>Wraps the host filesystem. Platform differences apply:</p>

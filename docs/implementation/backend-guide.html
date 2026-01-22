@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -463,7 +463,7 @@ impl FsDir for MyBackend {
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="optional-layer-3---fsinode-for-fuse"><a class="header" href="#optional-layer-3---fsinode-for-fuse">Optional: Layer 3 - <code>FsInode</code> (For FUSE)</a></h2>
-<p>Implement <code>FsInode</code> if you need FUSE mounting or proper hardlink support:</p>
+<p>Implement <code>FsInode</code> if you need FUSE mounting or inode-based hardlink tracking:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>impl FsInode for MyBackend {
@@ -476,10 +476,10 @@ impl FsDir for MyBackend {
 <p><strong>No blanket/default implementation</strong> - you must implement this trait explicitly if you need:</p>
 <ul>
 <li><strong>FUSE mounting</strong>: FUSE operates on inodes, not paths</li>
-<li><strong>Hardlink support</strong>: Two paths must share the same inode</li>
+<li><strong>Inode tracking for hardlinks</strong>: Two paths share the same inode (note: <code>hard_link()</code> creation is in <code>FsLink</code>)</li>
 </ul>
 <p><strong>Level 1: Simple backend (no FsInode)</strong></p>
-<p>Don’t implement <code>FsInode</code>. The backend won’t support FUSE mounting or hardlinks.</p>
+<p>Don’t implement <code>FsInode</code>. The backend won’t support FUSE mounting. Hardlink creation via <code>FsLink::hard_link()</code> still works, but inode sharing won’t be tracked.</p>
 <p><strong>Level 2: Hardlink support</strong></p>
 <p>Override <code>path_to_inode</code> so hardlinked paths return the same inode:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -950,7 +950,9 @@ impl&lt;B: Fs&gt; Layer&lt;B&gt; for CounterLayer {
 <p><strong>Usage with .layer():</strong></p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// LayerExt is in prelude, so .layer() just works
+</span>// LayerExt is re-exported from anyfs crate
+use anyfs::LayerExt;
+
 let backend = MemoryBackend::new()
     .layer(CounterLayer);
 <span class="boring">}</span></code></pre>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -204,7 +204,12 @@ anyfs-indexed = "0.1"
 <li><code>memory</code> — In-memory storage (default)</li>
 <li><code>stdfs</code> — Direct <code>std::fs</code> delegation (no containment)</li>
 <li><code>vrootfs</code> — Host filesystem backend with path containment</li>
+<li><code>bytes</code> — Zero-copy <code>Bytes</code> support (adds <code>read_bytes()</code> method)</li>
+<li><code>tracing</code> — Detailed audit logging (requires <code>tracing</code> crate)</li>
+<li><code>fuse</code> — Mount as filesystem on Linux/macOS</li>
+<li><code>winfsp</code> — Mount as filesystem on Windows</li>
 </ul>
+<p>Core middleware (Quota, PathFilter, Restrictions, ReadOnly, RateLimit, Cache, DryRun, Overlay) is always available.</p>
 <hr>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Examples below use <code>FileStorage</code>, so you can pass paths as <code>&amp;str</code>. If you call core trait methods directly, use <code>&amp;Path</code>.</p>
@@ -238,7 +243,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="with-restrictions"><a class="header" href="#with-restrictions">With Restrictions</a></h3>
-<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, Restrictions, FileStorage};
+<pre class="playground"><code class="language-rust">use anyfs::{MemoryBackend, RestrictionsLayer, FileStorage};
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Block permission changes for untrusted code
@@ -350,7 +355,7 @@ if !remaining.can_write {
 <h3 id="restrictions--block-permission-changes"><a class="header" href="#restrictions--block-permission-changes">Restrictions — Block Permission Changes</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use anyfs::{MemoryBackend, Restrictions};
+</span>use anyfs::{MemoryBackend, RestrictionsLayer};
 
 // Restrictions controls permission-related operations.
 // Symlink/hard-link capability is determined by trait bounds (FsLink).
@@ -486,7 +491,7 @@ let fs = FileStorage::new(
 │         ▼               │               ▼                   │
 │  /mnt/workspace         │    SELECT SUM(size) FROM nodes    │
 │  $ cp file.txt ./       │    SELECT COUNT(*) FROM nodes     │
-│  $ mkdir projects/      │    SELECT * FROM operations_log   │
+│  $ mkdir projects/      │    SELECT * FROM audit_log        │
 │                         │               │                   │
 │                         │               ▼                   │
 │                         │        ┌──────────────┐           │
@@ -515,6 +520,8 @@ let mount = MountHandle::mount(backend, "/mnt/workspace")?;
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Meanwhile, in a monitoring dashboard...
+// Note: This queries SqliteBackend's internal schema (nodes, audit_log tables).
+// See anyfs-sqlite documentation for schema details.
 use rusqlite::{Connection, OpenFlags};
 
 let conn = Connection::open_with_flags(

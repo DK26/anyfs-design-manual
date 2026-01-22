@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-325ea731.js";
+            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4ff2705e.js"></script>
@@ -513,6 +513,10 @@ impl&lt;B&gt; DryRun&lt;B&gt; {
         self.operations.read().unwrap().clone()
     }
 
+    pub fn clear(&amp;self) {
+        self.operations.write().unwrap().clear();
+    }
+
     fn log(&amp;self, op: String) {
         self.operations.write().unwrap().push(op);
     }
@@ -645,13 +649,13 @@ impl&lt;B: FsDir&gt; FsDir for PathFilter&lt;B&gt; {
         // Filter the iterator to exclude denied entries
         Ok(ReadDirIter::new(FilteredDirIter {
             inner: inner_iter,
-            filter: self.clone(),  // Need access to rules
+            rules: self.rules.clone(),  // Copy rules for filtering
         }))
     }
 }
 
 // Custom iterator that filters denied entries
-struct FilteredDirIter&lt;B&gt; {
+struct FilteredDirIter {
     inner: ReadDirIter,
     rules: Vec&lt;PathRule&gt;,
 }
