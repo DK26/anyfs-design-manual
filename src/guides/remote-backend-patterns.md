@@ -120,7 +120,9 @@ message MetadataResult {
   uint32 mode = 3;
   optional uint64 created_at = 4;
   optional uint64 modified_at = 5;
-  optional uint64 inode = 6;
+  optional uint64 accessed_at = 6;
+  optional uint64 inode = 7;
+  optional uint32 nlink = 8;
 }
 
 message ListDirResult {
@@ -130,8 +132,10 @@ message ListDirResult {
 
 message DirEntry {
   string name = 1;
-  string file_type = 2;
-  uint64 size = 3;
+  string path = 2;       // Full path to entry
+  string file_type = 3;
+  uint64 size = 4;
+  optional uint64 inode = 5;
 }
 ```
 

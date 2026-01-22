@@ -444,7 +444,9 @@ impl<B: FsWrite, I: IndexBackend> FsWrite for Indexing<B, I> {
 // Usage with PostgreSQL
 let index = PostgresIndex::connect("postgres://user:pass@db.example.com/files").await?;
 let backend = MemoryBackend::new()
-    .layer(IndexLayer::new(index));
+    .layer(IndexLayer::builder()
+        .index(index)
+        .build());
 ```
 
 **Configurable Tracing with Multiple Sinks:**
