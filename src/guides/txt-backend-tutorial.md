@@ -323,11 +323,12 @@ impl FsRead for TxtBackend {
         Ok(Metadata {
             file_type: if entry.is_dir { FileType::Directory } else { FileType::File },
             size: entry.content.len() as u64,
-            created: None,  // We keep it simple - no timestamps
-            modified: None,
-            accessed: None,
-            permissions: Some(entry.mode),
-            inode: None,
+            permissions: Permissions::from_mode(entry.mode),
+            created: std::time::UNIX_EPOCH,   // TxtBackend doesn't track timestamps
+            modified: std::time::UNIX_EPOCH,
+            accessed: std::time::UNIX_EPOCH,
+            inode: 0,   // No inode support
+            nlink: 1,   // No hardlink support
         })
     }
 
@@ -575,7 +576,7 @@ impl FsDir for TxtBackend {
                             FileType::File
                         },
                         size: child_entry.size,
-                        inode: None,
+                        inode: 0,  // No inode support
                     });
                 }
             }

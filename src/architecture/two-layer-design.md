@@ -65,7 +65,8 @@ let fs = FileStorage::new(backend);
 For `VRootFsBackend` (real filesystem), path containment uses `strict-path::VirtualRoot` internally:
 
 ```rust
-impl Fs for VRootFsBackend {
+// VRootFsBackend implements FsRead, FsWrite, FsDir (and thus Fs via blanket impl)
+impl FsRead for VRootFsBackend {
     fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         // VirtualRoot ensures paths can't escape
         let safe_path = self.root.join(path)?;

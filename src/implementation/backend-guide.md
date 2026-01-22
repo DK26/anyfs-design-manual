@@ -307,7 +307,7 @@ StatFs {
 
 ## Optional: Layer 3 - `FsInode` (For FUSE)
 
-Implement `FsInode` if you need FUSE mounting or proper hardlink support:
+Implement `FsInode` if you need FUSE mounting or inode-based hardlink tracking:
 
 ```rust
 impl FsInode for MyBackend {
@@ -320,11 +320,11 @@ impl FsInode for MyBackend {
 
 **No blanket/default implementation** - you must implement this trait explicitly if you need:
 - **FUSE mounting**: FUSE operates on inodes, not paths
-- **Hardlink support**: Two paths must share the same inode
+- **Inode tracking for hardlinks**: Two paths share the same inode (note: `hard_link()` creation is in `FsLink`)
 
 **Level 1: Simple backend (no FsInode)**
 
-Don't implement `FsInode`. The backend won't support FUSE mounting or hardlinks.
+Don't implement `FsInode`. The backend won't support FUSE mounting. Hardlink creation via `FsLink::hard_link()` still works, but inode sharing won't be tracked.
 
 **Level 2: Hardlink support**
 

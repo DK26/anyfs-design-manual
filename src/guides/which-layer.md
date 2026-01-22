@@ -50,22 +50,30 @@ let fs = FileStorage::new(stack);
 ### Custom backend implementation
 
 ```rust
-use anyfs_backend::{Fs, FsError, Metadata, DirEntry};
+use anyfs_backend::{FsRead, FsWrite, FsDir, FsError, Metadata, DirEntry};
 use std::path::Path;
 
 pub struct MyBackend;
 
-impl Fs for MyBackend {
+// Implement the three core traits - Fs is auto-implemented via blanket impl
+impl FsRead for MyBackend {
     fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         todo!()
     }
+    // ... 5 more FsRead methods
+}
 
+impl FsWrite for MyBackend {
     fn write(&self, path: &Path, data: &[u8]) -> Result<(), FsError> {
         todo!()
     }
-
-    // ... implement all 25 methods
+    // ... 6 more FsWrite methods
 }
+
+impl FsDir for MyBackend {
+    // ... 5 FsDir methods
+}
+// Total: 18 methods across FsRead + FsWrite + FsDir
 ```
 
 ### Custom middleware implementation
