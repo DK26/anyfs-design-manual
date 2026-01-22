@@ -729,9 +729,9 @@ fn with_symlinks<B: Fs + FsLink>(fs: &FileStorage<B>) -> Result<(), FsError> {
 Mounting is part of `anyfs` crate with `fuse` and `winfsp` feature flags; see `src/guides/mounting.md`.
 
 ```rust
-use anyfs::{FsFuse, MountHandle, FsError};
+use anyfs::{FsFuse, MountHandle, MountError};
 
-fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
+fn mount_filesystem(fs: impl FsFuse) -> Result<(), MountError> {
     MountHandle::mount(fs, "/mnt/myfs")?;
     Ok(())
 }

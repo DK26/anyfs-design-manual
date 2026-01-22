@@ -342,7 +342,7 @@ fn test_restrictions_blocks_permissions() {
     let fs = FileStorage::new(backend);
 
     fs.write("/file.txt", b"data").unwrap();
-    let result = fs.set_permissions("/file.txt", Permissions::new(0o644));
+    let result = fs.set_permissions("/file.txt", Permissions::from_mode(0o644));
 
     assert!(matches!(result, Err(FsError::FeatureNotEnabled { .. })));
 }

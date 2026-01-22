@@ -501,11 +501,11 @@ Without the correct password, the `.db` file appears as random bytes.
 
 **Core Traits (Layer 1):**
 
-| Trait     | Description                                                                      |
-| --------- | -------------------------------------------------------------------------------- |
-| `FsRead`  | Read operations: `read`, `exists`, `metadata`, `open_read`                       |
-| `FsWrite` | Write operations: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate` |
-| `FsDir`   | Directory operations: `read_dir`, `create_dir*`, `remove_dir*`                   |
+| Trait     | Description                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| `FsRead`  | Read operations: `read`, `read_to_string`, `read_range`, `exists`, `metadata`, `open_read`     |
+| `FsWrite` | Write operations: `write`, `append`, `remove_file`, `rename`, `copy`, `truncate`, `open_write` |
+| `FsDir`   | Directory operations: `read_dir`, `create_dir*`, `remove_dir*`                                 |
 
 **Extended Traits (Layer 2):**
 

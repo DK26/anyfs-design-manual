@@ -335,7 +335,7 @@ fn create_backup<B: Fs + FsLink>(fs: &FileStorage<B>) -> Result<(), FsError> {
 }
 
 // Requires FsFuse trait + fuse/winfsp feature
-fn mount_filesystem(fs: impl FsFuse) -> Result<(), FsError> {
+fn mount_filesystem(fs: impl FsFuse) -> Result<(), MountError> {
     anyfs::MountHandle::mount(fs, "/mnt/myfs")?;
     Ok(())
 }
