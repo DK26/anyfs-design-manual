@@ -83,7 +83,7 @@ impl EncryptedSqliteBackend {
 
         // Verify encryption is working
         conn.execute_batch("SELECT count(*) FROM sqlite_master;")
-            .map_err(|_| FsError::Backend("Invalid encryption key".into()))?;
+            .map_err(|_| FsError::InvalidPassword)?;
 
         // Configure after key is set
         conn.execute_batch("

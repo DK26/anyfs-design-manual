@@ -392,6 +392,8 @@ let mount = MountHandle::mount(backend, "/mnt/workspace")?;
 
 ```rust
 // Meanwhile, in a monitoring dashboard...
+// Note: This queries SqliteBackend's internal schema (nodes, audit_log tables).
+// See anyfs-sqlite documentation for schema details.
 use rusqlite::{Connection, OpenFlags};
 
 let conn = Connection::open_with_flags(

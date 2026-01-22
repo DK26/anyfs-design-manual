@@ -1001,13 +1001,11 @@ fs.write("/doc.txt", b"x"); // Error: FsError::ReadOnly
 Limits operations per second. Prevents runaway agents.
 
 ```rust
-use anyfs::{MemoryBackend, RateLimit};
-use std::time::Duration;
+use anyfs::{MemoryBackend, RateLimitLayer};
 
 let backend = RateLimitLayer::builder()
-    .max_ops(100)                        // 100 ops per window
-    .window(Duration::from_secs(1))      // 1 second window
-    .max_burst(10)                       // Allow bursts up to 10
+    .max_ops(100)       // 100 ops per window
+    .per_second()       // 1 second window
     .build()
     .layer(MemoryBackend::new());
 
@@ -1741,6 +1739,12 @@ pub enum FsError {
         path: PathBuf,
     },
 
+    /// Circular symlink detected during path resolution.
+    #[error("symlink loop detected: {path}")]
+    SymlinkLoop {
+        path: PathBuf,
+    },
+
     /// Security threat detected (e.g., virus).
     /// Note: This variant supports the Antivirus middleware example.
     /// Custom middleware can use this or define domain-specific error types.
@@ -1940,8 +1944,8 @@ AnyFS is designed for cross-platform use. Virtual backends work everywhere; real
 ```rust
 // This works identically on Windows, Linux, macOS, and WASM
 let fs = FileStorage::new(MemoryBackend::new());
-fs.symlink("/target", "/link")?;           // Just stores the link
-fs.set_permissions("/file", 0o755.into())?; // Just stores metadata
+fs.symlink("/target", "/link")?;                          // Just stores the link
+fs.set_permissions("/file", Permissions::from_mode(0o755))?; // Just stores metadata
 ```
 
 #### VRootFsBackend (Real Filesystem)

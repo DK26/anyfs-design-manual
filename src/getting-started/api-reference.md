@@ -384,7 +384,7 @@ assert_eq!(ino1, ino2);  // Same inode!
 | ----------------------------- | ---------------------------------------- |
 | `MemoryBackend`               | Internal node IDs (incrementing counter) |
 | `anyfs-sqlite: SqliteBackend` | SQLite row IDs (`INTEGER PRIMARY KEY`)   |
-| `VRootFsBackend`              | OS inode numbers (`Metadata::ino()`)     |
+| `VRootFsBackend`              | OS inode numbers (`metadata.inode`)      |
 
 ---
 
@@ -490,7 +490,8 @@ Without the correct password, the `.db` file appears as random bytes.
 | `TracingLayer`      | `Tracing<B>`      |
 | `DryRunLayer`       | `DryRun<B>`       |
 | `CacheLayer`        | `Cache<B>`        |
-| `OverlayLayer`      | `Overlay<B1,B2>`  |
+
+> **Note:** `Overlay<B1, B2>` is constructed directly via `Overlay::new(base, upper)` rather than using a Layer, because it takes two backends.
 
 ---
 
