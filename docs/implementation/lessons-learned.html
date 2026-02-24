@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
+            window.path_to_searchindex_js = "../searchindex-512b794b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4ff2705e.js"></script>
+        <script src="../toc-74107614.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -551,6 +551,40 @@ pub struct SqliteBackend { ... }
 <li><strong>Document concurrency model</strong> per backend</li>
 <li><strong><code>MemoryBackend</code> uses <code>Arc&lt;RwLock&lt;...&gt;&gt;</code></strong> for sharing</li>
 </ul>
+<hr>
+<h2 id="13-patterns-validated-by-linux-filesystems--git"><a class="header" href="#13-patterns-validated-by-linux-filesystems--git">13. Patterns Validated by Linux Filesystems &amp; Git</a></h2>
+<p>Based on a <a href="../comparisons/linux-fs-concepts-analysis.html">detailed analysis</a> of LVM, ZFS, XFS, and Git internals, several AnyFS design decisions align with battle-tested patterns from these systems:</p>
+<h3 id="what-anyfs-already-gets-right"><a class="header" href="#what-anyfs-already-gets-right">What AnyFS Already Gets Right</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>AnyFS Pattern</th><th>Validated By</th><th>Proven Concept</th></tr>
+</thead>
+<tbody>
+<tr><td>IndexedBackend (SQLite metadata + blob store)</td><td>ZFS special vdevs, Git LFS</td><td>Fast metadata on one tier, bulk data on another</td></tr>
+<tr><td>Content-addressed blobs with refcounting</td><td>ZFS DDT, Git object store, XFS reflink</td><td>Automatic dedup, O(1) copy, safe GC</td></tr>
+<tr><td>Write batching in SqliteBackend</td><td>XFS delayed allocation</td><td>Defer commits for contiguous allocation and throughput</td></tr>
+<tr><td>SQLite WAL mode</td><td>XFS journaling, ZFS ZIL</td><td>Write-ahead logging for crash consistency</td></tr>
+<tr><td>Two-phase commit (blob upload -&gt; metadata commit)</td><td>ZFS COW, XFS intent items</td><td>Crash-safe multi-step operations</td></tr>
+<tr><td><code>Overlay</code> middleware</td><td>LVM snapshots, ZFS clones</td><td>COW layering without modifying the base</td></tr>
+<tr><td><code>QuotaLayer</code></td><td>XFS project quotas, ZFS dataset quotas</td><td>Per-scope resource limits</td></tr>
+<tr><td><code>Cache</code> middleware</td><td>ZFS ARC</td><td>Read caching as a composable layer</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="key-lessons-learned"><a class="header" href="#key-lessons-learned">Key Lessons Learned</a></h3>
+<p><strong>1. SQLite single-file limits are solvable with LVM-style spanning.</strong>
+LVM treats physical disks as “Physical Volumes” pooled into “Volume Groups.” The same pattern works for SQLite: treat each <code>.db</code> file as a PV, aggregate them into a pool, and carve out logical filesystems. This overcomes practical size limits (tens of GB per file) by distributing extents across multiple smaller SQLite files, each staying in its performant range. Optimal extent size for SQLite: 64 KiB to 1 MiB (smaller than LVM’s 4 MiB default due to SQLite BLOB overflow page behavior).</p>
+<p><strong>2. Compression should be a middleware layer with early-abort.</strong>
+ZFS applies compression per-block and skips it if the result is larger than the original. AnyFS can do the same as a <code>CompressionLayer&lt;B&gt;</code> middleware. Already-compressed files (images, videos) get auto-detected and stored as-is. This is a low-effort, high-impact addition.</p>
+<p><strong>3. Integrity verification (scrubbing) is essential for long-lived data.</strong>
+ZFS scrubs every block periodically. For IndexedBackend where <code>blob_id = sha256(content)</code>, a scrub re-hashes every blob and compares. This catches silent corruption, validates refcounts, and finds orphaned blobs – all in one pass. Should be a standard backend operation.</p>
+<p><strong>4. GC needs grace periods, not just refcount == 0.</strong>
+Git protects recently-unreferenced objects for 30-90 days before deleting. AnyFS should do the same – a blob with <code>refcount = 0</code> might be referenced by an in-flight write. Adding a <code>created_at</code> check (e.g., “at least 1 day old”) prevents race conditions.</p>
+<p><strong>5. Merkle tree hashing enables efficient sync.</strong>
+Git’s tree objects hash directory contents recursively. Two filesystems can be compared by checking root hashes – if equal, nothing changed. If different, descend only into changed subtrees. This is O(changed paths), not O(total files). Valuable for send/receive replication.</p>
+<p><strong>6. Shared blob stores (Git alternates) enable multi-tenant dedup.</strong>
+Multiple IndexedBackend instances can share a single blob store read-only (“base image”), each with their own writable store for tenant-specific files. This is how GitLab deduplicates fork storage. In AnyFS, a <code>ChainedBlobStore</code> searches local store first, then shared alternates.</p>
 <hr>
 <h2 id="issues-we-already-avoid"><a class="header" href="#issues-we-already-avoid">Issues We Already Avoid</a></h2>
 <p>Our design decisions already prevent these problems:</p>

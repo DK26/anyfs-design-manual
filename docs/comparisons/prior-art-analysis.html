@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
+            window.path_to_searchindex_js = "../searchindex-512b794b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4ff2705e.js"></script>
+        <script src="../toc-74107614.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -535,9 +535,32 @@ ufs.use(memfs);     // Memory overlay
 <li>Lint/analyzer to discourage direct <code>std::fs</code> usage in app code (System.IO.Abstractions-style).</li>
 <li>Retry/timeout middleware for remote backends (once remote backends exist).</li>
 </ul>
+<p><strong>From Linux filesystems &amp; Git</strong> (see <a href="./linux-fs-concepts-analysis.html">full analysis</a>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Idea</th><th>Source</th><th>Fits As</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Multi-SQLite spanning (PV/VG/LV)</td><td>LVM</td><td>Ecosystem crate (<code>anyfs-lvm</code> or <code>anyfs-pool</code>)</td><td>Overcome SQLite single-file size limits</td></tr>
+<tr><td>Compression middleware (LZ4/ZSTD)</td><td>ZFS</td><td>Middleware layer with early-abort</td><td>Reduce storage 60-80% for text-heavy data</td></tr>
+<tr><td>Checksum verification on read</td><td>ZFS</td><td>Middleware layer</td><td>Detect corruption on untrusted backends</td></tr>
+<tr><td>Background scrubbing</td><td>ZFS</td><td>Backend method on IndexedBackend</td><td>Verify blob integrity over time</td></tr>
+<tr><td>Per-directory-tree quotas</td><td>XFS project quotas</td><td>Extension of <code>QuotaLayer</code></td><td>Multi-tenant per-path limits</td></tr>
+<tr><td>ARC adaptive caching</td><td>ZFS</td><td>Enhancement to <code>Cache</code> middleware</td><td>Self-tuning MRU/MFU balance</td></tr>
+<tr><td>Merkle tree hashing</td><td>Git tree objects</td><td>Column on <code>nodes</code> table</td><td>Efficient sync and snapshot diff</td></tr>
+<tr><td>Send/receive replication</td><td>ZFS</td><td>Protocol + change log infrastructure</td><td>Incremental backup and migration</td></tr>
+<tr><td>Shared blob stores (alternates)</td><td>Git</td><td>Chained <code>BlobStore</code> pattern</td><td>Multi-tenant blob dedup without copying</td></tr>
+<tr><td>Delta compression (pack files)</td><td>Git</td><td>Background compaction job</td><td>Storage savings for versioned documents</td></tr>
+<tr><td>Dataset properties with inheritance</td><td>ZFS</td><td>Config-driven middleware composition</td><td>Hierarchical tenant configuration</td></tr>
+</tbody>
+</table>
+</div>
 <p><strong>Drop for now (adds noise or cross-platform complexity):</strong></p>
 <ul>
 <li>Change notification support (optional <code>FsWatch</code> trait or polling middleware).</li>
+<li>RAIDZ across SQLite files (ZFS) – parity across SQLite is unnatural; use real RAID below SQLite.</li>
+<li>XFS-style allocation group sharding – cross-shard atomicity too complex for the value.</li>
 </ul>
 <hr>
 <h2 id="security-tests-to-add"><a class="header" href="#security-tests-to-add">Security Tests to Add</a></h2>
@@ -838,7 +861,7 @@ fn process_user(f: &amp;StrictPath&lt;UserFiles&gt;) { /* ... */ }
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../comparisons/benchmarking-plan.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../comparisons/linux-fs-concepts-analysis.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -852,7 +875,7 @@ fn process_user(f: &amp;StrictPath&lt;UserFiles&gt;) { /* ... */ }
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../comparisons/benchmarking-plan.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../comparisons/linux-fs-concepts-analysis.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

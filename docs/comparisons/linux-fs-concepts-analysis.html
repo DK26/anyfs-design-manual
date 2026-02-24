@@ -1,0 +1,1137 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Linux FS &amp; Git Concepts Analysis - AnyFS Ecosystem Manual</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Documentation for AnyFS: pluggable virtual filesystem backends + container layer for Rust">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "../searchindex-512b794b.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-74107614.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">AnyFS Ecosystem Manual</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/DK26/anyfs-design-manual" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/DK26/anyfs-design-manual/edit/main/src/comparisons/linux-fs-concepts-analysis.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="linux-filesystem--git-concepts-application-to-anyfs"><a class="header" href="#linux-filesystem--git-concepts-application-to-anyfs">Linux Filesystem &amp; Git Concepts: Application to AnyFS</a></h1>
+<p><strong>Status:</strong> Research Complete
+<strong>Last Updated:</strong> 2026-02-24</p>
+<p>This document analyzes concepts from Linux LVM, ZFS, XFS, and Git internals to identify patterns that could enhance AnyFS – particularly around overcoming SQLite size limits via multi-file spanning, and advanced storage management features.</p>
+<hr>
+<h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
+<p>AnyFS uses SQLite as a primary backend for portable, single-file virtual filesystems. However, SQLite has practical limits:</p>
+<ul>
+<li><strong>Database size</strong>: While the theoretical max is ~281 TB, practical performance degrades well before that (tens of GB+)</li>
+<li><strong>Single-writer constraint</strong>: Only one writer at a time, even in WAL mode</li>
+<li><strong>BLOB overhead</strong>: Large inline BLOBs cause WAL growth and page cache pressure</li>
+</ul>
+<p>Linux storage subsystems have solved analogous problems for decades. This analysis maps their proven concepts to AnyFS’s architecture.</p>
+<hr>
+<h2 id="table-of-contents"><a class="header" href="#table-of-contents">Table of Contents</a></h2>
+<ul>
+<li><a href="#part-1-lvm-logical-volume-manager">Part 1: LVM (Logical Volume Manager)</a></li>
+<li><a href="#part-2-zfs-zettabyte-file-system">Part 2: ZFS (Zettabyte File System)</a></li>
+<li><a href="#part-3-xfs">Part 3: XFS</a></li>
+<li><a href="#part-4-git-internals">Part 4: Git Internals</a></li>
+<li><a href="#unified-impact-matrix">Unified Impact Matrix</a></li>
+<li><a href="#recommended-priorities">Recommended Priorities</a></li>
+<li><a href="#sources">Sources</a></li>
+</ul>
+<hr>
+<h2 id="part-1-lvm-logical-volume-manager"><a class="header" href="#part-1-lvm-logical-volume-manager">Part 1: LVM (Logical Volume Manager)</a></h2>
+<p>LVM operates as a two-layer system: userspace tools (LVM2, source at <a href="https://gitlab.com/lvmteam/lvm2">gitlab.com/lvmteam/lvm2</a>) manage metadata and orchestrate operations, while the kernel device-mapper (<code>drivers/md/</code> in Linux) provides block-level virtual device mapping via pluggable targets.</p>
+<h3 id="11-physical-volumes-as-sqlite-files"><a class="header" href="#11-physical-volumes-as-sqlite-files">1.1 Physical Volumes as SQLite Files</a></h3>
+<p><strong>LVM concept</strong>: A Physical Volume (PV) is a block device initialized for LVM use. Each PV has a label, metadata area, and data area divided into fixed-size Physical Extents (PEs). Crucially, each PV carries a <em>full redundant copy</em> of the entire Volume Group metadata.</p>
+<p><strong>Source</strong>: <code>lib/metadata/pv.h</code>, <code>lib/format_text/format-text.c</code>, <code>lib/label/label.c</code></p>
+<p><strong>AnyFS mapping</strong>: Each SQLite database file acts as a Physical Volume. Just as a PV is self-contained with its own metadata header, a SQLite file is self-contained with its own schema.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// A Physical Volume is a single SQLite database file
+pub struct PhysicalVolume {
+    uuid: Uuid,
+    path: PathBuf,
+    connection: rusqlite::Connection,
+    total_bytes: u64,
+    pe_size: u64,      // Physical Extent size (e.g., 1 MiB)
+    pe_count: u32,
+    allocated: BitVec,  // Bitmap of allocated extents
+}
+<span class="boring">}</span></code></pre>
+<pre><code class="language-sql">-- Schema inside each PV SQLite file
+CREATE TABLE pv_header (
+    uuid TEXT NOT NULL,
+    pe_size INTEGER NOT NULL,
+    pe_count INTEGER NOT NULL,
+    vg_uuid TEXT,              -- NULL if not assigned to a VG
+    created_at TEXT NOT NULL
+);
+CREATE TABLE extents (
+    pe_index INTEGER PRIMARY KEY,
+    le_index INTEGER,          -- NULL if free
+    lv_uuid TEXT,              -- which LV owns this extent
+    data BLOB                  -- the actual chunk data
+);
+CREATE TABLE vg_metadata (
+    version INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL -- full VG layout (redundant across all PVs)
+);
+</code></pre>
+<p><strong>Key insight</strong>: Each PV SQLite file carries a full copy of the VG metadata, so any single PV can reconstruct the entire volume layout – mirroring LVM’s reliability model.</p>
+<p><strong>Practical limits</strong>: SQLite’s <code>ATTACH</code> limit is 125 databases per connection (10 by default). This caps simultaneous PV access from a single connection.</p>
+<h3 id="12-volume-groups-aggregating-sqlite-files"><a class="header" href="#12-volume-groups-aggregating-sqlite-files">1.2 Volume Groups: Aggregating SQLite Files</a></h3>
+<p><strong>LVM concept</strong>: A Volume Group (VG) pools one or more PVs into a single storage namespace. It defines a uniform PE size and maintains a complete allocation map.</p>
+<p><strong>Source</strong>: <code>lib/metadata/vg.h</code>, <code>lib/metadata/metadata.c</code>, <code>tools/vgcreate.c</code></p>
+<p><strong>AnyFS mapping</strong>: A VG coordinator aggregates multiple SQLite PV files into a unified pool.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Aggregates multiple SQLite PV files into a storage pool
+pub struct VolumeGroup {
+    uuid: Uuid,
+    name: String,
+    pe_size: u64,                    // Uniform across all PVs
+    pvs: Vec&lt;PhysicalVolume&gt;,
+    total_pe_count: u32,
+    free_pe_count: u32,
+    lvs: HashMap&lt;Uuid, LogicalVolume&gt;,
+    seqno: u64,                      // Metadata version (incremented on every change)
+}
+
+impl VolumeGroup {
+    /// Add a new SQLite PV file (analogous to `vgextend`)
+    pub fn extend(&amp;mut self, pv_path: &amp;Path) -&gt; Result&lt;()&gt; {
+        let mut pv = PhysicalVolume::open(pv_path)?;
+        pv.assign_to_vg(self.uuid, self.pe_size)?;
+        self.free_pe_count += pv.pe_count;
+        self.total_pe_count += pv.pe_count;
+        self.pvs.push(pv);
+        self.seqno += 1;
+        self.write_metadata_to_all_pvs()?; // Redundancy
+        Ok(())
+    }
+
+    /// Remove an empty PV (analogous to `vgreduce`)
+    pub fn reduce(&amp;mut self, pv_uuid: Uuid) -&gt; Result&lt;()&gt; {
+        // PV must have no allocated extents; pvmove first if needed
+        // ...
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Combine five 1 GB SQLite files into a 5 GB virtual filesystem</li>
+<li>Start with one PV, add more as needed without restructuring</li>
+<li>Different VGs for different environments (dev, staging, prod)</li>
+</ul>
+<h3 id="13-logical-volumes-virtual-filesystems-from-pooled-storage"><a class="header" href="#13-logical-volumes-virtual-filesystems-from-pooled-storage">1.3 Logical Volumes: Virtual Filesystems from Pooled Storage</a></h3>
+<p><strong>LVM concept</strong>: A Logical Volume (LV) is a virtual block device carved from a VG’s extent pool. An LV is composed of segments, each mapping Logical Extents (LEs) to Physical Extents (PEs) on specific PVs.</p>
+<p><strong>Source</strong>: <code>lib/metadata/lv.h</code>, <code>lib/metadata/segtype.h</code>, <code>lib/metadata/lv_manip.c</code></p>
+<p><strong>AnyFS mapping</strong>: An LV becomes an <code>Fs</code> trait implementor backed by extents across multiple SQLite PVs.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct LogicalVolume {
+    uuid: Uuid,
+    name: String,
+    vg: Arc&lt;RwLock&lt;VolumeGroup&gt;&gt;,
+    segments: Vec&lt;LvSegment&gt;,
+    size: u64,
+}
+
+pub struct LvSegment {
+    le_start: u32,
+    le_count: u32,
+    mapping: SegmentMapping,
+}
+
+pub enum SegmentMapping {
+    /// Contiguous mapping to a single PV
+    Linear { pv_uuid: Uuid, pe_start: u32 },
+    /// Striped across multiple PVs (RAID-0)
+    Striped { stripe_size: u64, stripes: Vec&lt;(Uuid, u32)&gt; },
+    /// Mirrored across multiple PVs (RAID-1)
+    Mirror { mirrors: Vec&lt;(Uuid, u32)&gt; },
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Separate LVs for “documents”, “media”, “temp” – each with different middleware stacks</li>
+<li>Grow an LV by allocating more extents without moving existing data</li>
+<li>Mix segment types: a “critical” LV uses mirrored segments, “temp” uses linear</li>
+</ul>
+<h3 id="14-physicallogical-extents"><a class="header" href="#14-physicallogical-extents">1.4 Physical/Logical Extents</a></h3>
+<p><strong>LVM concept</strong>: Fixed-size allocation units. PEs on PVs map 1:1 to LEs in LVs. PE size is set at VG creation (default 4 MiB).</p>
+<p><strong>AnyFS mapping</strong>: Extents become fixed-size BLOB rows in SQLite.</p>
+<pre><code class="language-sql">CREATE TABLE extents (
+    pe_index    INTEGER PRIMARY KEY,
+    lv_uuid     TEXT,            -- NULL = free
+    le_index    INTEGER,
+    data        BLOB NOT NULL,   -- exactly pe_size bytes
+    checksum    INTEGER          -- CRC32 for integrity
+);
+CREATE INDEX idx_extents_free ON extents(lv_uuid) WHERE lv_uuid IS NULL;
+</code></pre>
+<p><strong>Optimal extent size for SQLite</strong>: Unlike block devices, SQLite has per-row overhead. BLOBs &gt;100 KiB use overflow pages. Practical PE size: <strong>64 KiB to 1 MiB</strong> (vs LVM’s 4 MiB default). Use SQLite’s incremental BLOB I/O (<code>sqlite3_blob_open</code>) for larger extents.</p>
+<h3 id="15-striping-parallel-sqlite-writers"><a class="header" href="#15-striping-parallel-sqlite-writers">1.5 Striping (Parallel SQLite Writers)</a></h3>
+<p><strong>LVM concept</strong>: RAID-0 spreads data across PVs in round-robin fashion for parallel I/O.</p>
+<p><strong>Source</strong>: Kernel <code>drivers/md/dm-stripe.c</code></p>
+<p><strong>AnyFS mapping</strong>: Distribute writes across multiple SQLite connections (each PV has its own single-writer).</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct StripedMapping {
+    stripe_size: u64,
+    stripes: Vec&lt;Arc&lt;PhysicalVolume&gt;&gt;,
+}
+
+impl StripedMapping {
+    fn write_striped(&amp;self, offset: u64, data: &amp;[u8]) -&gt; Result&lt;()&gt; {
+        // Partition data into per-PV chunks
+        let mut pv_writes: HashMap&lt;usize, Vec&lt;(u64, &amp;[u8])&gt;&gt; = HashMap::new();
+        // ... distribute based on stripe_size ...
+
+        // Execute in parallel (each PV has its own connection)
+        std::thread::scope(|s| {
+            for (pv_idx, writes) in &amp;pv_writes {
+                s.spawn(|| self.stripes[*pv_idx].batch_write(writes));
+            }
+        });
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Key insight</strong>: SQLite’s single-writer bottleneck is <em>per-file</em>. With 4 striped PVs, large writes distribute across 4 independent SQLite writers.</p>
+<h3 id="16-mirroring-redundant-sqlite-files"><a class="header" href="#16-mirroring-redundant-sqlite-files">1.6 Mirroring (Redundant SQLite Files)</a></h3>
+<p><strong>LVM concept</strong>: RAID-1 writes identical data to N PVs. Reads come from any mirror. Dirty region log enables fast crash recovery.</p>
+<p><strong>Source</strong>: Kernel <code>drivers/md/dm-raid1.c</code></p>
+<p><strong>AnyFS mapping</strong>: Write extents to N SQLite PV files. Read from any (round-robin for load distribution).</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Critical tenant data mirrored across two disks</li>
+<li>Read scaling: 2-mirror setup doubles read throughput</li>
+<li>Live migration foundation: temporarily mirror, then remove old PV (this is how <code>pvmove</code> works)</li>
+</ul>
+<h3 id="17-thin-provisioning-overcommitted-sqlite-pools"><a class="header" href="#17-thin-provisioning-overcommitted-sqlite-pools">1.7 Thin Provisioning (Overcommitted SQLite Pools)</a></h3>
+<p><strong>LVM concept</strong>: Decouple advertised size from allocated size. Thin volumes collectively claim more space than physically exists. Space allocated on first write (lazy allocation).</p>
+<p><strong>Source</strong>: Kernel <code>drivers/md/dm-thin.c</code>, <code>drivers/md/dm-thin-metadata.c</code></p>
+<p><strong>AnyFS mapping</strong>: Highly natural for SQLite – files grow on demand. An empty database is a few KiB regardless of virtual capacity.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ThinProvisionedFs {
+    uuid: Uuid,
+    virtual_size: u64,              // Advertised: 100 GB
+    mapping: BTreeMap&lt;u32, u64&gt;,    // Sparse: only populated extents exist
+    pool: Arc&lt;RwLock&lt;ThinPool&gt;&gt;,
+}
+
+impl ThinProvisionedFs {
+    fn total_space(&amp;self) -&gt; u64 { self.virtual_size }   // 100 GB
+    fn used_space(&amp;self) -&gt; u64 { self.mapping.len() as u64 * EXTENT_SIZE }  // 2 GB
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Integration with existing middleware</strong>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let pool = ThinPool::new("pool.db", 50 * GB)?;
+let thin_vol = pool.create_volume("tenant-a", 1 * TB)?;
+
+// QuotaLayer prevents any single tenant from exhausting the shared pool
+let backend = thin_vol.layer(QuotaLayer::builder()
+    .max_total_size(10 * GB)
+    .build());
+<span class="boring">}</span></code></pre>
+<p><strong>Use case</strong>: 100 tenants, each advertised 10 GB, but only 200 GB actual storage. Most tenants use under 1 GB.</p>
+<h3 id="18-pvmove-live-data-migration"><a class="header" href="#18-pvmove-live-data-migration">1.8 pvmove: Live Data Migration</a></h3>
+<p><strong>LVM concept</strong>: Migrate data between PVs without downtime. Creates a temporary mirror, syncs, breaks mirror keeping only destination.</p>
+<p><strong>Source</strong>: <code>tools/pvmove.c</code></p>
+<p><strong>AnyFS mapping</strong>: Move extents between SQLite PV files while the filesystem remains operational, with crash-safe checkpointing.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct PvMoveOperation {
+    source_pv: Arc&lt;PhysicalVolume&gt;,
+    dest_pv: Arc&lt;PhysicalVolume&gt;,
+    extent_list: Vec&lt;u32&gt;,
+    checkpoint: u32,  // Persisted for crash recovery
+}
+
+impl PvMoveOperation {
+    pub fn execute(&amp;mut self) -&gt; Result&lt;()&gt; {
+        for &amp;pe_idx in &amp;self.extent_list[self.checkpoint as usize..] {
+            let data = self.source_pv.read_extent(pe_idx)?;
+            let dest_pe = self.dest_pv.allocate_extent()?;
+            self.dest_pv.write_extent(dest_pe, &amp;data)?;
+            self.update_lv_mapping(pe_idx, &amp;self.dest_pv, dest_pe)?;
+            self.source_pv.free_extent(pe_idx)?;
+            self.checkpoint += 1;
+            self.save_checkpoint()?;
+        }
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Migrate tenant from SSD-backed PV to HDD-backed PV without downtime</li>
+<li>Rebalance extents after adding a new PV</li>
+<li>Replace a degraded PV before it fails</li>
+</ul>
+<h3 id="19-lvm-cache-tiered-storage"><a class="header" href="#19-lvm-cache-tiered-storage">1.9 LVM Cache (Tiered Storage)</a></h3>
+<p><strong>LVM concept</strong>: Place a fast device (SSD) in front of a slow device (HDD). dm-cache uses SMQ policy (Stochastic Multi-Queue) for promotion/demotion.</p>
+<p><strong>Source</strong>: Kernel <code>drivers/md/dm-cache-target.c</code>, <code>drivers/md/dm-cache-policy-smq.c</code></p>
+<p><strong>AnyFS mapping</strong>: MemoryBackend (or RAM-disk SQLite) caching in front of disk-backed SqliteBackend.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let slow_backend = SqliteBackend::open("archive.db")?;
+let cached = slow_backend
+    .layer(CacheLayer::builder()
+        .cache_backend(MemoryBackend::new())
+        .capacity(256 * MB)
+        .policy(CachePolicy::WriteBack)
+        .build());
+let fs = FileStorage::new(cached);
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="part-2-zfs-zettabyte-file-system"><a class="header" href="#part-2-zfs-zettabyte-file-system">Part 2: ZFS (Zettabyte File System)</a></h2>
+<p>ZFS is an integrated volume manager and filesystem. Source at <a href="https://github.com/openzfs/zfs">github.com/openzfs/zfs</a>.</p>
+<h3 id="21-storage-pools-zpools"><a class="header" href="#21-storage-pools-zpools">2.1 Storage Pools (zpools)</a></h3>
+<p><strong>ZFS concept</strong>: A zpool aggregates physical devices (vdevs) into a single namespace. Self-describing via uberblocks and labels.</p>
+<p><strong>Source</strong>: <code>module/zfs/spa.c</code>, <code>module/zfs/vdev.c</code>, <code>module/zfs/vdev_label.c</code></p>
+<p><strong>AnyFS mapping</strong>: Similar to LVM Volume Groups but with integrated filesystem semantics. A <code>BackendPool</code> aggregates multiple backend instances.</p>
+<h3 id="22-datasets-and-zvols"><a class="header" href="#22-datasets-and-zvols">2.2 Datasets and zvols</a></h3>
+<p><strong>ZFS concept</strong>: Filesystems within a pool, each with independent properties, quotas, and snapshot history. Hierarchical: <code>pool/parent/child</code>.</p>
+<p><strong>Source</strong>: <code>module/zfs/dsl_dataset.c</code>, <code>module/zfs/dsl_dir.c</code></p>
+<p><strong>AnyFS mapping</strong>: Each <code>FileStorage&lt;B&gt;</code> instance is effectively a dataset. The hierarchy can be modeled in SQLite:</p>
+<pre><code class="language-sql">CREATE TABLE datasets (
+    dataset_id    INTEGER PRIMARY KEY,
+    name          TEXT NOT NULL UNIQUE,     -- 'pool/users/alice'
+    parent_id     INTEGER REFERENCES datasets(dataset_id),
+    backend_type  TEXT NOT NULL,
+    quota         INTEGER,                  -- inherited from parent if NULL
+    compression   TEXT DEFAULT 'none',
+    encryption    TEXT DEFAULT 'none',
+    created_at    INTEGER NOT NULL,
+    referenced    INTEGER NOT NULL DEFAULT 0,
+    used_by_self  INTEGER NOT NULL DEFAULT 0,
+    used_by_snaps INTEGER NOT NULL DEFAULT 0
+);
+</code></pre>
+<h3 id="23-copy-on-write-cow"><a class="header" href="#23-copy-on-write-cow">2.3 Copy-on-Write (COW)</a></h3>
+<p><strong>ZFS concept</strong>: Never overwrites data in place. Every write allocates new blocks, updates block pointers bottom-up, commits atomically via transaction groups. The on-disk state is always a consistent tree.</p>
+<p><strong>Source</strong>: <code>module/zfs/dbuf.c</code>, <code>module/zfs/dmu.c</code>, <code>module/zfs/txg.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already present in IndexedBackend. Writing creates a new blob; old blob stays referenced by snapshots. The <code>blobs</code> table with refcounting is COW by design. The two-phase commit pattern (blob upload -&gt; SQLite metadata commit) provides crash consistency.</p>
+<h3 id="24-block-level-checksumming-merkle-trees"><a class="header" href="#24-block-level-checksumming-merkle-trees">2.4 Block-Level Checksumming (Merkle Trees)</a></h3>
+<p><strong>ZFS concept</strong>: Every block has a checksum stored in its parent block pointer, forming a Merkle tree from uberblock to leaf data. Verified on every read. Self-healing from mirrors/parity on mismatch.</p>
+<p><strong>Source</strong>: <code>module/zfs/zio_checksum.c</code> (supports Fletcher-2/4, SHA-256, SHA-512, Skein, EDONR, BLAKE3)</p>
+<p><strong>AnyFS mapping</strong>: For IndexedBackend where <code>blob_id = sha256(content)</code>, the content hash already serves as a checksum. A verification middleware adds read-time checking:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ChecksumLayer&lt;B&gt; {
+    inner: B,
+    algorithm: ChecksumAlgorithm,
+}
+
+impl&lt;B: FsRead&gt; FsRead for ChecksumLayer&lt;B&gt; {
+    fn read(&amp;self, path: &amp;Path) -&gt; Result&lt;Vec&lt;u8&gt;, FsError&gt; {
+        let data = self.inner.read(path)?;
+        let expected = self.get_stored_checksum(path)?;
+        let actual = self.algorithm.compute(&amp;data);
+        if expected != actual {
+            return Err(FsError::IntegrityError { path, expected, actual });
+        }
+        Ok(data)
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Use case</strong>: Verify data integrity on untrusted storage backends (S3, remote blob stores).</p>
+<h3 id="25-snapshots-and-clones"><a class="header" href="#25-snapshots-and-clones">2.5 Snapshots and Clones</a></h3>
+<p><strong>ZFS concept</strong>: Snapshot freezes dataset state at a transaction group boundary. Instantaneous because of COW. Clones are writable copies of snapshots.</p>
+<p><strong>Source</strong>: <code>module/zfs/dsl_dataset.c</code> (<code>dsl_dataset_snapshot_sync_impl</code>, <code>dsl_dataset_clone_sync</code>)</p>
+<p><strong>AnyFS mapping</strong>: Already documented in <code>hybrid-backend-design.md</code>. Enhancement: make snapshots first-class with clones:</p>
+<pre><code class="language-sql">CREATE TABLE snapshots (
+    snap_id     INTEGER PRIMARY KEY,
+    dataset_id  INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    created_txg INTEGER NOT NULL,
+    UNIQUE(dataset_id, name)
+);
+
+CREATE TABLE clones (
+    clone_id    INTEGER PRIMARY KEY,
+    origin_snap INTEGER NOT NULL REFERENCES snapshots(snap_id),
+    dataset_id  INTEGER NOT NULL REFERENCES datasets(dataset_id),
+    created_at  INTEGER NOT NULL
+);
+</code></pre>
+<h3 id="26-sendreceive-incremental-replication"><a class="header" href="#26-sendreceive-incremental-replication">2.6 Send/Receive (Incremental Replication)</a></h3>
+<p><strong>ZFS concept</strong>: <code>zfs send</code> generates a stream of Data Replication Records (DRR). Incremental sends traverse blocks born after the “from” snapshot’s transaction group. <code>zfs receive</code> applies the stream on the receiving side.</p>
+<p><strong>Source</strong>: <code>module/zfs/dmu_send.c</code>, <code>module/zfs/dmu_recv.c</code></p>
+<p><strong>AnyFS mapping</strong>: Define a replication stream format with a change log:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum ReplicationRecord {
+    Begin { dataset: String, from_txg: Option&lt;u64&gt;, to_txg: u64 },
+    CreateNode { inode: u64, parent: u64, name: String, node_type: NodeType },
+    WriteBlob { blob_id: String, data: Vec&lt;u8&gt;, checksum: [u8; 32] },
+    UpdateNode { inode: u64, changes: NodeDiff },
+    RemoveNode { inode: u64 },
+    End { checksum: [u8; 32] },
+}
+<span class="boring">}</span></code></pre>
+<pre><code class="language-sql">-- Change tracking for incremental sends
+CREATE TABLE change_log (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    txg         INTEGER NOT NULL,
+    operation   TEXT NOT NULL,
+    inode       INTEGER,
+    path        TEXT,
+    blob_id     TEXT,
+    timestamp   INTEGER NOT NULL
+);
+</code></pre>
+<p>Incremental send: <code>SELECT * FROM change_log WHERE txg &gt; bookmark.txg ORDER BY seq</code>.</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Replicate AnyFS backend to a remote backup server</li>
+<li>Edge-to-cloud sync</li>
+<li>Migrate between backend types (SqliteBackend -&gt; IndexedBackend)</li>
+</ul>
+<h3 id="27-deduplication"><a class="header" href="#27-deduplication">2.7 Deduplication</a></h3>
+<p><strong>ZFS concept</strong>: DDT (Dedup Table) uses cryptographic checksums as keys. On write, if checksum exists, increment refcount and skip write. Notoriously memory-intensive.</p>
+<p><strong>Source</strong>: <code>module/zfs/ddt.c</code>, <code>module/zfs/ddt_log.c</code>, <code>module/zfs/ddt_zap.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already implemented in IndexedBackend (whole-file dedup). Enhancement: block-level dedup:</p>
+<pre><code class="language-sql">CREATE TABLE chunks (
+    chunk_hash  TEXT PRIMARY KEY,
+    chunk_data  BLOB NOT NULL,
+    size        INTEGER NOT NULL,
+    refcount    INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE file_chunks (
+    file_id     INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    chunk_hash  TEXT NOT NULL REFERENCES chunks(chunk_hash),
+    PRIMARY KEY (file_id, chunk_index)
+);
+</code></pre>
+<p><strong>Key difference</strong>: Two 1GB files differing by 1 byte share 0% storage with whole-file dedup, but ~99.998% with block-level dedup using 128KB chunks.</p>
+<h3 id="28-compression"><a class="header" href="#28-compression">2.8 Compression</a></h3>
+<p><strong>ZFS concept</strong>: Transparent per-block compression during write pipeline. Early-abort skips compression if result exceeds original size.</p>
+<p><strong>Source</strong>: <code>module/zfs/zio_compress.c</code> (LZ4, ZSTD, GZIP, LZJB, ZLE)</p>
+<p><strong>AnyFS mapping</strong>: Tower-style compression middleware:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct CompressionLayer&lt;B&gt; {
+    inner: B,
+    algorithm: CompressionAlgorithm, // Lz4, Zstd { level }, Gzip { level }
+}
+
+impl&lt;B: FsWrite&gt; FsWrite for CompressionLayer&lt;B&gt; {
+    fn write(&amp;self, path: &amp;Path, data: &amp;[u8]) -&gt; Result&lt;(), FsError&gt; {
+        let compressed = self.algorithm.compress(data);
+        if compressed.len() &gt;= data.len() {
+            self.inner.write(path, data)     // Early abort: store uncompressed
+        } else {
+            self.inner.write(path, &amp;compressed)
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Caveat</strong>: Compression breaks <code>read_range()</code> – must decompress entire blob. Per-extent compression avoids this.</p>
+<h3 id="29-arc-adaptive-replacement-cache"><a class="header" href="#29-arc-adaptive-replacement-cache">2.9 ARC (Adaptive Replacement Cache)</a></h3>
+<p><strong>ZFS concept</strong>: Seven-state cache based on Megiddo-Modha algorithm. Ghost lists track evicted entries’ metadata (no data) to adaptively balance MRU vs MFU. Responds to memory pressure.</p>
+<p><strong>Source</strong>: <code>module/zfs/arc.c</code></p>
+<p><strong>AnyFS mapping</strong>: Replace simple LRU in Cache middleware (ADR-020) with ARC:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ArcCache&lt;B&gt; {
+    inner: B,
+    mru: LruCache&lt;PathBuf, CacheEntry&gt;,       // Recently used
+    mfu: LruCache&lt;PathBuf, CacheEntry&gt;,       // Frequently used
+    mru_ghost: LruCache&lt;PathBuf, ()&gt;,          // Evicted MRU metadata (no data)
+    mfu_ghost: LruCache&lt;PathBuf, ()&gt;,          // Evicted MFU metadata (no data)
+    target_mru_size: AtomicUsize,              // Adaptive target
+}
+<span class="boring">}</span></code></pre>
+<p>Ghost MRU hit -&gt; shift toward recency. Ghost MFU hit -&gt; shift toward frequency. No manual tuning needed.</p>
+<p><strong>Caveat</strong>: Double-caching problem if used above SQLite’s own page cache.</p>
+<h3 id="210-zil-zfs-intent-log"><a class="header" href="#210-zil-zfs-intent-log">2.10 ZIL (ZFS Intent Log)</a></h3>
+<p><strong>ZFS concept</strong>: Write-ahead log for synchronous operations. Records intents for crash replay. Separate from the main transaction group pipeline.</p>
+<p><strong>Source</strong>: <code>module/zfs/zil.c</code></p>
+<p><strong>AnyFS mapping</strong>: Intent log bridging blob store and metadata DB in IndexedBackend:</p>
+<pre><code class="language-sql">CREATE TABLE intent_log (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation   TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    blob_id     TEXT,
+    metadata    TEXT,
+    created_at  INTEGER NOT NULL,
+    committed   BOOLEAN NOT NULL DEFAULT FALSE
+);
+</code></pre>
+<p>Record intent before operation, mark committed after. On crash recovery, replay uncommitted intents.</p>
+<h3 id="211-dataset-properties-inheritable-configuration"><a class="header" href="#211-dataset-properties-inheritable-configuration">2.11 Dataset Properties (Inheritable Configuration)</a></h3>
+<p><strong>ZFS concept</strong>: Per-dataset properties (compression, quota, encryption, recordsize) with inheritance. Values: local, inherited, received, default.</p>
+<p><strong>Source</strong>: <code>module/zfs/dsl_prop.c</code></p>
+<p><strong>AnyFS mapping</strong>: Properties drive runtime middleware composition:</p>
+<pre><code class="language-sql">CREATE TABLE dataset_properties (
+    dataset_id  INTEGER NOT NULL,
+    property    TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'local',
+    PRIMARY KEY (dataset_id, property)
+);
+</code></pre>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn build_stack(config: &amp;DatasetConfig) -&gt; impl Fs {
+    let mut stack = BackendStack::new(SqliteBackend::open(&amp;config.db_path)?);
+    if let Some(quota) = config.resolve("quota", parent).as_u64() {
+        stack = stack.layer(QuotaLayer::new(quota));
+    }
+    if config.resolve("compression", parent).as_str() != "none" {
+        stack = stack.layer(CompressionLayer::new(config.compression()));
+    }
+    stack
+}
+<span class="boring">}</span></code></pre>
+<h3 id="212-scrubbing-background-integrity-verification"><a class="header" href="#212-scrubbing-background-integrity-verification">2.12 Scrubbing (Background Integrity Verification)</a></h3>
+<p><strong>ZFS concept</strong>: Traverse all blocks, verify checksums, self-heal from mirrors. Throttled to avoid starving foreground I/O.</p>
+<p><strong>Source</strong>: <code>module/zfs/dsl_scan.c</code></p>
+<p><strong>AnyFS mapping</strong>: Verify every blob referenced by metadata actually exists and matches its hash:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn scrub(&amp;self, throttle: ScrubThrottle) -&gt; Result&lt;ScrubResult, FsError&gt; {
+    // Phase 1: Verify all nodes reference valid blobs
+    for node in all_file_nodes() {
+        throttle.wait();
+        let data = self.blobs.get(&amp;node.blob_id)?;
+        if sha256(&amp;data) != node.blob_id {
+            result.checksum_errors.push(/* ... */);
+        }
+    }
+    // Phase 2: Find orphaned blobs
+    for blob in self.blobs.list_all()? {
+        if !referenced_by_any_node(&amp;blob) {
+            result.orphaned_blobs.push(blob);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="213-bookmarks-lightweight-sendreceive-markers"><a class="header" href="#213-bookmarks-lightweight-sendreceive-markers">2.13 Bookmarks (Lightweight Send/Receive Markers)</a></h3>
+<p><strong>ZFS concept</strong>: Record a snapshot’s transaction group without holding block references. Enable incremental sends after destroying the source snapshot.</p>
+<p><strong>Source</strong>: <code>module/zfs/dsl_bookmark.c</code></p>
+<p><strong>AnyFS mapping</strong>: Tiny metadata entries that remember “last sent” state:</p>
+<pre><code class="language-sql">CREATE TABLE bookmarks (
+    name            TEXT PRIMARY KEY,
+    dataset_id      INTEGER NOT NULL,
+    creation_txg    INTEGER NOT NULL,
+    creation_time   INTEGER NOT NULL,
+    last_change_seq INTEGER NOT NULL  -- Points into change_log
+);
+</code></pre>
+<p>Create snapshot -&gt; send to replica -&gt; bookmark -&gt; destroy snapshot (frees storage) -&gt; next incremental send uses bookmark.</p>
+<hr>
+<h2 id="part-3-xfs"><a class="header" href="#part-3-xfs">Part 3: XFS</a></h2>
+<p>XFS is a high-performance journaling filesystem in the Linux kernel at <code>fs/xfs/</code>.</p>
+<h3 id="31-allocation-groups-parallel-regions"><a class="header" href="#31-allocation-groups-parallel-regions">3.1 Allocation Groups (Parallel Regions)</a></h3>
+<p><strong>XFS concept</strong>: Divides filesystem into equally-sized Allocation Groups, each with independent inodes, free space B+ trees, and metadata. Enables concurrent I/O without contention.</p>
+<p><strong>Source</strong>: <code>fs/xfs/libxfs/xfs_ag.h</code>, <code>fs/xfs/libxfs/xfs_alloc.c</code></p>
+<p><strong>AnyFS mapping</strong>: Database sharding by path prefix – partition the <code>nodes</code> table across multiple SQLite files:</p>
+<pre><code>shard_0.db: /users/a-m/
+shard_1.db: /users/n-z/
+shard_2.db: /system/
+</code></pre>
+<p>Each shard has its own SQLite writer, enabling true parallel writes across path prefixes.</p>
+<p><strong>Caveat</strong>: Cross-shard operations (rename across shards) lose atomicity.</p>
+<h3 id="32-extent-based-allocation-chunked-blobs"><a class="header" href="#32-extent-based-allocation-chunked-blobs">3.2 Extent-Based Allocation (Chunked Blobs)</a></h3>
+<p><strong>XFS concept</strong>: Records contiguous block ranges as <code>(startblock, startoff, blockcount)</code> tuples instead of tracking individual blocks.</p>
+<p><strong>Source</strong>: <code>fs/xfs/libxfs/xfs_bmap.c</code>, <code>fs/xfs/libxfs/xfs_bmap.h</code></p>
+<p><strong>AnyFS mapping</strong>: Store large files as extent-like chunks:</p>
+<pre><code class="language-sql">CREATE TABLE extents (
+    inode       INTEGER NOT NULL,
+    offset      INTEGER NOT NULL,
+    length      INTEGER NOT NULL,
+    blob_id     TEXT NOT NULL,
+    PRIMARY KEY (inode, offset)
+);
+</code></pre>
+<p>Enables <code>read_range()</code> to fetch only relevant chunks. Append-only logs create new extents without rewriting existing blobs.</p>
+<h3 id="33-delayed-allocation-write-batching"><a class="header" href="#33-delayed-allocation-write-batching">3.3 Delayed Allocation (Write Batching)</a></h3>
+<p><strong>XFS concept</strong>: Defer block allocation until writeback. Allows the allocator to see total write size and allocate contiguously.</p>
+<p><strong>Source</strong>: <code>fs/xfs/xfs_file.c</code> (<code>xfs_file_buffered_write</code>), <code>fs/xfs/xfs_iomap.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already implemented as the write batching pattern in <code>sqlite-operations.md</code>. Flush triggers: batch size, timeout, explicit <code>sync()</code>, read-after-write consistency.</p>
+<h3 id="34-online-defragmentation"><a class="header" href="#34-online-defragmentation">3.4 Online Defragmentation</a></h3>
+<p><strong>XFS concept</strong>: <code>xfs_fsr</code> defragments files by allocating a temp file, copying data contiguously, then atomically swapping extent maps.</p>
+<p><strong>Source</strong>: <code>fs/xfs/xfs_bmap_util.c</code> (<code>xfs_swapext</code>)</p>
+<p><strong>AnyFS mapping</strong>: SQLite <code>VACUUM</code> and <code>incremental_vacuum</code>. For blob stores: consolidate small blobs, repack chunked files, rebuild indexes.</p>
+<h3 id="35-project-quotas-per-directory-tree-quotas"><a class="header" href="#35-project-quotas-per-directory-tree-quotas">3.5 Project Quotas (Per-Directory-Tree Quotas)</a></h3>
+<p><strong>XFS concept</strong>: Quotas applied to directory trees. A project ID is assigned to a directory hierarchy; all children inherit it.</p>
+<p><strong>Source</strong>: <code>fs/xfs/xfs_qm.c</code></p>
+<p><strong>AnyFS mapping</strong>: Extend <code>QuotaLayer</code> beyond global limits to per-path-prefix quotas:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let backend = backend.layer(ProjectQuotaLayer::builder()
+    .project("/users/alice", QuotaPolicy { max_size: 1_GB, max_files: 10_000 })
+    .project("/users/bob",   QuotaPolicy { max_size: 500_MB, max_files: 5_000 })
+    .build());
+<span class="boring">}</span></code></pre>
+<h3 id="36-reflinkcow-lightweight-copies"><a class="header" href="#36-reflinkcow-lightweight-copies">3.6 Reflink/CoW (Lightweight Copies)</a></h3>
+<p><strong>XFS concept</strong>: Share physical blocks between files via reference counting. On write, COW creates new blocks for modified regions only.</p>
+<p><strong>Source</strong>: <code>fs/xfs/xfs_reflink.c</code>, <code>fs/xfs/libxfs/xfs_refcount_btree.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already implemented in IndexedBackend’s <code>copy()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn copy(&amp;self, from: &amp;Path, to: &amp;Path) -&gt; Result&lt;(), FsError&gt; {
+    // Just increment refcount -- no blob copy!
+}
+<span class="boring">}</span></code></pre>
+<p>Enhancement: extend to sub-file (extent-level) COW for partial updates.</p>
+<h3 id="37-reverse-mapping"><a class="header" href="#37-reverse-mapping">3.7 Reverse Mapping</a></h3>
+<p><strong>XFS concept</strong>: Maps physical blocks back to owning files. Enables online fsck, error reporting (which files affected by bad sector), and reflink validation.</p>
+<p><strong>Source</strong>: <code>fs/xfs/libxfs/xfs_rmap_btree.c</code></p>
+<p><strong>AnyFS mapping</strong>: The <code>idx_nodes_blob</code> index already answers “which files reference blob X?”. A full reverse mapping table:</p>
+<pre><code class="language-sql">CREATE TABLE blob_owners (
+    blob_id TEXT NOT NULL,
+    inode   INTEGER NOT NULL,
+    PRIMARY KEY (blob_id, inode)
+);
+</code></pre>
+<p>Enables smart GC (verify refcounts by counting actual references) and impact analysis (which files affected by corrupted blob).</p>
+<h3 id="38-log-structured-journaling"><a class="header" href="#38-log-structured-journaling">3.8 Log-Structured Journaling</a></h3>
+<p><strong>XFS concept</strong>: Write-ahead log for metadata. Deferred operations (EFI) enable atomic multi-step operations.</p>
+<p><strong>Source</strong>: <code>fs/xfs/xfs_log.c</code>, kernel.org <a href="https://www.kernel.org/doc/html/v6.1/filesystems/xfs-delayed-logging-design.html">delayed logging design</a></p>
+<p><strong>AnyFS mapping</strong>: SQLite WAL mode + the audit table pattern:</p>
+<pre><code class="language-sql">CREATE TABLE audit (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   INTEGER NOT NULL,
+    operation   TEXT NOT NULL,
+    path        TEXT,
+    details     TEXT  -- JSON with before/after state
+);
+</code></pre>
+<p>Enables crash recovery, undo/redo, and replication (stream audit log to replica).</p>
+<hr>
+<h2 id="part-4-git-internals"><a class="header" href="#part-4-git-internals">Part 4: Git Internals</a></h2>
+<p>Git source at <a href="https://github.com/git/git">github.com/git/git</a>.</p>
+<h3 id="41-content-addressable-object-store"><a class="header" href="#41-content-addressable-object-store">4.1 Content-Addressable Object Store</a></h3>
+<p><strong>Git concept</strong>: Every object (blob, tree, commit) stored by SHA hash of content. Identical content = same hash = automatic dedup.</p>
+<p><strong>Source</strong>: <code>object-file.c</code>, <code>hash-object.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already implemented in IndexedBackend’s <code>LocalCasBackend</code> with SHA-256 and the same <code>xx/hash</code> directory layout as Git.</p>
+<h3 id="42-pack-files-delta-compression"><a class="header" href="#42-pack-files-delta-compression">4.2 Pack Files (Delta Compression)</a></h3>
+<p><strong>Git concept</strong>: Similar objects stored as deltas from a base object. Dramatically reduces storage for repositories with many versions of the same files.</p>
+<p><strong>Source</strong>: <code>builtin/pack-objects.c</code>, <code>packfile.c</code></p>
+<p><strong>AnyFS mapping</strong>: Delta-compressed blob storage:</p>
+<pre><code class="language-sql">CREATE TABLE blobs (
+    blob_id     TEXT PRIMARY KEY,
+    base_id     TEXT,              -- NULL if full blob, else delta base
+    delta       BLOB,             -- Delta from base (if base_id set)
+    full_size   INTEGER NOT NULL,
+    stored_size INTEGER NOT NULL,  -- Actual bytes on disk
+    refcount    INTEGER NOT NULL DEFAULT 0
+);
+</code></pre>
+<p><strong>Use case</strong>: Document management with many revisions. Background “pack” job identifies similar blobs and computes deltas.</p>
+<p><strong>Tradeoff</strong>: Random access to delta-compressed blobs requires reconstructing from base + delta chain.</p>
+<h3 id="43-tree-objects-merkle-trees"><a class="header" href="#43-tree-objects-merkle-trees">4.3 Tree Objects (Merkle Trees)</a></h3>
+<p><strong>Git concept</strong>: Directory listing where each entry contains a hash of either a blob or subtree. Changing any file changes hashes up to root.</p>
+<p><strong>Source</strong>: <code>tree.c</code>, <code>tree-walk.c</code></p>
+<p><strong>AnyFS mapping</strong>: Add <code>tree_hash</code> to the <code>nodes</code> table:</p>
+<pre><code class="language-sql">ALTER TABLE nodes ADD COLUMN tree_hash TEXT;
+-- Directories: SHA-256 of sorted(child_name + child_hash)
+-- Files: same as blob_id
+</code></pre>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Efficient sync: compare root hashes to detect any change; descend only into changed directories</li>
+<li>Snapshot diff in O(changed paths) time</li>
+<li>Integrity verification: recompute tree hashes bottom-up and compare</li>
+</ul>
+<p><strong>Caveat</strong>: Hash invalidation cascades up to root on every file change. Must be lazy/incremental.</p>
+<h3 id="44-refs-and-reflog-named-filesystem-states"><a class="header" href="#44-refs-and-reflog-named-filesystem-states">4.4 Refs and Reflog (Named Filesystem States)</a></h3>
+<p><strong>Git concept</strong>: Named pointers to commits. Reflog records every change to each ref, enabling recovery.</p>
+<p><strong>Source</strong>: <code>refs.c</code>, <code>refs/files-backend.c</code>, <code>reflog.c</code></p>
+<p><strong>AnyFS mapping</strong>: Named snapshots with change history:</p>
+<pre><code class="language-sql">CREATE TABLE snapshot_log (
+    snapshot    TEXT NOT NULL,
+    old_hash    TEXT,
+    new_hash    TEXT NOT NULL,
+    timestamp   INTEGER NOT NULL,
+    operation   TEXT NOT NULL,
+    message     TEXT
+);
+</code></pre>
+<p>“Branches” = mutable snapshot refs. “Tags” = immutable snapshot refs.</p>
+<h3 id="45-garbage-collection-with-grace-periods"><a class="header" href="#45-garbage-collection-with-grace-periods">4.5 Garbage Collection with Grace Periods</a></h3>
+<p><strong>Git concept</strong>: Unreachable objects removed, but protected by reflog for configurable period (30-90 days).</p>
+<p><strong>Source</strong>: <code>builtin/gc.c</code>, <code>builtin/prune.c</code></p>
+<p><strong>AnyFS mapping</strong>: Already implemented. Enhancement: add grace period:</p>
+<pre><code class="language-sql">SELECT blob_id FROM blobs
+WHERE refcount = 0
+  AND created_at &lt; strftime('%s', 'now') - 86400;  -- At least 1 day old
+</code></pre>
+<h3 id="46-worktrees-shared-blob-stores"><a class="header" href="#46-worktrees-shared-blob-stores">4.6 Worktrees (Shared Blob Stores)</a></h3>
+<p><strong>Git concept</strong>: Multiple working directories linked to the same repository. Each has its own HEAD but shares the object store.</p>
+<p><strong>Source</strong>: <code>worktree.c</code></p>
+<p><strong>AnyFS mapping</strong>: Multiple <code>FileStorage</code> instances sharing a single blob store:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let blobs = Arc::new(LocalCasBackend::new("./shared-blobs"));
+
+// Worktree 1: "main"
+let wt1 = IndexedBackend::with_blobs("wt1-index.db", blobs.clone());
+let fs1 = FileStorage::new(wt1);
+
+// Worktree 2: "feature" -- shares blobs, independent metadata
+let wt2 = IndexedBackend::with_blobs("wt2-index.db", blobs.clone());
+let fs2 = FileStorage::new(wt2);
+<span class="boring">}</span></code></pre>
+<p><strong>Use case</strong>: Multi-tenant systems where tenants share common files but have independent directory structures.</p>
+<h3 id="47-alternates-chained-blob-stores"><a class="header" href="#47-alternates-chained-blob-stores">4.7 Alternates (Chained Blob Stores)</a></h3>
+<p><strong>Git concept</strong>: <code>.git/objects/info/alternates</code> lists paths to other repos’ object dirs. Objects searched locally first, then in alternates.</p>
+<p><strong>Source</strong>: GitLab uses this extensively for <a href="https://docs.gitlab.com/18.6/development/git_object_deduplication/">fork deduplication</a></p>
+<p><strong>AnyFS mapping</strong>: Chained blob store pattern:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ChainedBlobStore {
+    primary: Arc&lt;dyn BlobStore&gt;,          // Local, writable
+    alternates: Vec&lt;Arc&lt;dyn BlobStore&gt;&gt;,  // Shared, read-only
+}
+
+impl BlobStore for ChainedBlobStore {
+    fn get(&amp;self, blob_id: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, BlobError&gt; {
+        if let Ok(data) = self.primary.get(blob_id) { return Ok(data); }
+        for alt in &amp;self.alternates {
+            if let Ok(data) = alt.get(blob_id) { return Ok(data); }
+        }
+        Err(BlobError::NotFound)
+    }
+
+    fn put(&amp;self, data: &amp;[u8]) -&gt; Result&lt;String, BlobError&gt; {
+        let blob_id = sha256_hex(data);
+        // Skip write if already in any alternate
+        for alt in &amp;self.alternates {
+            if alt.exists(&amp;blob_id)? { return Ok(blob_id); }
+        }
+        self.primary.put(data)
+    }
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Use case</strong>: “Base image” blob store shared read-only; each tenant has a private writable store.</p>
+<h3 id="48-bitmap-indexes-fast-reachability"><a class="header" href="#48-bitmap-indexes-fast-reachability">4.8 Bitmap Indexes (Fast Reachability)</a></h3>
+<p><strong>Git concept</strong>: Compressed bitset per commit indicating which objects are reachable. Enables O(bitwise OR) reachability vs O(graph traversal).</p>
+<p><strong>Source</strong>: <code>pack-bitmap.c</code>, <a href="https://git-scm.com/docs/bitmap-format">bitmap format docs</a></p>
+<p><strong>AnyFS mapping</strong>: Accelerate GC across many snapshots:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn reachable_blobs(&amp;self, snapshots: &amp;[&amp;str]) -&gt; RoaringBitmap {
+    let mut result = RoaringBitmap::new();
+    for snap in snapshots {
+        result |= self.load_bitmap(snap);
+    }
+    result
+}
+
+fn gc(&amp;self) {
+    let reachable = self.reachable_blobs(&amp;self.active_snapshots());
+    let orphans = self.all_blob_bitmap() - reachable;
+    // Delete orphans
+}
+<span class="boring">}</span></code></pre>
+<p>Fast snapshot diff: XOR two bitmaps to find changed blobs.</p>
+<h3 id="49-grafts-and-replace-objects"><a class="header" href="#49-grafts-and-replace-objects">4.9 Grafts and Replace Objects</a></h3>
+<p><strong>Git concept</strong>: Transparent object substitution. When reading object X, return replacement Y instead.</p>
+<p><strong>Source</strong>: <code>refs/replace/</code>, <a href="https://git-scm.com/docs/git-replace">git-replace docs</a></p>
+<p><strong>AnyFS mapping</strong>: Virtual blob replacement table:</p>
+<pre><code class="language-sql">CREATE TABLE replacements (
+    original_blob_id    TEXT PRIMARY KEY,
+    replacement_blob_id TEXT NOT NULL,
+    reason TEXT,
+    created_at INTEGER NOT NULL
+);
+</code></pre>
+<p><strong>Use cases</strong>: Content migration (re-encode blobs without changing metadata), redaction, A/B testing.</p>
+<hr>
+<h2 id="unified-impact-matrix"><a class="header" href="#unified-impact-matrix">Unified Impact Matrix</a></h2>
+<h3 id="already-present-in-anyfs-enhance"><a class="header" href="#already-present-in-anyfs-enhance">Already Present in AnyFS (Enhance)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concept</th><th>Source</th><th>AnyFS Component</th><th>Enhancement Opportunity</th></tr>
+</thead>
+<tbody>
+<tr><td>Content-addressed storage</td><td>Git</td><td>IndexedBackend</td><td>Block-level dedup (chunks)</td></tr>
+<tr><td>Copy-on-Write</td><td>ZFS, XFS</td><td>IndexedBackend (refcount blobs)</td><td>Sub-file COW via extents</td></tr>
+<tr><td>Reflink/CoW copies</td><td>XFS</td><td><code>copy()</code> via refcount++</td><td>Extent-level partial COW</td></tr>
+<tr><td>Deduplication</td><td>ZFS, Git</td><td><code>blob_id = sha256(content)</code></td><td>Block-level dedup tables</td></tr>
+<tr><td>Garbage collection</td><td>Git, ZFS</td><td><code>refcount = 0</code> pruning</td><td>Grace periods, bitmap indexes</td></tr>
+<tr><td>Write batching</td><td>XFS</td><td>Write queue pattern</td><td>Configurable flush policies</td></tr>
+<tr><td>WAL journaling</td><td>XFS, ZFS</td><td>SQLite WAL mode</td><td>Intent log for two-phase ops</td></tr>
+<tr><td>Metadata/data separation</td><td>ZFS (special vdevs)</td><td>IndexedBackend</td><td>Tiered blob stores</td></tr>
+<tr><td>Snapshots</td><td>ZFS</td><td>IndexedBackend pattern</td><td>First-class API, clones</td></tr>
+<tr><td>Defragmentation</td><td>XFS</td><td>VACUUM</td><td>Blob consolidation</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="high-value-additions"><a class="header" href="#high-value-additions">High-Value Additions</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concept</th><th>Source</th><th>Effort</th><th>Impact</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>SQLite-as-PV spanning</strong></td><td>LVM</td><td>High</td><td><strong>Critical</strong></td><td>Overcome SQLite size limits via multi-file pools</td></tr>
+<tr><td><strong>Compression middleware</strong></td><td>ZFS</td><td>Low</td><td>High</td><td>Transparent LZ4/ZSTD layer with early-abort</td></tr>
+<tr><td><strong>Checksum verification</strong></td><td>ZFS</td><td>Low</td><td>High</td><td>Read-time integrity middleware</td></tr>
+<tr><td><strong>Scrubbing</strong></td><td>ZFS</td><td>Low</td><td>High</td><td>Background blob integrity verification</td></tr>
+<tr><td><strong>Project quotas</strong></td><td>XFS</td><td>Medium</td><td>High</td><td>Per-directory-tree quota middleware</td></tr>
+<tr><td><strong>ARC caching</strong></td><td>ZFS</td><td>Medium</td><td>High</td><td>Replace simple LRU with adaptive cache</td></tr>
+<tr><td><strong>Dataset properties</strong></td><td>ZFS</td><td>Medium</td><td>High</td><td>Inheritable per-dataset configuration</td></tr>
+<tr><td><strong>Merkle tree hashing</strong></td><td>Git</td><td>Medium</td><td>Medium</td><td>Efficient sync and snapshot diff</td></tr>
+<tr><td><strong>Shared blob stores</strong></td><td>Git (alternates/worktrees)</td><td>Medium</td><td>Medium</td><td>Multi-tenant blob dedup</td></tr>
+<tr><td><strong>Send/receive protocol</strong></td><td>ZFS</td><td>High</td><td>Medium</td><td>Incremental replication</td></tr>
+<tr><td><strong>Bookmarks</strong></td><td>ZFS</td><td>Low</td><td>Medium</td><td>Lightweight send/receive markers</td></tr>
+<tr><td><strong>Intent log</strong></td><td>ZFS (ZIL)</td><td>Medium</td><td>Medium</td><td>Crash recovery for two-phase ops</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="ambitious--niche"><a class="header" href="#ambitious--niche">Ambitious / Niche</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concept</th><th>Source</th><th>Effort</th><th>Fit</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Pack files (delta compression)</td><td>Git</td><td>High</td><td>Medium</td><td>CPU-intensive, good for versioned docs</td></tr>
+<tr><td>Striping across SQLite PVs</td><td>LVM</td><td>Medium</td><td>Medium</td><td>Value only with multiple physical disks</td></tr>
+<tr><td>Mirroring across SQLite PVs</td><td>LVM</td><td>Medium</td><td>Medium</td><td>Redundancy for critical data</td></tr>
+<tr><td>Thin provisioning</td><td>LVM</td><td>Medium</td><td>Medium</td><td>Natural fit for SQLite (grows on demand)</td></tr>
+<tr><td>pvmove (live migration)</td><td>LVM</td><td>High</td><td>Medium</td><td>Zero-downtime PV replacement</td></tr>
+<tr><td>Allocation groups (sharding)</td><td>XFS</td><td>High</td><td>Low</td><td>Cross-shard atomicity is hard</td></tr>
+<tr><td>RAIDZ</td><td>ZFS</td><td>Very High</td><td>Low</td><td>Parity across SQLite files is unnatural</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="recommended-priorities"><a class="header" href="#recommended-priorities">Recommended Priorities</a></h2>
+<h3 id="phase-1-foundation-multi-sqlite-spanning"><a class="header" href="#phase-1-foundation-multi-sqlite-spanning">Phase 1: Foundation (Multi-SQLite Spanning)</a></h3>
+<p>The LVM-inspired multi-file architecture directly solves the SQLite size limit problem:</p>
+<ol>
+<li><strong>PhysicalVolume abstraction</strong>: Individual SQLite files as PVs with extent-based storage</li>
+<li><strong>VolumeGroup coordinator</strong>: Aggregate PVs into a pool with redundant metadata</li>
+<li><strong>LogicalVolume backend</strong>: Implement <code>Fs</code> trait over mapped extents</li>
+<li><strong>vgextend/vgreduce</strong>: Dynamic add/remove of SQLite PV files</li>
+</ol>
+<h3 id="phase-2-integrity--efficiency"><a class="header" href="#phase-2-integrity--efficiency">Phase 2: Integrity &amp; Efficiency</a></h3>
+<p>Low-effort, high-impact features from ZFS and Git:</p>
+<ol start="5">
+<li><strong>CompressionLayer middleware</strong>: LZ4/ZSTD with early-abort</li>
+<li><strong>ChecksumLayer middleware</strong>: Read-time verification</li>
+<li><strong>Scrub operation</strong>: Background blob integrity checking</li>
+<li><strong>GC grace periods</strong>: Don’t delete recently-orphaned blobs</li>
+</ol>
+<h3 id="phase-3-advanced-storage-management"><a class="header" href="#phase-3-advanced-storage-management">Phase 3: Advanced Storage Management</a></h3>
+<ol start="9">
+<li><strong>Dataset properties with inheritance</strong>: Drive middleware composition from config</li>
+<li><strong>Project quotas</strong>: Per-directory-tree limits</li>
+<li><strong>ARC cache</strong>: Replace simple LRU</li>
+<li><strong>Merkle tree hashing</strong>: Efficient sync and diff</li>
+</ol>
+<h3 id="phase-4-replication--scale"><a class="header" href="#phase-4-replication--scale">Phase 4: Replication &amp; Scale</a></h3>
+<ol start="13">
+<li><strong>Change log infrastructure</strong>: Transaction numbering for send/receive</li>
+<li><strong>Send/receive protocol</strong>: Incremental replication</li>
+<li><strong>Bookmarks</strong>: Lightweight send markers</li>
+<li><strong>Shared blob stores</strong>: Git alternates pattern for multi-tenant dedup</li>
+</ol>
+<hr>
+<h2 id="sources"><a class="header" href="#sources">Sources</a></h2>
+<h3 id="lvm"><a class="header" href="#lvm">LVM</a></h3>
+<ul>
+<li><a href="https://www.sourceware.org/lvm2/">LVM2 Resource Page</a></li>
+<li><a href="https://gitlab.com/lvmteam/lvm2">LVM2 GitLab Repository</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Device_mapper">Device Mapper - Wikipedia</a></li>
+<li><a href="https://wiki.archlinux.org/title/LVM">LVM - ArchWiki</a></li>
+<li><a href="https://www.digitalocean.com/community/tutorials/an-introduction-to-lvm-concepts-terminology-and-operations">LVM Concepts - DigitalOcean</a></li>
+<li><a href="https://docs.kernel.org/admin-guide/device-mapper/thin-provisioning.html">dm-thin-provisioning - Kernel Docs</a></li>
+<li><a href="https://docs.kernel.org/admin-guide/device-mapper/linear.html">dm-linear - Kernel Docs</a></li>
+<li><a href="https://docs.kernel.org/admin-guide/device-mapper/striped.html">dm-stripe - Kernel Docs</a></li>
+<li><a href="https://man7.org/linux/man-pages/man7/lvmcache.7.html">lvmcache(7) man page</a></li>
+</ul>
+<h3 id="zfs--openzfs"><a class="header" href="#zfs--openzfs">ZFS / OpenZFS</a></h3>
+<ul>
+<li><a href="https://github.com/openzfs/zfs">OpenZFS Repository</a></li>
+<li><code>module/zfs/spa.c</code> - Storage Pool Allocator</li>
+<li><code>module/zfs/dsl_dataset.c</code> - Dataset/Snapshot Layer</li>
+<li><code>module/zfs/dmu_send.c</code> / <code>dmu_recv.c</code> - Send/Receive</li>
+<li><code>module/zfs/zio_checksum.c</code> - Checksum framework</li>
+<li><code>module/zfs/arc.c</code> - Adaptive Replacement Cache</li>
+<li><code>module/zfs/zil.c</code> - ZFS Intent Log</li>
+<li><code>module/zfs/ddt.c</code> - Deduplication Table</li>
+<li><code>module/zfs/zio_compress.c</code> - Compression</li>
+<li><code>module/zfs/vdev_raidz.c</code> - RAIDZ</li>
+<li><code>module/zfs/dsl_scan.c</code> - Scrubbing</li>
+<li><code>module/zfs/dsl_bookmark.c</code> - Bookmarks</li>
+<li><code>module/zfs/dsl_prop.c</code> - Dataset Properties</li>
+</ul>
+<h3 id="xfs"><a class="header" href="#xfs">XFS</a></h3>
+<ul>
+<li><a href="https://xfs.org/docs/xfsdocs-xml-dev/XFS_Filesystem_Structure/tmp/en-US/html/Allocation_Groups.html">XFS Allocation Groups</a></li>
+<li><a href="https://www.kernel.org/doc/html/v6.1/filesystems/xfs-delayed-logging-design.html">XFS Delayed Logging Design - Kernel Docs</a></li>
+<li><a href="https://www.kernel.org/doc/html/next/filesystems/xfs-online-fsck-design.html">XFS Online Fsck Design</a></li>
+<li><a href="https://blogs.oracle.com/linux/xfs-realtime-rmap-and-reflink">XFS Realtime Rmap and Reflink (Oracle)</a></li>
+<li><a href="https://lwn.net/Articles/695290/">XFS Reverse Mapping (LWN)</a></li>
+<li><code>fs/xfs/libxfs/xfs_ag.h</code> - Allocation Group structures</li>
+<li><code>fs/xfs/libxfs/xfs_alloc.c</code> - Allocation logic</li>
+<li><code>fs/xfs/libxfs/xfs_bmap.c</code> - Extent mapping</li>
+<li><code>fs/xfs/xfs_reflink.c</code> - Reflink implementation</li>
+<li><code>fs/xfs/libxfs/xfs_rmap_btree.c</code> - Reverse mapping</li>
+</ul>
+<h3 id="git"><a class="header" href="#git">Git</a></h3>
+<ul>
+<li><a href="https://git-scm.com/book/en/v2/Git-Internals-Git-Objects">Git Internals: Git Objects</a></li>
+<li><a href="https://git-scm.com/book/en/v2/Git-Internals-Packfiles">Git Internals: Packfiles</a></li>
+<li><a href="https://github.blog/open-source/git/gits-database-internals-i-packed-object-store/">Git’s Database Internals (GitHub Blog)</a></li>
+<li><a href="https://git-scm.com/docs/bitmap-format">Git Bitmap Format</a></li>
+<li><a href="https://git-scm.com/docs/gitformat-pack">Git Pack Format</a></li>
+<li><a href="https://docs.gitlab.com/18.6/development/git_object_deduplication/">Git Object Deduplication (GitLab)</a></li>
+<li><code>builtin/pack-objects.c</code> - Pack file creation</li>
+<li><code>packfile.c</code> - Pack file reading</li>
+<li><code>pack-bitmap.c</code> - Bitmap indexes</li>
+<li><code>tree.c</code>, <code>tree-walk.c</code> - Tree objects</li>
+<li><code>refs.c</code>, <code>worktree.c</code> - References and worktrees</li>
+</ul>
+<h3 id="sqlite"><a class="header" href="#sqlite">SQLite</a></h3>
+<ul>
+<li><a href="https://www.sqlite.org/limits.html">SQLite Implementation Limits</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../comparisons/prior-art-analysis.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../comparisons/benchmarking-plan.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../comparisons/prior-art-analysis.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../comparisons/benchmarking-plan.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace-2a3cd908.js"></script>
+        <script src="../mode-rust-2c9d5c9a.js"></script>
+        <script src="../editor-16ca416c.js"></script>
+        <script src="../theme-dawn-4493f9c8.js"></script>
+        <script src="../theme-tomorrow_night-9dbe62a9.js"></script>
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

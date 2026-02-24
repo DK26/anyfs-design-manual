@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-fb4854eb.js";
+            window.path_to_searchindex_js = "../searchindex-512b794b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4ff2705e.js"></script>
+        <script src="../toc-74107614.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -455,6 +455,33 @@ process_sandbox(&amp;userdata);  // Compile error - different type!
 <li>No breaking changes to existing sync API</li>
 </ul>
 <hr>
+<h2 id="multi-sqlite-spanning-lvm-inspired"><a class="header" href="#multi-sqlite-spanning-lvm-inspired">Multi-SQLite Spanning (LVM-Inspired)</a></h2>
+<p><strong>Status:</strong> Future consideration</p>
+<p><strong>Question:</strong> How should AnyFS handle SQLite databases that outgrow practical single-file limits?</p>
+<p><strong>Context:</strong> SQLite performance degrades with very large files (tens of GB+), and the single-writer constraint becomes a bottleneck. Linux LVM solves the analogous problem for block devices by pooling multiple Physical Volumes into Volume Groups and carving out Logical Volumes.</p>
+<p><strong>Proposed approach:</strong> An ecosystem crate that treats individual SQLite files as Physical Volumes, aggregates them into a pool (Volume Group), and presents logical filesystems (Logical Volumes) backed by fixed-size extents distributed across PVs. Each PV has its own SQLite writer, enabling parallel writes.</p>
+<p><strong>Key design decisions deferred:</strong></p>
+<ul>
+<li>Extent size: 64 KiB to 1 MiB (vs LVM’s 4 MiB) due to SQLite BLOB overflow page behavior</li>
+<li>Whether to support striping (parallel PVs) or linear-only (simpler)</li>
+<li>VG metadata redundancy: store full layout on every PV, or use a coordinator DB?</li>
+<li>Integration point: ecosystem crate implementing <code>Fs</code>, or a lower-level building block?</li>
+</ul>
+<p><strong>Relationship to existing design:</strong> Builds on <code>IndexedBackend</code>’s metadata/blob separation. The PV concept extends it: instead of one SQLite + one blob dir, multiple SQLite files collectively store extents while a metadata layer maps files to extent locations.</p>
+<p>See <a href="../comparisons/linux-fs-concepts-analysis.html">Linux FS &amp; Git Concepts Analysis</a> for the full LVM mapping.</p>
+<hr>
+<h2 id="replication-zfs-sendreceive-inspired"><a class="header" href="#replication-zfs-sendreceive-inspired">Replication (ZFS Send/Receive-Inspired)</a></h2>
+<p><strong>Status:</strong> Future consideration</p>
+<p><strong>Question:</strong> How should AnyFS support incremental backup and migration between backends?</p>
+<p><strong>Context:</strong> ZFS <code>send/receive</code> generates a stream of change records that can be applied to a remote pool. This enables incremental replication without re-transferring unchanged data.</p>
+<p><strong>Proposed approach:</strong> A change log table in <code>IndexedBackend</code> that records every mutation with a transaction sequence number. Incremental send: query changes since the last bookmark. Bookmarks (ZFS concept) are lightweight markers that remember “last sent” state without pinning blob storage.</p>
+<p><strong>Key design decisions deferred:</strong></p>
+<ul>
+<li>Stream format (binary protocol vs SQLite dump vs JSON records)</li>
+<li>Whether change log is opt-in or always-on for IndexedBackend</li>
+<li>How to handle cross-backend migration (SQLite -&gt; IndexedBackend)</li>
+</ul>
+<hr>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -484,6 +511,8 @@ process_sandbox(&amp;userdata);  // Compile error - different type!
 <tr><td>Dry-run testing</td><td><code>DryRun</code> middleware (ADR-019)</td></tr>
 <tr><td>Read caching</td><td><code>Cache</code> middleware (ADR-020)</td></tr>
 <tr><td>Union filesystem</td><td><code>Overlay</code> middleware (ADR-021)</td></tr>
+<tr><td>Multi-SQLite spanning</td><td>Future consideration (LVM-inspired, ecosystem crate)</td></tr>
+<tr><td>Replication</td><td>Future consideration (ZFS send/receive-inspired, change log + bookmarks)</td></tr>
 </tbody>
 </table>
 </div>
