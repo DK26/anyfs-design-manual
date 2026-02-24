@@ -321,8 +321,26 @@ These are optional extensions inspired by other ecosystems. They are intentional
 - Lint/analyzer to discourage direct `std::fs` usage in app code (System.IO.Abstractions-style).
 - Retry/timeout middleware for remote backends (once remote backends exist).
 
+**From Linux filesystems & Git** (see [full analysis](./linux-fs-concepts-analysis.md)):
+
+| Idea | Source | Fits As | Value |
+|---|---|---|---|
+| Multi-SQLite spanning (PV/VG/LV) | LVM | Ecosystem crate (`anyfs-lvm` or `anyfs-pool`) | Overcome SQLite single-file size limits |
+| Compression middleware (LZ4/ZSTD) | ZFS | Middleware layer with early-abort | Reduce storage 60-80% for text-heavy data |
+| Checksum verification on read | ZFS | Middleware layer | Detect corruption on untrusted backends |
+| Background scrubbing | ZFS | Backend method on IndexedBackend | Verify blob integrity over time |
+| Per-directory-tree quotas | XFS project quotas | Extension of `QuotaLayer` | Multi-tenant per-path limits |
+| ARC adaptive caching | ZFS | Enhancement to `Cache` middleware | Self-tuning MRU/MFU balance |
+| Merkle tree hashing | Git tree objects | Column on `nodes` table | Efficient sync and snapshot diff |
+| Send/receive replication | ZFS | Protocol + change log infrastructure | Incremental backup and migration |
+| Shared blob stores (alternates) | Git | Chained `BlobStore` pattern | Multi-tenant blob dedup without copying |
+| Delta compression (pack files) | Git | Background compaction job | Storage savings for versioned documents |
+| Dataset properties with inheritance | ZFS | Config-driven middleware composition | Hierarchical tenant configuration |
+
 **Drop for now (adds noise or cross-platform complexity):**
 - Change notification support (optional `FsWatch` trait or polling middleware).
+- RAIDZ across SQLite files (ZFS) -- parity across SQLite is unnatural; use real RAID below SQLite.
+- XFS-style allocation group sharding -- cross-shard atomicity too complex for the value.
 
 ---
 

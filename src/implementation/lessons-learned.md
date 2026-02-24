@@ -349,6 +349,45 @@ strategy:
 
 ---
 
+## 13. Patterns Validated by Linux Filesystems & Git
+
+Based on a [detailed analysis](../comparisons/linux-fs-concepts-analysis.md) of LVM, ZFS, XFS, and Git internals, several AnyFS design decisions align with battle-tested patterns from these systems:
+
+### What AnyFS Already Gets Right
+
+| AnyFS Pattern | Validated By | Proven Concept |
+|---|---|---|
+| IndexedBackend (SQLite metadata + blob store) | ZFS special vdevs, Git LFS | Fast metadata on one tier, bulk data on another |
+| Content-addressed blobs with refcounting | ZFS DDT, Git object store, XFS reflink | Automatic dedup, O(1) copy, safe GC |
+| Write batching in SqliteBackend | XFS delayed allocation | Defer commits for contiguous allocation and throughput |
+| SQLite WAL mode | XFS journaling, ZFS ZIL | Write-ahead logging for crash consistency |
+| Two-phase commit (blob upload -> metadata commit) | ZFS COW, XFS intent items | Crash-safe multi-step operations |
+| `Overlay` middleware | LVM snapshots, ZFS clones | COW layering without modifying the base |
+| `QuotaLayer` | XFS project quotas, ZFS dataset quotas | Per-scope resource limits |
+| `Cache` middleware | ZFS ARC | Read caching as a composable layer |
+
+### Key Lessons Learned
+
+**1. SQLite single-file limits are solvable with LVM-style spanning.**
+LVM treats physical disks as "Physical Volumes" pooled into "Volume Groups." The same pattern works for SQLite: treat each `.db` file as a PV, aggregate them into a pool, and carve out logical filesystems. This overcomes practical size limits (tens of GB per file) by distributing extents across multiple smaller SQLite files, each staying in its performant range. Optimal extent size for SQLite: 64 KiB to 1 MiB (smaller than LVM's 4 MiB default due to SQLite BLOB overflow page behavior).
+
+**2. Compression should be a middleware layer with early-abort.**
+ZFS applies compression per-block and skips it if the result is larger than the original. AnyFS can do the same as a `CompressionLayer<B>` middleware. Already-compressed files (images, videos) get auto-detected and stored as-is. This is a low-effort, high-impact addition.
+
+**3. Integrity verification (scrubbing) is essential for long-lived data.**
+ZFS scrubs every block periodically. For IndexedBackend where `blob_id = sha256(content)`, a scrub re-hashes every blob and compares. This catches silent corruption, validates refcounts, and finds orphaned blobs -- all in one pass. Should be a standard backend operation.
+
+**4. GC needs grace periods, not just refcount == 0.**
+Git protects recently-unreferenced objects for 30-90 days before deleting. AnyFS should do the same -- a blob with `refcount = 0` might be referenced by an in-flight write. Adding a `created_at` check (e.g., "at least 1 day old") prevents race conditions.
+
+**5. Merkle tree hashing enables efficient sync.**
+Git's tree objects hash directory contents recursively. Two filesystems can be compared by checking root hashes -- if equal, nothing changed. If different, descend only into changed subtrees. This is O(changed paths), not O(total files). Valuable for send/receive replication.
+
+**6. Shared blob stores (Git alternates) enable multi-tenant dedup.**
+Multiple IndexedBackend instances can share a single blob store read-only ("base image"), each with their own writable store for tenant-specific files. This is how GitLab deduplicates fork storage. In AnyFS, a `ChainedBlobStore` searches local store first, then shared alternates.
+
+---
+
 ## Issues We Already Avoid
 
 Our design decisions already prevent these problems:

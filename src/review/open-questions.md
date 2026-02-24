@@ -274,6 +274,45 @@ Based on review feedback, the following naming concerns were raised:
 
 ---
 
+## Multi-SQLite Spanning (LVM-Inspired)
+
+**Status:** Future consideration
+
+**Question:** How should AnyFS handle SQLite databases that outgrow practical single-file limits?
+
+**Context:** SQLite performance degrades with very large files (tens of GB+), and the single-writer constraint becomes a bottleneck. Linux LVM solves the analogous problem for block devices by pooling multiple Physical Volumes into Volume Groups and carving out Logical Volumes.
+
+**Proposed approach:** An ecosystem crate that treats individual SQLite files as Physical Volumes, aggregates them into a pool (Volume Group), and presents logical filesystems (Logical Volumes) backed by fixed-size extents distributed across PVs. Each PV has its own SQLite writer, enabling parallel writes.
+
+**Key design decisions deferred:**
+- Extent size: 64 KiB to 1 MiB (vs LVM's 4 MiB) due to SQLite BLOB overflow page behavior
+- Whether to support striping (parallel PVs) or linear-only (simpler)
+- VG metadata redundancy: store full layout on every PV, or use a coordinator DB?
+- Integration point: ecosystem crate implementing `Fs`, or a lower-level building block?
+
+**Relationship to existing design:** Builds on `IndexedBackend`'s metadata/blob separation. The PV concept extends it: instead of one SQLite + one blob dir, multiple SQLite files collectively store extents while a metadata layer maps files to extent locations.
+
+See [Linux FS & Git Concepts Analysis](../comparisons/linux-fs-concepts-analysis.md) for the full LVM mapping.
+
+---
+
+## Replication (ZFS Send/Receive-Inspired)
+
+**Status:** Future consideration
+
+**Question:** How should AnyFS support incremental backup and migration between backends?
+
+**Context:** ZFS `send/receive` generates a stream of change records that can be applied to a remote pool. This enables incremental replication without re-transferring unchanged data.
+
+**Proposed approach:** A change log table in `IndexedBackend` that records every mutation with a transaction sequence number. Incremental send: query changes since the last bookmark. Bookmarks (ZFS concept) are lightweight markers that remember "last sent" state without pinning blob storage.
+
+**Key design decisions deferred:**
+- Stream format (binary protocol vs SQLite dump vs JSON records)
+- Whether change log is opt-in or always-on for IndexedBackend
+- How to handle cross-backend migration (SQLite -> IndexedBackend)
+
+---
+
 ## Summary
 
 | Topic                     | Decision                                                                      |
@@ -300,3 +339,5 @@ Based on review feedback, the following naming concerns were raised:
 | Dry-run testing           | `DryRun` middleware (ADR-019)                                                 |
 | Read caching              | `Cache` middleware (ADR-020)                                                  |
 | Union filesystem          | `Overlay` middleware (ADR-021)                                                |
+| Multi-SQLite spanning     | Future consideration (LVM-inspired, ecosystem crate)                          |
+| Replication               | Future consideration (ZFS send/receive-inspired, change log + bookmarks)      |

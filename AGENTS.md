@@ -480,7 +480,7 @@ let sandbox = MemoryBackend::new()
 - Do NOT use old names: `VfsBackend` → `Fs`, `FilesContainer` → `FileStorage`, `FeatureGuard` → `Restrictions`
 - Middleware order matters: innermost applies first
 - Use `FsExt` for convenience methods, don't add them to core traits
-- Do NOT run `mdbook build` - the user or CI will build, you only edit `src/` files
+- **NEVER run `mdbook build`** - only the user runs builds. You only edit `src/` files. No exceptions.
 - Do NOT run git commands (commit, push, etc.) unless explicitly told to - the user will commit when ready
 
 ---
@@ -616,7 +616,7 @@ OPT-IN TYPE ERASURE:
    - It's behind feature flags (`fuse`, `winfsp`) in the `anyfs` crate
    - Use `anyfs::MountHandle`, not `anyfs_mount::MountHandle`
 
-11. **Do NOT run `mdbook build`** - the user or CI will build, you only edit `src/` files
+11. **NEVER run `mdbook build`** - only the user runs builds. You only edit `src/` files. No exceptions.
 
 12. **Document design reasoning in ADRs:**
    - Significant API changes (e.g., simplifying generics, changing trait hierarchy) require an ADR
